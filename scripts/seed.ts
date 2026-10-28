@@ -159,19 +159,33 @@ async function main() {
     kelasList.push(r)
   }
 
-  // 9. WALI SANTRI
+  // 9. WALI SANTRI (dengan phone normalized & activationStatus bervariasi)
+  // PIN demo untuk wali ACTIVE: 258041 (bukan blacklist, mudah diingat: "2580 41")
+  const WALI_DEMO_PIN = "258041"
+  const WALI_DEMO_PIN_HASH = bcrypt.hashSync(WALI_DEMO_PIN, 10)
   const waliData = [
-    { name: "Bapak H. Abdullah", phone: "081234511001", relationship: "AYAH", email: "abdullah.wali@test.com", occupation: "Pedagang", address: "Jl. Mawar No. 10" },
-    { name: "Ibu Khadijah", phone: "081234511002", relationship: "IBU", email: "khadijah.wali@test.com", occupation: "Ibu Rumah Tangga", address: "Jl. Melati No. 5" },
-    { name: "Bapak Hasan", phone: "081234511003", relationship: "AYAH", email: "hasan.wali@test.com", occupation: "Wiraswasta", address: "Jl. Anggrek No. 8" },
-    { name: "Bapak Yusuf", phone: "081234511004", relationship: "AYAH", email: "yusuf.wali@test.com", occupation: "PNS", address: "Jl. Kenanga No. 12" },
-    { name: "Ibu Aminah", phone: "081234511005", relationship: "IBU", email: "aminah.wali@test.com", occupation: "Guru", address: "Jl. Dahlia No. 3" },
+    { name: "Bapak H. Abdullah", phone: "6281234511001", relationship: "AYAH", email: "abdullah.wali@test.com", occupation: "Pedagang", address: "Jl. Mawar No. 10" },
+    { name: "Ibu Khadijah", phone: "6281234511002", relationship: "IBU", email: "khadijah.wali@test.com", occupation: "Ibu Rumah Tangga", address: "Jl. Melati No. 5" },
+    { name: "Bapak Hasan", phone: "6281234511003", relationship: "AYAH", email: "hasan.wali@test.com", occupation: "Wiraswasta", address: "Jl. Anggrek No. 8" },
+    { name: "Bapak Yusuf", phone: "6281234511004", relationship: "AYAH", email: "yusuf.wali@test.com", occupation: "PNS", address: "Jl. Kenanga No. 12" },
+    { name: "Ibu Aminah", phone: "6281234511005", relationship: "IBU", email: "aminah.wali@test.com", occupation: "Guru", address: "Jl. Dahlia No. 3" },
+    { name: "Bapak Ridwan", phone: null, relationship: "AYAH", email: null, occupation: "Pedagang", address: "Jl. Flamboyan No. 7" }, // wali tanpa WA (PENDING_NO_PHONE)
   ]
-  const waliList: { id: string }[] = []
-  for (const w of waliData) {
-    const r = await db.wali.create({ data: w })
+  const waliList: { id: string; phone: string | null }[] = []
+  for (let i = 0; i < waliData.length; i++) {
+    const w = waliData[i]
+    const activationStatus = w.phone ? (i === 0 || i === 2 ? "ACTIVE" : "PENDING") : "PENDING_NO_PHONE"
+    const r = await db.wali.create({
+      data: {
+        ...w,
+        activationStatus,
+        // Untuk wali yang ACTIVE, set PIN hash
+        ...(activationStatus === "ACTIVE" ? { pinHash: WALI_DEMO_PIN_HASH } : {}),
+      },
+    })
     waliList.push(r)
   }
+  console.log(`   - 5 wali ACTIVE/PENDING + 1 wali PENDING_NO_PHONE (PIN demo untuk ACTIVE: ${WALI_DEMO_PIN})`)
 
   // 10. SANTRI (15 santri, 5 per kelas)
   const santriNames = [
@@ -191,14 +205,19 @@ async function main() {
     { name: "Ruqayyah Aulia", gender: "P", waliIdx: 3 },
     { name: "Hamzah Pratama", gender: "L", waliIdx: 4 },
   ]
-  const santriList: { id: string; kelasId: string | null }[] = []
-  let nisCounter = 25001
+  const santriList: { id: string; kelasId: string | null; waliId: string | null }[] = []
+  // NIS auto-generate: format YYNNNNNN (tahun 2 digit + urut 6 digit per tahun)
+  let nisSeq = 1
   for (let i = 0; i < santriNames.length; i++) {
     const s = santriNames[i]
     const kelasIdx = Math.floor(i / 5)
+    const waliId = waliList[s.waliIdx].id
+    const nis = `25${String(nisSeq).padStart(6, "0")}`
+    nisSeq++
+
     const r = await db.santri.create({
       data: {
-        nis: `NIS-${nisCounter++}`,
+        nis,
         name: s.name,
         gender: s.gender,
         birthPlace: "Bandung",
@@ -206,13 +225,23 @@ async function main() {
         address: "Jl. Santri No. " + (i + 1),
         entryDate: new Date("2025-07-15"),
         status: "AKTIF",
-        waliId: waliList[s.waliIdx].id,
+        waliId,
         kelasId: kelasList[kelasIdx].id,
         tahunAjaranId: ta.id,
+        // Create SantriWali pivot link
+        waliLinks: {
+          create: {
+            waliId,
+            relationship: waliData[s.waliIdx].relationship,
+            isPrimary: true,
+            canAccess: true,
+          },
+        },
       },
     })
     santriList.push(r)
   }
+  console.log(`   - 15 santri dengan NIS format YYNNNNNN (25000001 - 25000015)`)
 
   // 11. JADWAL PELAJARAN (sample)
   for (let kIdx = 0; kIdx < kelasList.length; kIdx++) {

@@ -13,6 +13,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       include: {
         kelas: true,
         wali: { include: { santri: { select: { id: true, name: true, nis: true, kelas: { select: { name: true } } } } } },
+        waliLinks: {
+          include: {
+            wali: { select: { id: true, name: true, phone: true, relationship: true, activationStatus: true } },
+          },
+          orderBy: { isPrimary: "desc" },
+        },
         tahunAjaran: true,
         absensi: { take: 30, orderBy: { date: "desc" } },
         nilai: { include: { mapel: true, guru: { select: { name: true } } }, orderBy: { assessmentDate: "desc" } },

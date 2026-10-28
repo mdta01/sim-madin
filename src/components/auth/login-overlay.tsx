@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast"
 import { GraduationCap, Loader2, Lock, User, Eye, EyeOff, ShieldCheck } from "lucide-react"
 
-export function LoginOverlay() {
+export function LoginOverlay({ onSwitchToWali }: { onSwitchToWali?: () => void }) {
   const [identifier, setIdentifier] = useState("admin@madrasah.test")
   const [password, setPassword] = useState("admin123")
   const [showPass, setShowPass] = useState(false)
@@ -172,6 +172,17 @@ export function LoginOverlay() {
             </div>
           </CardContent>
         </Card>
+
+        {onSwitchToWali && (
+          <div className="text-center mt-4">
+            <button
+              onClick={onSwitchToWali}
+              className="text-sm text-emerald-600 hover:text-emerald-700 hover:underline"
+            >
+              Login sebagai Wali Santri →
+            </button>
+          </div>
+        )}
 
         <p className="text-center text-xs text-muted-foreground mt-6">
           © 2025 SIM MADIN • MVP V1.0 • Powered by Next.js + Prisma

@@ -209,28 +209,92 @@ model MataPelajaran {
 
 model Wali {
   id          String   @id @default(cuid())
-  userId      String?  @unique // link ke User jika sudah punya akun
+  userId      String?  @unique // link ke User jika sudah punya akun (deprecated, gunakan pinHash langsung)
   name        String
   nik         String?  @unique
-  phone       String
+  phone       String?  @unique // Nomor WhatsApp — identitas login wali. Null jika belum punya WA.
   email       String?
   occupation  String?
   address     String?
-  relationship String  // "AYAH" | "IBU" | "WALI" | dll
+  relationship String  @default("WALI") // default relationship (untuk backward compat)
+  // Activation & Auth
+  activationStatus String @default("PENDING") // PENDING_NO_PHONE | PENDING | ACTIVE | SUSPENDED
+  pinHash     String?  // PIN 6 digit yang di-hash (bcrypt)
+  otpCode     String?  // OTP aktif saat ini
+  otpExpiresAt DateTime?
+  otpAttempts Int      @default(0) // attempt verify OTP
+  otpRequestCount Int  @default(0) // anti-spam: max 5/jam
+  otpRequestResetAt DateTime?
+  failedLoginAttempts Int @default(0)
+  lockedUntil DateTime?
+  lastLoginAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   deletedAt   DateTime?
 
   user        User?    @relation(fields: [userId], references: [id])
-  santri      Santri[]
+  santri      Santri[] // backward compat (wali utama)
+  santriLinks SantriWali[] // semua relasi wali-santri
+  activations WaliActivation[]
+  phoneChangeLogs PhoneChangeLog[]
 
   @@index([phone])
+  @@index([activationStatus])
   @@index([deletedAt])
+}
+
+model SantriWali {
+  id           String   @id @default(cuid())
+  santriId     String
+  waliId       String
+  relationship String   // AYAH | IBU | WALI | KAKEK | NENEK | PAMAN | BIBI
+  isPrimary    Boolean  @default(false) // wali utama (1 per santri)
+  canAccess    Boolean  @default(true) // admin bisa disable akses wali tertentu
+  createdAt    DateTime @default(now())
+
+  santri       Santri   @relation(fields: [santriId], references: [id], onDelete: Cascade)
+  wali         Wali     @relation(fields: [waliId], references: [id], onDelete: Cascade)
+
+  @@unique([santriId, waliId])
+  @@index([waliId])
+  @@index([santriId, isPrimary])
+}
+
+model WaliActivation {
+  id           String   @id @default(cuid())
+  waliId       String
+  token        String   @unique // untuk link aktivasi
+  otpCode      String   // 6 digit OTP
+  type         String   // INVITE | FORGOT_PIN | CHANGE_PHONE
+  expiresAt    DateTime
+  usedAt       DateTime?
+  attempts     Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  wali         Wali     @relation(fields: [waliId], references: [id], onDelete: Cascade)
+
+  @@index([waliId])
+  @@index([token])
+  @@index([type, expiresAt])
+}
+
+model PhoneChangeLog {
+  id           String   @id @default(cuid())
+  waliId       String
+  oldPhone     String?
+  newPhone     String
+  changedById  String?  // admin yang mengubah
+  changedAt    DateTime @default(now())
+  reason       String?
+
+  wali         Wali     @relation(fields: [waliId], references: [id], onDelete: Cascade)
+
+  @@index([waliId])
 }
 
 model Santri {
   id            String   @id @default(cuid())
-  nis           String   @unique // Nomor Induk Santri
+  nis           String   @unique // Nomor Induk Santri — auto-generated, identitas permanen
   nisn          String?  @unique
   name          String
   gender        String   // "L" | "P"
@@ -241,7 +305,7 @@ model Santri {
   photoUrl      String?
   entryDate     DateTime @default(now())
   status        String   @default("AKTIF") // "AKTIF" | "LULUS" | "PINDAH" | "KELUAR"
-  waliId        String?
+  waliId        String?  // backward compat: shortcut ke wali utama
   kelasId       String?
   tahunAjaranId String?  // tahun ajaran saat pendaftaran
   userId        String?  @unique // link ke User jika santri punya akun (untuk wali/santri portal)
@@ -253,6 +317,7 @@ model Santri {
   kelas         Kelas?       @relation(fields: [kelasId], references: [id])
   tahunAjaran   TahunAjaran? @relation(fields: [tahunAjaranId], references: [id])
   user          User?        @relation(fields: [userId], references: [id])
+  waliLinks     SantriWali[] // semua wali yang terhubung (multi-wali)
   absensi       Absensi[]
   nilai         Nilai[]
   rapor         Rapor[]
