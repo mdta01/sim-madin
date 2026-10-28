@@ -338,7 +338,7 @@ export function WaliLoginOverlay({ onBack, onLoginSuccess }: WaliLoginOverlayPro
             </form>
 
             <div className="mt-6 pt-4 border-t">
-              <p className="text-xs text-muted-foreground mb-2 font-medium">Akun Demo (PIN: <code className="font-mono font-semibold">123456</code>):</p>
+              <p className="text-xs text-muted-foreground mb-2 font-medium">Akun Demo (PIN: <code className="font-mono font-semibold">258041</code>):</p>
               <div className="space-y-1">
                 <button onClick={() => setPhone("081234511001")} className="w-full text-left p-2 rounded border bg-muted/30 hover:bg-muted text-xs">
                   <span className="font-medium text-emerald-600">Bapak H. Abdullah</span> — 081234511001 (3 anak)

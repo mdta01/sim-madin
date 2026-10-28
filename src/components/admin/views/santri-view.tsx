@@ -21,7 +21,7 @@ import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { ToastContainer } from "@/components/ui/toaster"
 import { GENDER_LABELS, KELAS_LEVELS, formatDate, formatRupiah } from "@/lib/constants"
-import { GraduationCap, Plus, Pencil, Trash2, ArrowLeft, User, Phone, MapPin, Calendar, BookOpen, Wallet, FileText, ClipboardCheck } from "lucide-react"
+import { GraduationCap, Plus, Pencil, Trash2, ArrowLeft, User, Users, Phone, MapPin, Calendar, BookOpen, Wallet, FileText, ClipboardCheck } from "lucide-react"
 import { PhotoUpload } from "@/components/admin/shared/photo-upload"
 
 export function SantriView() {
@@ -130,6 +130,7 @@ function SantriList() {
                     <TableHead>Kelas</TableHead>
                     <TableHead>L/P</TableHead>
                     <TableHead>Wali</TableHead>
+                    <TableHead>Status Wali</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Aksi</TableHead>
                   </TableRow>
@@ -158,6 +159,29 @@ function SantriList() {
                       <TableCell className="text-xs">
                         <p>{s.wali?.name || "-"}</p>
                         <p className="text-muted-foreground">{s.wali?.phone}</p>
+                      </TableCell>
+                      <TableCell>
+                        {s.wali ? (
+                          <Badge
+                            variant="outline"
+                            className={
+                              s.wali.activationStatus === "ACTIVE" ? "bg-emerald-100 text-emerald-700 border-emerald-200" :
+                              s.wali.activationStatus === "PENDING" ? "bg-amber-100 text-amber-700 border-amber-200" :
+                              s.wali.activationStatus === "PENDING_NO_PHONE" ? "bg-orange-100 text-orange-700 border-orange-200" :
+                              s.wali.activationStatus === "SUSPENDED" ? "bg-red-100 text-red-700 border-red-200" :
+                              ""
+                            }
+                            title={s.wali.activationStatus}
+                          >
+                            {s.wali.activationStatus === "ACTIVE" ? "✓ Aktif" :
+                              s.wali.activationStatus === "PENDING" ? "⏳ Pending" :
+                              s.wali.activationStatus === "PENDING_NO_PHONE" ? "⚠️ No WA" :
+                              s.wali.activationStatus === "SUSPENDED" ? "🚫 Suspended" :
+                              s.wali.activationStatus}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
                       </TableCell>
                       <TableCell><StatusBadge status={s.status} /></TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
@@ -223,8 +247,18 @@ function SantriForm({ open, onOpenChange, editing, kelasList, onSuccess }: {
   }, [editing, open])
 
   const handleSave = async () => {
-    if (!form.nis || !form.name || !form.gender) {
-      toast({ title: "Validasi gagal", description: "NIS, Nama, dan Jenis Kelamin wajib diisi", variant: "destructive" })
+    // Saat create, NIS opsional (auto-generate). Saat edit, NIS wajib.
+    if (editing && !form.nis) {
+      toast({ title: "Validasi gagal", description: "NIS wajib diisi saat edit", variant: "destructive" })
+      return
+    }
+    if (!form.name || !form.gender) {
+      toast({ title: "Validasi gagal", description: "Nama dan Jenis Kelamin wajib diisi", variant: "destructive" })
+      return
+    }
+    // Jika createNewWali aktif, wajib isi nama wali
+    if (form.createNewWali && !form.waliName) {
+      toast({ title: "Validasi gagal", description: "Nama wali wajib diisi jika membuat wali baru", variant: "destructive" })
       return
     }
     setSaving(true)
@@ -233,8 +267,23 @@ function SantriForm({ open, onOpenChange, editing, kelasList, onSuccess }: {
         await apiPut(`/api/admin/santri/${editing.id}`, form)
         toast({ title: "Berhasil", description: "Data santri diperbarui" })
       } else {
-        await apiPost("/api/admin/santri", form)
-        toast({ title: "Berhasil", description: "Santri baru ditambahkan" })
+        const result = await apiPost<any>("/api/admin/santri", form)
+        // Tampilkan info NIS + aktivasi wali
+        const nisInfo = result.nis ? `NIS: ${result.nis}` : ""
+        let waliInfo = ""
+        if (result.waliActivation) {
+          const wa = result.waliActivation
+          waliInfo = ` | Wali: ${wa.waliName}`
+          if (wa.otpCode) {
+            waliInfo += ` | OTP: ${wa.otpCode} (dev mode)`
+          }
+          waliInfo += ` | Aktivasi: ${wa.activationUrl}`
+        }
+        toast({
+          title: "✅ Santri ditambahkan",
+          description: `${nisInfo}${waliInfo}`.trim(),
+          duration: 10000, // tampilkan lebih lama agar bisa baca OTP
+        })
       }
       onOpenChange(false)
       onSuccess()
@@ -262,8 +311,18 @@ function SantriForm({ open, onOpenChange, editing, kelasList, onSuccess }: {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-2">
           <div className="space-y-1">
-            <Label className="text-xs">NIS *</Label>
-            <Input value={form.nis || ""} onChange={(e) => setForm({ ...form, nis: e.target.value })} placeholder="NIS-00001" />
+            <Label className="text-xs">NIS {editing ? "*" : "(kosongkan untuk auto-generate)"}</Label>
+            <Input
+              value={form.nis || ""}
+              onChange={(e) => setForm({ ...form, nis: e.target.value })}
+              placeholder={editing ? "Wajib diisi" : "Auto: YYNNNNNN (mis. 26000001)"}
+              disabled={!!editing}
+            />
+            {!editing && (
+              <p className="text-[10px] text-muted-foreground">
+                💡 NIS = identitas permanen santri. Format: 2 digit tahun + 6 digit urut.
+              </p>
+            )}
           </div>
           <div className="space-y-1">
             <Label className="text-xs">NISN</Label>
@@ -292,7 +351,7 @@ function SantriForm({ open, onOpenChange, editing, kelasList, onSuccess }: {
             <Input type="date" value={form.birthDate || ""} onChange={(e) => setForm({ ...form, birthDate: e.target.value })} />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">No. HP</Label>
+            <Label className="text-xs">No. HP Santri (opsional)</Label>
             <Input value={form.phone || ""} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           </div>
           <div className="space-y-1">
@@ -304,15 +363,85 @@ function SantriForm({ open, onOpenChange, editing, kelasList, onSuccess }: {
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Wali Santri</Label>
-            <Select value={form.waliId} onValueChange={(v) => setForm({ ...form, waliId: v })}>
-              <SelectTrigger><SelectValue placeholder="Pilih Wali" /></SelectTrigger>
-              <SelectContent>
-                {waliList.map((w) => <SelectItem key={w.id} value={w.id}>{w.name} ({w.phone})</SelectItem>)}
-              </SelectContent>
-            </Select>
+
+          {/* WALI SECTION — pilih existing ATAU buat baru */}
+          <div className="sm:col-span-2 mt-2 pt-3 border-t">
+            <div className="flex items-center justify-between mb-2">
+              <Label className="text-xs font-medium">Wali Santri</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setForm({ ...form, createNewWali: !form.createNewWali, waliId: form.createNewWali ? form.waliId : null })}
+              >
+                {form.createNewWali ? "← Pilih Wali Existing" : "+ Buat Wali Baru"}
+              </Button>
+            </div>
+
+            {!form.createNewWali ? (
+              <Select value={form.waliId} onValueChange={(v) => setForm({ ...form, waliId: v })}>
+                <SelectTrigger><SelectValue placeholder="Pilih Wali Existing" /></SelectTrigger>
+                <SelectContent>
+                  {waliList.map((w) => (
+                    <SelectItem key={w.id} value={w.id}>
+                      {w.name} {w.phone ? `(${w.phone})` : "(no WA)"} {w.activationStatus === "ACTIVE" ? "✓" : "⏳"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-3 rounded border bg-muted/20">
+                <div className="space-y-1">
+                  <Label className="text-xs">Nama Wali *</Label>
+                  <Input
+                    value={form.waliName || ""}
+                    onChange={(e) => setForm({ ...form, waliName: e.target.value })}
+                    placeholder="Mis. Bapak Ahmad"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">No. WhatsApp Wali</Label>
+                  <Input
+                    value={form.waliPhone || ""}
+                    onChange={(e) => setForm({ ...form, waliPhone: e.target.value })}
+                    placeholder="08xxx atau 628xxx"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Kosongkan jika wali belum punya WA. Akun akan berstatus PENDING_NO_PHONE.
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Hubungan</Label>
+                  <Select
+                    value={form.waliRelationship || "WALI"}
+                    onValueChange={(v) => setForm({ ...form, waliRelationship: v })}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="AYAH">Ayah</SelectItem>
+                      <SelectItem value="IBU">Ibu</SelectItem>
+                      <SelectItem value="WALI">Wali</SelectItem>
+                      <SelectItem value="KAKEK">Kakek</SelectItem>
+                      <SelectItem value="NENEK">Nenek</SelectItem>
+                      <SelectItem value="PAMAN">Paman</SelectItem>
+                      <SelectItem value="BIBI">Bibi</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {form.waliPhone && (
+                  <p className="text-[10px] text-emerald-600 sm:col-span-3">
+                    ✨ Wali akan otomatis dibuat dengan status PENDING. OTP & link aktivasi akan ditampilkan setelah santri disimpan.
+                  </p>
+                )}
+                {!form.waliPhone && form.waliName && (
+                  <p className="text-[10px] text-amber-600 sm:col-span-3">
+                    ⚠️ Wali tanpa nomor WhatsApp akan dibuat dengan status PENDING_NO_PHONE. Admin bisa tambahkan nomor WA nanti.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
+
           <div className="space-y-1 sm:col-span-2">
             <Label className="text-xs">Alamat</Label>
             <Input value={form.address || ""} onChange={(e) => setForm({ ...form, address: e.target.value })} />
@@ -395,8 +524,9 @@ function SantriDetail({ id }: { id: string }) {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 mb-4">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-6 mb-4">
           <TabsTrigger value="profile" className="text-xs sm:text-sm"><User className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Profil</span></TabsTrigger>
+          <TabsTrigger value="wali" className="text-xs sm:text-sm"><Users className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Wali</span></TabsTrigger>
           <TabsTrigger value="absensi" className="text-xs sm:text-sm"><ClipboardCheck className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Absensi</span></TabsTrigger>
           <TabsTrigger value="nilai" className="text-xs sm:text-sm"><BookOpen className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Nilai</span></TabsTrigger>
           <TabsTrigger value="tagihan" className="text-xs sm:text-sm"><Wallet className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Tagihan</span></TabsTrigger>
@@ -440,6 +570,78 @@ function SantriDetail({ id }: { id: string }) {
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="wali">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Users className="h-4 w-4" /> Wali Santri ({data.waliLinks?.length || 0})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {(data.waliLinks?.length || 0) === 0 ? (
+                <EmptyState
+                  icon={<Users className="h-5 w-5" />}
+                  title="Belum ada wali terhubung"
+                  description="Tambah wali via form edit santri atau kelola dari menu Data Wali"
+                />
+              ) : (
+                <div className="space-y-2">
+                  {data.waliLinks.map((wl: any) => (
+                    <div key={wl.id} className="flex items-center gap-3 p-3 rounded border bg-card">
+                      <Avatar className="h-10 w-10">
+                        <AvatarFallback className="bg-primary/10 text-primary">
+                          {wl.wali.name[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-sm">{wl.wali.name}</p>
+                          {wl.isPrimary && (
+                            <Badge variant="default" className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 text-[10px]">
+                              ⭐ Wali Utama
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                          <Badge variant="outline" className="text-[10px]">{wl.relationship}</Badge>
+                          {wl.wali.phone && (
+                            <span className="text-[11px] text-muted-foreground">{wl.wali.phone}</span>
+                          )}
+                          <Badge
+                            variant="outline"
+                            className={
+                              wl.wali.activationStatus === "ACTIVE" ? "bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px]" :
+                              wl.wali.activationStatus === "PENDING" ? "bg-amber-100 text-amber-700 border-amber-200 text-[10px]" :
+                              wl.wali.activationStatus === "PENDING_NO_PHONE" ? "bg-orange-100 text-orange-700 border-orange-200 text-[10px]" :
+                              "text-[10px]"
+                            }
+                          >
+                            {wl.wali.activationStatus === "ACTIVE" ? "✓ Aktif" :
+                              wl.wali.activationStatus === "PENDING" ? "⏳ Pending" :
+                              wl.wali.activationStatus === "PENDING_NO_PHONE" ? "⚠️ No WA" :
+                              wl.wali.activationStatus}
+                          </Badge>
+                          {!wl.canAccess && (
+                            <Badge variant="outline" className="text-[10px] text-red-600 border-red-200">
+                              🚫 Akses Ditolak
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="mt-3 pt-3 border-t">
+                    <p className="text-xs text-muted-foreground mb-2">
+                      💡 Untuk menambah wali (mis. ayah + ibu), kelola dari menu <strong>Data Wali</strong> lalu hubungkan ke santri ini.
+                      Saat ini API sudah support, UI manajemen multi-wali akan ditambahkan di V1.5.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="absensi">
