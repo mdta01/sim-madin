@@ -138,18 +138,64 @@ export const authOptions: NextAuthOptions = {
   // ⚠️ trustHost WAJIB true untuk preview environment yang URL-nya dinamis
   // (mis. preview-chat-xxx.space-z.ai). Tanpa ini, NextAuth akan reject
   // cookie karena host tidak match dengan NEXTAUTH_URL.
-  // Di production dengan domain tetap, ini bisa di-set false untuk security.
   trustHost: true,
 
-  // Cookie settings — long-lived session
+  // Cookie settings — kompatibel dengan iframe & cross-site (preview environment)
+  // Preview Z.ai pakai iframe dari chat.z.ai, jadi cookie harus sameSite:"none" + secure:true
+  // untuk bisa ter-set di cross-origin iframe context.
   cookies: {
     sessionToken: {
-      name: "next-auth.session-token",
+      name: `next-auth.session-token`,
       options: {
         httpOnly: true,
-        sameSite: "lax", // lax cukup untuk same-origin, lebih kompatibel
+        sameSite: "none", // none wajib untuk iframe cross-origin
         path: "/",
-        secure: false, // false untuk HTTP preview; di production Vercel HTTPS, otomatis secure
+        secure: true, // secure WAJIB true jika sameSite=none (preview HTTPS)
+      },
+    },
+    callbackUrl: {
+      name: `next-auth.callback-url`,
+      options: {
+        httpOnly: true,
+        sameSite: "none",
+        path: "/",
+        secure: true,
+      },
+    },
+    csrfToken: {
+      name: `next-auth.csrf-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "none",
+        path: "/",
+        secure: true,
+      },
+    },
+    pkceCodeVerifier: {
+      name: `next-auth.pkce.code-verifier`,
+      options: {
+        httpOnly: true,
+        sameSite: "none",
+        path: "/",
+        secure: true,
+      },
+    },
+    state: {
+      name: `next-auth.state`,
+      options: {
+        httpOnly: true,
+        sameSite: "none",
+        path: "/",
+        secure: true,
+      },
+    },
+    nonce: {
+      name: `next-auth.nonce`,
+      options: {
+        httpOnly: true,
+        sameSite: "none",
+        path: "/",
+        secure: true,
       },
     },
   },
