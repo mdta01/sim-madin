@@ -3,7 +3,10 @@ import { db } from "@/lib/db"
 import { normalizeWhatsApp } from "@/lib/wali/helpers"
 import jwt from "jsonwebtoken"
 
-const JWT_SECRET = process.env.NEXTAUTH_SECRET || "sim-madin-dev-secret-change-in-production"
+const JWT_SECRET =
+  process.env.NEXTAUTH_SECRET ||
+  process.env.NEXT_PUBLIC_WALI_JWT_SECRET ||
+  "sim-madin-dev-secret-change-in-production-2025"
 
 /**
  * POST /api/wali/verify-otp

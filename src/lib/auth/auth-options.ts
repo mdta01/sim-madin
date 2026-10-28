@@ -200,5 +200,8 @@ export const authOptions: NextAuthOptions = {
     },
   },
 
-  secret: process.env.NEXTAUTH_SECRET || "sim-madin-dev-secret-change-in-production",
+  secret:
+    process.env.NEXTAUTH_SECRET ||
+    process.env.NEXT_PUBLIC_WALI_JWT_SECRET ||
+    "sim-madin-dev-secret-change-in-production-2025",
 }
