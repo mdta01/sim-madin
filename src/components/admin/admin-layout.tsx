@@ -19,6 +19,8 @@ import { PembayaranView } from "./views/pembayaran-view"
 import { PengumumanView } from "./views/pengumuman-view"
 import { UsersView } from "./views/users-view"
 import { PengaturanView } from "./views/pengaturan-view"
+import { ProfileView } from "./views/profile-view"
+import { AuditLogView } from "./views/audit-log-view"
 
 export function AdminLayout() {
   const currentView = useAdminStore((s) => s.currentView)
@@ -44,6 +46,8 @@ export function AdminLayout() {
       case "pengumuman": return <PengumumanView />
       case "users": return <UsersView />
       case "pengaturan": return <PengaturanView />
+      case "profile": return <ProfileView />
+      case "audit-log": return <AuditLogView />
       default: return <DashboardView />
     }
   }

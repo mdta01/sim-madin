@@ -1,5 +1,5 @@
-import { AdminLayout } from "@/components/admin/admin-layout"
+import { AuthGate } from "@/components/auth/auth-gate"
 
 export default function Home() {
-  return <AdminLayout />
+  return <AuthGate />
 }

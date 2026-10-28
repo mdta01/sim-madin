@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function GET(req: NextRequest) {
+  const guard = await requireApiPermission("pengumuman:read")
+  if (guard.error) return guard.error
   try {
     const { searchParams } = new URL(req.url)
     const audience = searchParams.get("audience")
@@ -24,19 +27,13 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const guard = await requireApiPermission("pengumuman:create")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const body = await req.json()
     if (!body.title || !body.content || !body.audience) {
       return NextResponse.json({ error: "Judul, Konten, dan Target wajib diisi" }, { status: 400 })
-    }
-
-    // Get first admin user as createdBy fallback
-    let createdById = body.createdById
-    if (!createdById) {
-      const adminUser = await db.user.findFirst({
-        where: { userRoles: { some: { role: { code: "SUPER_ADMIN" }, isActive: true } } },
-      })
-      createdById = adminUser?.id
     }
 
     const ann = await db.announcement.create({
@@ -49,9 +46,10 @@ export async function POST(req: NextRequest) {
         isPublished: body.isPublished !== false,
         publishedAt: body.publishedAt ? new Date(body.publishedAt) : new Date(),
         expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
-        createdById,
+        createdById: session.user.id,
       },
     })
+    await logAudit(session, "CREATE", "PENGUMUMAN", ann.id, { title: ann.title, audience: ann.audience }, req)
     return NextResponse.json({ data: ann })
   } catch (error) {
     console.error("[pengumuman create] error:", error)

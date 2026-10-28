@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import bcrypt from "bcryptjs"
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireApiPermission("user:read")
+  if (guard.error) return guard.error
   try {
     const { id } = await params
     const user = await db.user.findUnique({
@@ -20,22 +24,28 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireApiPermission("user:update")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const { id } = await params
     const body = await req.json()
 
-    // Update user basic info
-    const updated = await db.user.update({
-      where: { id },
-      data: {
-        ...(body.email && { email: body.email }),
-        ...(body.username && { username: body.username }),
-        ...(body.name && { name: body.name }),
-        ...(body.phone !== undefined && { phone: body.phone }),
-        ...(body.isActive !== undefined && { isActive: body.isActive }),
-        ...(body.passwordHash && { passwordHash: body.passwordHash }),
-      },
-    })
+    const updateData: any = {}
+    if (body.email !== undefined) updateData.email = body.email
+    if (body.username !== undefined) updateData.username = body.username
+    if (body.name !== undefined) updateData.name = body.name
+    if (body.phone !== undefined) updateData.phone = body.phone
+    if (body.isActive !== undefined) updateData.isActive = body.isActive
+    if (body.avatarUrl !== undefined) updateData.avatarUrl = body.avatarUrl
+
+    // Jika password diberikan, hash ulang
+    if (body.passwordHash || body.password) {
+      const pwd = body.passwordHash || body.password
+      updateData.passwordHash = bcrypt.hashSync(pwd, 10)
+    }
+
+    const updated = await db.user.update({ where: { id }, data: updateData })
 
     // Sync roles: if roleIds provided, replace all
     if (Array.isArray(body.roleIds)) {
@@ -53,6 +63,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       where: { id },
       include: { userRoles: { include: { role: true } } },
     })
+    await logAudit(session, "UPDATE", "USER", id, {
+      changes: Object.keys(updateData), rolesSynced: Array.isArray(body.roleIds),
+    }, req)
     return NextResponse.json({ data: fullUser })
   } catch (error) {
     console.error("[users update] error:", error)
@@ -60,10 +73,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireApiPermission("user:delete")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const { id } = await params
+    if (id === session.user.id) {
+      return NextResponse.json({ error: "Tidak bisa menghapus akun sendiri" }, { status: 400 })
+    }
     await db.user.update({ where: { id }, data: { deletedAt: new Date(), isActive: false } })
+    await logAudit(session, "DELETE", "USER", id, {}, req)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("[users delete] error:", error)

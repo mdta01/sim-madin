@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireApiPermission("wali:read")
+  if (guard.error) return guard.error
   try {
     const { id } = await params
     const wali = await db.wali.findUnique({
@@ -17,10 +20,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireApiPermission("wali:update")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const { id } = await params
     const body = await req.json()
     const updated = await db.wali.update({ where: { id }, data: body, include: { _count: { select: { santri: true } } } })
+    await logAudit(session, "UPDATE", "WALI", id, { changes: body }, req)
     return NextResponse.json({ data: updated })
   } catch (error) {
     console.error("[wali update] error:", error)
@@ -28,10 +35,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireApiPermission("wali:delete")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const { id } = await params
     await db.wali.update({ where: { id }, data: { deletedAt: new Date() } })
+    await logAudit(session, "DELETE", "WALI", id, {}, req)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("[wali delete] error:", error)

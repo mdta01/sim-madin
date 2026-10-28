@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function GET(req: NextRequest) {
+  const guard = await requireApiPermission("tagihan:read")
+  if (guard.error) return guard.error
   try {
     const { searchParams } = new URL(req.url)
     const santriId = searchParams.get("santriId")
@@ -40,10 +43,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const guard = await requireApiPermission("tagihan:create")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const body = await req.json()
 
-    // Bulk generate: { kelasId, jenisTagihanId, amount, description, dueDate, santriIds? }
     if (body.bulk) {
       const { kelasId, jenisTagihanId, amount, description, dueDate, santriIds } = body
       if (!jenisTagihanId || !amount) {
@@ -72,10 +77,12 @@ export async function POST(req: NextRequest) {
         })
         created.push(t)
       }
+      await logAudit(session, "CREATE", "TAGIHAN", undefined, {
+        bulk: true, count: created.length, kelasId, jenisTagihanId, amount,
+      }, req)
       return NextResponse.json({ data: created, count: created.length })
     }
 
-    // Single create
     if (!body.santriId || !body.jenisTagihanId || !body.amount) {
       return NextResponse.json({ error: "Santri, Jenis Tagihan, dan Nominal wajib diisi" }, { status: 400 })
     }
@@ -95,6 +102,9 @@ export async function POST(req: NextRequest) {
       },
       include: { santri: true, jenisTagihan: true },
     })
+    await logAudit(session, "CREATE", "TAGIHAN", tagihan.id, {
+      santri: tagihan.santri.name, jenis: tagihan.jenisTagihan.name, amount: tagihan.amount,
+    }, req)
     return NextResponse.json({ data: tagihan })
   } catch (error) {
     console.error("[tagihan create] error:", error)

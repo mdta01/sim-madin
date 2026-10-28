@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 import { NILAI_BOBAT } from "@/lib/constants"
 
 /**
@@ -7,6 +8,8 @@ import { NILAI_BOBAT } from "@/lib/constants"
  * Mengembalikan rapor + rekap nilai per mapel + rata-rata + ranking.
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireApiPermission("rapor:read")
+  if (guard.error) return guard.error
   try {
     const { id } = await params
     const rapor = await db.rapor.findUnique({
@@ -106,10 +109,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireApiPermission("rapor:update")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const { id } = await params
     const body = await req.json()
     const updated = await db.rapor.update({ where: { id }, data: body })
+    await logAudit(session, "UPDATE", "RAPOR", id, { changes: Object.keys(body) }, req)
     return NextResponse.json({ data: updated })
   } catch (error) {
     console.error("[rapor update] error:", error)
@@ -117,10 +124,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireApiPermission("rapor:delete")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const { id } = await params
     await db.rapor.delete({ where: { id } })
+    await logAudit(session, "DELETE", "RAPOR", id, {}, req)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("[rapor delete] error:", error)

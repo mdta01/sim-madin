@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function GET() {
+  const guard = await requireApiPermission("tahun_ajaran:read")
+  if (guard.error) return guard.error
   try {
     const ta = await db.tahunAjaran.findMany({
       include: { _count: { select: { semesters: true, santri: true } } },
@@ -15,6 +18,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const guard = await requireApiPermission("tahun_ajaran:create")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const body = await req.json()
     if (!body.code || !body.name || !body.startDate || !body.endDate) {
@@ -23,7 +29,6 @@ export async function POST(req: NextRequest) {
     const existing = await db.tahunAjaran.findFirst({ where: { code: body.code } })
     if (existing) return NextResponse.json({ error: "Kode sudah terdaftar" }, { status: 400 })
 
-    // If isActive, deactivate others
     if (body.isActive) {
       await db.tahunAjaran.updateMany({ where: { isActive: true }, data: { isActive: false } })
     }
@@ -38,7 +43,6 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Auto-create 2 semesters
     if (body.createSemesters !== false) {
       await db.semester.create({
         data: {
@@ -64,6 +68,7 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    await logAudit(session, "CREATE", "TAHUN_AJARAN", ta.id, { code: ta.code, name: ta.name }, req)
     return NextResponse.json({ data: ta })
   } catch (error) {
     console.error("[tahun-ajaran create] error:", error)

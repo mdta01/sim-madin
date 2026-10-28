@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function GET(req: NextRequest) {
+  const guard = await requireApiPermission("wali:read")
+  if (guard.error) return guard.error
+
   try {
     const { searchParams } = new URL(req.url)
     const search = searchParams.get("search") || ""
@@ -25,6 +29,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const guard = await requireApiPermission("wali:create")
+  if (guard.error) return guard.error
+  const session = guard.session
+
   try {
     const body = await req.json()
     if (!body.name || !body.phone) {
@@ -43,6 +51,7 @@ export async function POST(req: NextRequest) {
       },
       include: { _count: { select: { santri: true } } },
     })
+    await logAudit(session, "CREATE", "WALI", wali.id, { name: wali.name, phone: wali.phone }, req)
     return NextResponse.json({ data: wali })
   } catch (error) {
     console.error("[wali create] error:", error)

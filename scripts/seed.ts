@@ -5,8 +5,13 @@
  */
 
 import { PrismaClient } from "@prisma/client"
+import bcrypt from "bcryptjs"
 
 const db = new PrismaClient()
+
+// Default password untuk semua user demo: "admin123"
+const DEFAULT_PASSWORD = "admin123"
+const DEFAULT_PASSWORD_HASH = bcrypt.hashSync(DEFAULT_PASSWORD, 10)
 
 async function main() {
   console.log("🌱 Seeding database...")
@@ -49,25 +54,50 @@ async function main() {
   const guruRole = roles[3]
   const guruPerms = permissions.filter(p => {
     if (p.module === "absensi" || p.module === "nilai") return true
-    if (p.code.endsWith(":read") && ["santri","kelas","mapel","jadwal","pengumuman","rapor"].includes(p.module)) return true
+    if (p.code.endsWith(":read") && ["santri","kelas","mapel","jadwal","pengumuman","rapor","tahun_ajaran"].includes(p.module)) return true
     return false
   })
   for (const p of guruPerms) {
     await db.rolePermission.upsert({ where: { roleId_permissionId: { roleId: guruRole.id, permissionId: p.id } }, update: {}, create: { roleId: guruRole.id, permissionId: p.id } })
   }
   const waliRole = roles[4]
-  const waliPerms = permissions.filter(p => p.code.endsWith(":read") && ["santri","tagihan","pembayaran","rapor","absensi","nilai","pengumuman"].includes(p.module))
+  const waliPerms = permissions.filter(p => p.code.endsWith(":read") && ["santri","tagihan","pembayaran","rapor","absensi","nilai","pengumuman","kelas","tahun_ajaran"].includes(p.module))
   for (const p of waliPerms) {
     await db.rolePermission.upsert({ where: { roleId_permissionId: { roleId: waliRole.id, permissionId: p.id } }, update: {}, create: { roleId: waliRole.id, permissionId: p.id } })
   }
 
-  // 3. USER SUPER ADMIN DEFAULT
+  // 3. USER SUPER ADMIN DEFAULT + demo users per role
   const superAdminUser = await db.user.upsert({
     where: { email: "admin@madrasah.test" },
-    update: {},
-    create: { email: "admin@madrasah.test", username: "admin", passwordHash: "$2a$10$placeholder_hash_will_be_replaced", name: "Administrator Sistem", phone: "081234567890", isActive: true },
+    update: { passwordHash: DEFAULT_PASSWORD_HASH },
+    create: { email: "admin@madrasah.test", username: "admin", passwordHash: DEFAULT_PASSWORD_HASH, name: "Administrator Sistem", phone: "081234567890", isActive: true },
   })
   await db.userRole.upsert({ where: { userId_roleId: { userId: superAdminUser.id, roleId: superAdminRole.id } }, update: {}, create: { userId: superAdminUser.id, roleId: superAdminRole.id } })
+
+  // Demo users untuk tiap role (untuk testing login sebagai role berbeda)
+  const demoUsersData = [
+    { email: "kepala@madrasah.test", username: "kepala", name: "Kepala Madrasah", roleCode: "KEPALA", phone: "081234511100" },
+    { email: "bendahara@madrasah.test", username: "bendahara", name: "Bendahara Madrasah", roleCode: "BENDAHARA", phone: "081234511200" },
+    { email: "guru@madrasah.test", username: "guru", name: "Ustadz Ahmad Fauzi", roleCode: "GURU", phone: "081234500001" },
+    { email: "wali@madrasah.test", username: "wali", name: "Bapak H. Abdullah", roleCode: "WALI", phone: "081234511001" },
+  ]
+  for (const du of demoUsersData) {
+    const u = await db.user.upsert({
+      where: { email: du.email },
+      update: { passwordHash: DEFAULT_PASSWORD_HASH, isActive: true },
+      create: {
+        email: du.email, username: du.username, passwordHash: DEFAULT_PASSWORD_HASH,
+        name: du.name, phone: du.phone, isActive: true,
+      },
+    })
+    const role = roles.find((r) => r.code === du.roleCode)!
+    await db.userRole.upsert({
+      where: { userId_roleId: { userId: u.id, roleId: role.id } },
+      update: {},
+      create: { userId: u.id, roleId: role.id },
+    })
+  }
+  console.log(`   - Default password for all users: "${DEFAULT_PASSWORD}"`)
 
   // 4. TAHUN AJARAN & SEMESTER
   const ta = await db.tahunAjaran.upsert({ where: { code: "2025/2026" }, update: { isActive: true }, create: { code: "2025/2026", name: "Tahun Ajaran 2025/2026", startDate: new Date("2025-07-15"), endDate: new Date("2026-06-14"), isActive: true } })

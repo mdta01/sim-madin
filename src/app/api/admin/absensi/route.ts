@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function GET(req: NextRequest) {
+  const guard = await requireApiPermission("absensi:read")
+  if (guard.error) return guard.error
   try {
     const { searchParams } = new URL(req.url)
     const kelasId = searchParams.get("kelasId")
@@ -52,9 +55,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const guard = await requireApiPermission("absensi:create")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const body = await req.json()
-    // Support bulk: { entries: [{ santriId, status, note }] , date, kelasId }
     if (body.entries && Array.isArray(body.entries)) {
       const ta = await db.tahunAjaran.findFirst({ where: { isActive: true } })
       if (!ta) return NextResponse.json({ error: "Tidak ada tahun ajaran aktif" }, { status: 400 })
@@ -65,7 +70,6 @@ export async function POST(req: NextRequest) {
 
       const results = []
       for (const entry of body.entries) {
-        // upsert: unique [santriId, date, tahunAjaranId]
         const existing = await db.absensi.findFirst({
           where: { santriId: entry.santriId, date: { gte: dStart, lte: dEnd }, tahunAjaranId: ta.id },
         })
@@ -90,10 +94,12 @@ export async function POST(req: NextRequest) {
           results.push(r)
         }
       }
+      await logAudit(session, "CREATE", "ABSENSI", undefined, {
+        count: results.length, kelasId: body.kelasId, date: dStart.toISOString(),
+      }, req)
       return NextResponse.json({ data: results, count: results.length })
     }
 
-    // Single create
     if (!body.santriId || !body.kelasId || !body.status) {
       return NextResponse.json({ error: "Santri, Kelas, dan Status wajib diisi" }, { status: 400 })
     }
@@ -113,6 +119,9 @@ export async function POST(req: NextRequest) {
       },
       include: { santri: true, kelas: true },
     })
+    await logAudit(session, "CREATE", "ABSENSI", absensi.id, {
+      santri: absensi.santri.name, status: absensi.status, date,
+    }, req)
     return NextResponse.json({ data: absensi })
   } catch (error) {
     console.error("[absensi create] error:", error)

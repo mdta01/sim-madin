@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 import { NILAI_BOBAT } from "@/lib/constants"
 
 export async function GET(req: NextRequest) {
+  const guard = await requireApiPermission("rapor:read")
+  if (guard.error) return guard.error
   try {
     const { searchParams } = new URL(req.url)
     const santriId = searchParams.get("santriId")
@@ -38,9 +41,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const guard = await requireApiPermission("rapor:create")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const body = await req.json()
-    // Generate rapor for all santri in a kelas
     if (body.kelasId) {
       const ta = await db.tahunAjaran.findFirst({ where: { isActive: true } })
       const sem = await db.semester.findFirst({ where: { isActive: true } })
@@ -52,7 +57,6 @@ export async function POST(req: NextRequest) {
 
       const results = []
       for (const santri of santriList) {
-        // Count absensi
         const absensiList = await db.absensi.findMany({
           where: { santriId: santri.id, tahunAjaranId: ta.id },
         })
@@ -61,7 +65,6 @@ export async function POST(req: NextRequest) {
         const izin = absensiList.filter(a => a.status === "IZIN").length
         const alfa = absensiList.filter(a => a.status === "ALFA").length
 
-        // Upsert rapor
         const existing = await db.rapor.findUnique({
           where: { santriId_semesterId_tahunAjaranId: { santriId: santri.id, semesterId: sem.id, tahunAjaranId: ta.id } },
         })
@@ -88,6 +91,7 @@ export async function POST(req: NextRequest) {
           results.push(created)
         }
       }
+      await logAudit(session, "CREATE", "RAPOR", undefined, { bulk: true, kelasId: body.kelasId, count: results.length }, req)
       return NextResponse.json({ data: results, count: results.length })
     }
 
@@ -128,6 +132,7 @@ export async function POST(req: NextRequest) {
         },
       })
     }
+    await logAudit(session, "CREATE", "RAPOR", rapor.id, { santriId: santri.id }, req)
     return NextResponse.json({ data: rapor })
   } catch (error) {
     console.error("[rapor create] error:", error)

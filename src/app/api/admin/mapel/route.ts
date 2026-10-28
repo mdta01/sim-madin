@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function GET(req: NextRequest) {
+  const guard = await requireApiPermission("mapel:read")
+  if (guard.error) return guard.error
   try {
     const { searchParams } = new URL(req.url)
     const search = searchParams.get("search") || ""
@@ -23,6 +26,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const guard = await requireApiPermission("mapel:create")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const body = await req.json()
     if (!body.code || !body.name || !body.category) {
@@ -43,6 +49,7 @@ export async function POST(req: NextRequest) {
         isActive: body.isActive !== false,
       },
     })
+    await logAudit(session, "CREATE", "MAPEL", mapel.id, { code: mapel.code, name: mapel.name }, req)
     return NextResponse.json({ data: mapel })
   } catch (error) {
     console.error("[mapel create] error:", error)

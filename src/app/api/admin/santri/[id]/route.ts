@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireApiPermission("santri:read")
+  if (guard.error) return guard.error
+
   try {
     const { id } = await params
     const santri = await db.santri.findUnique({
@@ -26,6 +30,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireApiPermission("santri:update")
+  if (guard.error) return guard.error
+  const session = guard.session
+
   try {
     const { id } = await params
     const body = await req.json()
@@ -38,6 +46,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       },
       include: { kelas: true, wali: true },
     })
+
+    await logAudit(session, "UPDATE", "SANTRI", id, { changes: body }, req)
     return NextResponse.json({ data: updated })
   } catch (error) {
     console.error("[santri update] error:", error)
@@ -45,11 +55,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireApiPermission("santri:delete")
+  if (guard.error) return guard.error
+  const session = guard.session
+
   try {
     const { id } = await params
     // Soft delete
     await db.santri.update({ where: { id }, data: { deletedAt: new Date(), status: "KELUAR" } })
+    await logAudit(session, "DELETE", "SANTRI", id, {}, req)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("[santri delete] error:", error)

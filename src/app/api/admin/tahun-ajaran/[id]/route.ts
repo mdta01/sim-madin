@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireApiPermission("tahun_ajaran:read")
+  if (guard.error) return guard.error
   try {
     const { id } = await params
     const ta = await db.tahunAjaran.findUnique({
@@ -17,17 +20,18 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireApiPermission("tahun_ajaran:update")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const { id } = await params
     const body = await req.json()
 
-    // If setting active, deactivate others
     if (body.isActive) {
       const ta = await db.tahunAjaran.findUnique({ where: { id } })
       if (ta) {
         await db.tahunAjaran.updateMany({ where: { isActive: true, NOT: { id } }, data: { isActive: false } })
         await db.semester.updateMany({ where: { isActive: true, NOT: { tahunAjaranId: id } }, data: { isActive: false } })
-        // Activate the ganjil semester of this TA
         await db.semester.updateMany({ where: { tahunAjaranId: id, type: "GANJIL" }, data: { isActive: true } })
       }
     }
@@ -43,6 +47,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       },
       include: { semesters: true },
     })
+    await logAudit(session, "UPDATE", "TAHUN_AJARAN", id, { changes: Object.keys(body) }, req)
     return NextResponse.json({ data: updated })
   } catch (error) {
     console.error("[tahun-ajaran update] error:", error)
@@ -50,10 +55,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireApiPermission("tahun_ajaran:delete")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const { id } = await params
     await db.tahunAjaran.delete({ where: { id } })
+    await logAudit(session, "DELETE", "TAHUN_AJARAN", id, {}, req)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("[tahun-ajaran delete] error:", error)

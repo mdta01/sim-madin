@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireApiPermission("pembayaran:update")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const { id } = await params
     const body = await req.json()
@@ -10,6 +14,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       data: body,
       include: { santri: true, tagihan: { include: { jenisTagihan: true } } },
     })
+    await logAudit(session, "UPDATE", "PEMBAYARAN", id, { changes: body }, req)
     return NextResponse.json({ data: updated })
   } catch (error) {
     console.error("[pembayaran update] error:", error)
@@ -17,10 +22,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireApiPermission("pembayaran:delete")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const { id } = await params
-    // If linked to tagihan, reverse paidAmount
     const payment = await db.payment.findUnique({ where: { id } })
     if (payment?.tagihanId) {
       const tagihan = await db.tagihan.findUnique({ where: { id: payment.tagihanId } })
@@ -33,6 +40,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
       }
     }
     await db.payment.delete({ where: { id } })
+    await logAudit(session, "DELETE", "PEMBAYARAN", id, { invoiceNo: payment?.invoiceNo }, req)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("[pembayaran delete] error:", error)

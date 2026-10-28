@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireApiPermission("guru:read")
+  if (guard.error) return guard.error
   try {
     const { id } = await params
     const guru = await db.guru.findUnique({
@@ -22,6 +25,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireApiPermission("guru:update")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const { id } = await params
     const body = await req.json()
@@ -33,6 +39,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         joinDate: body.joinDate ? new Date(body.joinDate) : undefined,
       },
     })
+    await logAudit(session, "UPDATE", "GURU", id, { changes: body }, req)
     return NextResponse.json({ data: updated })
   } catch (error) {
     console.error("[guru update] error:", error)
@@ -40,10 +47,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireApiPermission("guru:delete")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const { id } = await params
     await db.guru.update({ where: { id }, data: { deletedAt: new Date(), status: "KELUAR" } })
+    await logAudit(session, "DELETE", "GURU", id, {}, req)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("[guru delete] error:", error)

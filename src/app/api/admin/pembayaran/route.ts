@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function GET(req: NextRequest) {
+  const guard = await requireApiPermission("pembayaran:read")
+  if (guard.error) return guard.error
   try {
     const { searchParams } = new URL(req.url)
     const santriId = searchParams.get("santriId")
@@ -38,6 +41,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const guard = await requireApiPermission("pembayaran:create")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const body = await req.json()
     if (!body.santriId || !body.amount || !body.paymentMethod) {
@@ -46,18 +52,8 @@ export async function POST(req: NextRequest) {
 
     const ta = await db.tahunAjaran.findFirst({ where: { isActive: true } })
 
-    // Generate invoice number
     const count = await db.payment.count()
     const invoiceNo = `INV-${new Date().getFullYear()}-${String(count + 1).padStart(6, "0")}`
-
-    // Get the first super admin user as recordedBy fallback
-    let recordedById = body.recordedById
-    if (!recordedById) {
-      const adminUser = await db.user.findFirst({
-        where: { userRoles: { some: { role: { code: "SUPER_ADMIN" }, isActive: true } } },
-      })
-      recordedById = adminUser?.id
-    }
 
     const payment = await db.payment.create({
       data: {
@@ -71,12 +67,11 @@ export async function POST(req: NextRequest) {
         status: body.status || "VERIFIED",
         note: body.note || null,
         proofUrl: body.proofUrl || null,
-        recordedById,
+        recordedById: session.user.id,
       },
       include: { santri: true, tagihan: { include: { jenisTagihan: true } } },
     })
 
-    // If linked to tagihan, update tagihan paidAmount & status
     if (body.tagihanId) {
       const tagihan = await db.tagihan.findUnique({ where: { id: body.tagihanId } })
       if (tagihan) {
@@ -89,6 +84,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    await logAudit(session, "CREATE", "PEMBAYARAN", payment.id, {
+      invoiceNo, santri: payment.santri.name, amount: payment.amount, method: payment.paymentMethod,
+    }, req)
     return NextResponse.json({ data: payment })
   } catch (error) {
     console.error("[pembayaran create] error:", error)

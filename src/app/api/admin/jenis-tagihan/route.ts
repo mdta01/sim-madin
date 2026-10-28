@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { requireApiAuth, logAudit } from "@/lib/auth/guards"
 
 export async function GET() {
+  const guard = await requireApiAuth()
+  if (guard.error) return guard.error
   try {
     const jt = await db.jenisTagihan.findMany({ orderBy: { name: "asc" } })
     return NextResponse.json({ data: jt })
@@ -12,6 +15,14 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // Hanya super admin / bendahara yang bisa kelola jenis tagihan
+  const guard = await requireApiAuth()
+  if (guard.error) return guard.error
+  const session = guard.session
+  const canManage = session.user.roles?.some(r => ["SUPER_ADMIN", "BENDAHARA"].includes(r))
+  if (!canManage) {
+    return NextResponse.json({ error: "Hanya Super Admin atau Bendahara" }, { status: 403 })
+  }
   try {
     const body = await req.json()
     if (!body.code || !body.name || !body.defaultAmount) {
@@ -30,6 +41,7 @@ export async function POST(req: NextRequest) {
         isActive: body.isActive !== false,
       },
     })
+    await logAudit(session, "CREATE", "JENIS_TAGIHAN", jt.id, { code: jt.code, name: jt.name }, req)
     return NextResponse.json({ data: jt })
   } catch (error) {
     console.error("[jenis-tagihan create] error:", error)

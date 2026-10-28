@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function GET(req: NextRequest) {
+  const guard = await requireApiPermission("jadwal:read")
+  if (guard.error) return guard.error
   try {
     const { searchParams } = new URL(req.url)
     const kelasId = searchParams.get("kelasId")
@@ -10,7 +13,6 @@ export async function GET(req: NextRequest) {
     const taId = searchParams.get("tahunAjaranId")
     const semId = searchParams.get("semesterId")
 
-    // Get active TA & semester if not provided
     let tahunAjaranId = taId
     let semesterId = semId
     if (!tahunAjaranId) {
@@ -42,13 +44,15 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const guard = await requireApiPermission("jadwal:create")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const body = await req.json()
     if (!body.kelasId || !body.mapelId || !body.guruId || !body.dayOfWeek || !body.startTime || !body.endTime) {
       return NextResponse.json({ error: "Kelas, Mapel, Guru, Hari, Jam mulai & selesai wajib diisi" }, { status: 400 })
     }
 
-    // Get active TA & semester
     let ta = body.tahunAjaranId
     let sem = body.semesterId
     if (!ta) {
@@ -74,6 +78,9 @@ export async function POST(req: NextRequest) {
       },
       include: { kelas: true, mapel: true, guru: { select: { name: true } } },
     })
+    await logAudit(session, "CREATE", "JADWAL", jadwal.id, {
+      kelas: jadwal.kelas?.code, mapel: jadwal.mapel?.name, day: jadwal.dayOfWeek, time: `${jadwal.startTime}-${jadwal.endTime}`,
+    }, req)
     return NextResponse.json({ data: jadwal })
   } catch (error) {
     console.error("[jadwal create] error:", error)

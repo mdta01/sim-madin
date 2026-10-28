@@ -22,6 +22,7 @@ import { useToast } from "@/hooks/use-toast"
 import { ToastContainer } from "@/components/ui/toaster"
 import { GENDER_LABELS, KELAS_LEVELS, formatDate, formatRupiah } from "@/lib/constants"
 import { GraduationCap, Plus, Pencil, Trash2, ArrowLeft, User, Phone, MapPin, Calendar, BookOpen, Wallet, FileText, ClipboardCheck } from "lucide-react"
+import { PhotoUpload } from "@/components/admin/shared/photo-upload"
 
 export function SantriView() {
   const selectedId = useAdminStore((s) => s.selectedEntityId)
@@ -139,7 +140,11 @@ function SantriList() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Avatar className="h-8 w-8">
-                            <AvatarFallback className="bg-primary/10 text-primary text-xs">{s.name[0]}</AvatarFallback>
+                            {s.photoUrl ? (
+                              <img src={s.photoUrl} alt={s.name} className="h-full w-full object-cover" />
+                            ) : (
+                              <AvatarFallback className="bg-primary/10 text-primary text-xs">{s.name[0]}</AvatarFallback>
+                            )}
                           </Avatar>
                           <div>
                             <p className="font-medium text-sm">{s.name}</p>
@@ -246,6 +251,15 @@ function SantriForm({ open, onOpenChange, editing, kelasList, onSuccess }: {
         <DialogHeader>
           <DialogTitle>{editing ? "Edit Santri" : "Tambah Santri Baru"}</DialogTitle>
         </DialogHeader>
+        <div className="mb-3 pb-3 border-b">
+          <Label className="text-xs mb-2 block">Foto Profil</Label>
+          <PhotoUpload
+            value={form.photoUrl}
+            onChange={(url) => setForm({ ...form, photoUrl: url })}
+            name={form.name}
+            prefix="santri"
+          />
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-2">
           <div className="space-y-1">
             <Label className="text-xs">NIS *</Label>
@@ -360,7 +374,11 @@ function SantriDetail({ id }: { id: string }) {
       />
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
         <Avatar className="h-20 w-20">
-          <AvatarFallback className="bg-primary/10 text-primary text-2xl">{data.name[0]}</AvatarFallback>
+          {data.photoUrl ? (
+            <img src={data.photoUrl} alt={data.name} className="h-full w-full object-cover" />
+          ) : (
+            <AvatarFallback className="bg-primary/10 text-primary text-2xl">{data.name[0]}</AvatarFallback>
+          )}
         </Avatar>
         <div className="flex-1">
           <h1 className="text-2xl font-bold">{data.name}</h1>

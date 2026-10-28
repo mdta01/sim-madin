@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function GET(req: NextRequest) {
+  const guard = await requireApiPermission("kelas:read")
+  if (guard.error) return guard.error
   try {
     const { searchParams } = new URL(req.url)
     const level = searchParams.get("level")
@@ -26,6 +29,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const guard = await requireApiPermission("kelas:create")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const body = await req.json()
     if (!body.code || !body.name || !body.level) {
@@ -47,6 +53,7 @@ export async function POST(req: NextRequest) {
       },
       include: { waliKelas: { select: { name: true } } },
     })
+    await logAudit(session, "CREATE", "KELAS", kelas.id, { code: kelas.code, name: kelas.name }, req)
     return NextResponse.json({ data: kelas })
   } catch (error) {
     console.error("[kelas create] error:", error)

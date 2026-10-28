@@ -2,6 +2,27 @@
 
 Sistem informasi terpadu satu pintu untuk Madrasah Diniyah, dibangun secara bertahap mulai dari **MVP V1** dengan fondasi yang konsisten dan mudah dipelihara.
 
+## 📢 Status Versi Terbaru: V1.1 (Stabilisasi)
+
+**Update terbaru (V1.1):**
+- ✅ **Autentikasi real** dengan NextAuth.js v4 + bcrypt (sebelumnya placeholder)
+- ✅ **Permission enforcement** di semua API route — Guru tidak bisa hapus user, dst.
+- ✅ **Audit Log otomatis** tercatat di setiap CREATE/UPDATE/DELETE (terlihat di menu Audit Log)
+- ✅ **Upload foto** profil santri & guru (local storage, siap diganti Firebase Storage)
+- ✅ **Profil Saya** — user bisa update nama, no HP, foto, dan ubah password sendiri
+- ✅ **Login & Logout** flow lengkap dengan 5 demo account (admin/kepala/bendahara/guru/wali)
+- ✅ **Dark mode** sudah aktif
+- ✅ Lint bersih 0 error
+
+**Akun Demo (password semua: `admin123`):**
+| Email | Role | Akses |
+|-------|------|-------|
+| admin@madrasah.test | Super Admin | Semua modul |
+| kepala@madrasah.test | Kepala Madrasah | Read semua + pengumuman |
+| bendahara@madrasah.test | Bendahara | Tagihan, pembayaran, jenis tagihan, santri (read) |
+| guru@madrasah.test | Guru | Absensi, nilai, read akademik |
+| wali@madrasah.test | Wali Santri | Read santri/tagihan/rapor anak |
+
 ## 🎯 Visi & Filosofi
 
 > **"Satu pintu, bertahap, fondasi kuat"**
@@ -18,7 +39,7 @@ Aplikasi ini dirancang sebagai **satu ekosistem** yang menghubungkan madrasah, k
 6. ✅ **Data Keuangan Terhubung Santri** — tagihan & pembayaran otomatis ter-link
 7. ✅ **Modular** — fitur baru bisa ditambah tanpa merombak sistem utama
 8. ✅ **Backup** — siap untuk strategi backup berkala
-9. ✅ **Keamanan** — setiap role hanya akses sesuai kewenangan
+9. ✅ **Keamanan** — setiap role hanya akses sesuai kewenangan (V1.1: enforced)
 10. ✅ **Mobile First** — pengguna lapangan utama pakai HP
 
 ## 🏗️ Arsitektur Monorepo (Target Production)

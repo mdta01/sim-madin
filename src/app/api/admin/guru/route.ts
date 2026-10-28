@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function GET(req: NextRequest) {
+  const guard = await requireApiPermission("guru:read")
+  if (guard.error) return guard.error
   try {
     const { searchParams } = new URL(req.url)
     const search = searchParams.get("search") || ""
@@ -27,6 +30,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const guard = await requireApiPermission("guru:create")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const body = await req.json()
     if (!body.name || !body.gender) {
@@ -46,9 +52,11 @@ export async function POST(req: NextRequest) {
         specialization: body.specialization || null,
         joinDate: body.joinDate ? new Date(body.joinDate) : new Date(),
         status: body.status || "AKTIF",
+        photoUrl: body.photoUrl || null,
         userId: body.userId || null,
       },
     })
+    await logAudit(session, "CREATE", "GURU", guru.id, { name: guru.name }, req)
     return NextResponse.json({ data: guru })
   } catch (error) {
     console.error("[guru create] error:", error)

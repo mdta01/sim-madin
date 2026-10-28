@@ -22,6 +22,8 @@ export type AdminView =
   | "pengumuman"
   | "users"
   | "pengaturan"
+  | "profile"
+  | "audit-log"
 
 interface AdminState {
   currentView: AdminView

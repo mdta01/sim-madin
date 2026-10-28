@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { requireApiAuth, requireApiPermission, logAudit, type AppSession } from "@/lib/auth/guards"
 
 export async function GET(req: NextRequest) {
+  const guard = await requireApiPermission("santri:read")
+  if (guard.error) return guard.error
+  const session = guard.session
+
   try {
     const { searchParams } = new URL(req.url)
     const search = searchParams.get("search") || ""
@@ -38,11 +43,15 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const guard = await requireApiPermission("santri:create")
+  if (guard.error) return guard.error
+  const session = guard.session
+
   try {
     const body = await req.json()
     const {
       nis, nisn, name, gender, birthPlace, birthDate, address, phone,
-      waliId, kelasId, tahunAjaranId, entryDate, status,
+      waliId, kelasId, tahunAjaranId, entryDate, status, photoUrl,
     } = body
 
     if (!nis || !name || !gender) {
@@ -64,6 +73,7 @@ export async function POST(req: NextRequest) {
         birthDate: birthDate ? new Date(birthDate) : null,
         address: address || null,
         phone: phone || null,
+        photoUrl: photoUrl || null,
         waliId: waliId || null,
         kelasId: kelasId || null,
         tahunAjaranId: tahunAjaranId || null,
@@ -72,6 +82,9 @@ export async function POST(req: NextRequest) {
       },
       include: { kelas: true, wali: true },
     })
+
+    // Audit log
+    await logAudit(session, "CREATE", "SANTRI", santri.id, { name: santri.name, nis: santri.nis }, req)
 
     return NextResponse.json({ data: santri })
   } catch (error) {

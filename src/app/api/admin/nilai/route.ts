@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function GET(req: NextRequest) {
+  const guard = await requireApiPermission("nilai:read")
+  if (guard.error) return guard.error
   try {
     const { searchParams } = new URL(req.url)
     const santriId = searchParams.get("santriId")
@@ -49,6 +52,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const guard = await requireApiPermission("nilai:create")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const body = await req.json()
     if (!body.santriId || !body.kelasId || !body.mapelId || !body.type || body.score === undefined) {
@@ -69,7 +75,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Tahun ajaran/semester aktif tidak ditemukan" }, { status: 400 })
     }
 
-    // Upsert: unique [santriId, mapelId, type, semesterId, tahunAjaranId]
     const existing = await db.nilai.findFirst({
       where: { santriId: body.santriId, mapelId: body.mapelId, type: body.type, semesterId, tahunAjaranId },
     })
@@ -85,6 +90,9 @@ export async function POST(req: NextRequest) {
         },
         include: { santri: true, mapel: true },
       })
+      await logAudit(session, "UPDATE", "NILAI", nilai.id, {
+        santri: nilai.santri.name, mapel: nilai.mapel.name, type: body.type, score: body.score,
+      }, req)
     } else {
       nilai = await db.nilai.create({
         data: {
@@ -101,6 +109,9 @@ export async function POST(req: NextRequest) {
         },
         include: { santri: true, mapel: true },
       })
+      await logAudit(session, "CREATE", "NILAI", nilai.id, {
+        santri: nilai.santri.name, mapel: nilai.mapel.name, type: body.type, score: body.score,
+      }, req)
     }
     return NextResponse.json({ data: nilai })
   } catch (error) {

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireApiPermission("pengumuman:read")
+  if (guard.error) return guard.error
   try {
     const { id } = await params
     const ann = await db.announcement.findUnique({
@@ -17,6 +20,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireApiPermission("pengumuman:update")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const { id } = await params
     const body = await req.json()
@@ -28,6 +34,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         expiresAt: body.expiresAt ? new Date(body.expiresAt) : (body.expiresAt === null ? null : undefined),
       },
     })
+    await logAudit(session, "UPDATE", "PENGUMUMAN", id, { changes: body }, req)
     return NextResponse.json({ data: updated })
   } catch (error) {
     console.error("[pengumuman update] error:", error)
@@ -35,10 +42,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireApiPermission("pengumuman:delete")
+  if (guard.error) return guard.error
+  const session = guard.session
   try {
     const { id } = await params
     await db.announcement.delete({ where: { id } })
+    await logAudit(session, "DELETE", "PENGUMUMAN", id, {}, req)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("[pengumuman delete] error:", error)

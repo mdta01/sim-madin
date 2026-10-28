@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { requireApiAuth, logAudit } from "@/lib/auth/guards"
 
 export async function GET() {
+  const guard = await requireApiAuth()
+  if (guard.error) return guard.error
   try {
     const roles = await db.role.findMany({
       include: {
@@ -18,6 +21,13 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // Hanya super admin yang bisa kelola role
+  const guard = await requireApiAuth()
+  if (guard.error) return guard.error
+  const session = guard.session
+  if (!session.user.roles?.includes("SUPER_ADMIN")) {
+    return NextResponse.json({ error: "Hanya Super Admin yang bisa mengelola role" }, { status: 403 })
+  }
   try {
     const body = await req.json()
     if (!body.code || !body.name) {
@@ -36,7 +46,6 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Assign permissions if provided
     if (body.permissionIds && Array.isArray(body.permissionIds)) {
       for (const pid of body.permissionIds) {
         await db.rolePermission.create({ data: { roleId: role.id, permissionId: pid } })
@@ -44,6 +53,7 @@ export async function POST(req: NextRequest) {
     }
 
     const full = await db.role.findUnique({ where: { id: role.id }, include: { permissions: { include: { permission: true } } } })
+    await logAudit(session, "CREATE", "ROLE", role.id, { code: role.code, name: role.name }, req)
     return NextResponse.json({ data: full })
   } catch (error) {
     console.error("[roles create] error:", error)
