@@ -3,7 +3,7 @@ import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireApiPermission("absensi:delete")
+  const guard = await requireApiPermission("absensi:delete", req)
   if (guard.error) return guard.error
   const session = guard.session
   try {
@@ -18,7 +18,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireApiPermission("absensi:update")
+  const guard = await requireApiPermission("absensi:update", req)
   if (guard.error) return guard.error
   const session = guard.session
   try {

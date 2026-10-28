@@ -7,8 +7,8 @@ import { requireApiAuth } from "@/lib/auth/guards"
  * Mengembalikan statistik agregat untuk dashboard Super Admin.
  * Semua role authenticated bisa akses (dashboard adaptif per role).
  */
-export async function GET() {
-  const guard = await requireApiAuth()
+export async function GET(req: NextRequest) {
+  const guard = await requireApiAuth(req)
   if (guard.error) return guard.error
   const session = guard.session
 

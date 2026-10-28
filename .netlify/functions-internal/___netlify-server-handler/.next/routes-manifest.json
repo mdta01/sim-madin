@@ -1,0 +1,387 @@
+{
+  "version": 3,
+  "pages404": true,
+  "appType": "app",
+  "caseSensitive": false,
+  "basePath": "",
+  "redirects": [
+    {
+      "source": "/:path+/",
+      "destination": "/:path+",
+      "internal": true,
+      "priority": true,
+      "statusCode": 308,
+      "regex": "^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))/$"
+    }
+  ],
+  "headers": [],
+  "rewrites": {
+    "beforeFiles": [],
+    "afterFiles": [],
+    "fallback": []
+  },
+  "dynamicRoutes": [
+    {
+      "page": "/api/admin/absensi/[id]",
+      "regex": "^/api/admin/absensi/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/absensi/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/admin/guru/[id]",
+      "regex": "^/api/admin/guru/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/guru/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/admin/jadwal/[id]",
+      "regex": "^/api/admin/jadwal/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/jadwal/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/admin/jenis-tagihan/[id]",
+      "regex": "^/api/admin/jenis\\-tagihan/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/jenis\\-tagihan/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/admin/kelas/[id]",
+      "regex": "^/api/admin/kelas/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/kelas/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/admin/mapel/[id]",
+      "regex": "^/api/admin/mapel/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/mapel/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/admin/nilai/[id]",
+      "regex": "^/api/admin/nilai/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/nilai/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/admin/pembayaran/[id]",
+      "regex": "^/api/admin/pembayaran/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/pembayaran/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/admin/pengumuman/[id]",
+      "regex": "^/api/admin/pengumuman/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/pengumuman/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/admin/rapor/[id]",
+      "regex": "^/api/admin/rapor/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/rapor/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/admin/roles/[id]",
+      "regex": "^/api/admin/roles/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/roles/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/admin/santri/[id]",
+      "regex": "^/api/admin/santri/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/santri/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/admin/tagihan/[id]",
+      "regex": "^/api/admin/tagihan/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/tagihan/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/admin/tahun-ajaran/[id]",
+      "regex": "^/api/admin/tahun\\-ajaran/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/tahun\\-ajaran/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/admin/users/[id]",
+      "regex": "^/api/admin/users/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/users/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/admin/wali/[id]",
+      "regex": "^/api/admin/wali/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/wali/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/auth/[...nextauth]",
+      "regex": "^/api/auth/(.+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPnextauth": "nxtPnextauth"
+      },
+      "namedRegex": "^/api/auth/(?<nxtPnextauth>.+?)(?:/)?$"
+    },
+    {
+      "page": "/api/wali/santri/[id]",
+      "regex": "^/api/wali/santri/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/wali/santri/(?<nxtPid>[^/]+?)(?:/)?$"
+    }
+  ],
+  "staticRoutes": [
+    {
+      "page": "/",
+      "regex": "^/(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/(?:/)?$"
+    },
+    {
+      "page": "/_global-error",
+      "regex": "^/_global\\-error(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_global\\-error(?:/)?$"
+    },
+    {
+      "page": "/_not-found",
+      "regex": "^/_not\\-found(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_not\\-found(?:/)?$"
+    },
+    {
+      "page": "/api",
+      "regex": "^/api(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api(?:/)?$"
+    },
+    {
+      "page": "/api/admin/absensi",
+      "regex": "^/api/admin/absensi(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/absensi(?:/)?$"
+    },
+    {
+      "page": "/api/admin/audit-log",
+      "regex": "^/api/admin/audit\\-log(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/audit\\-log(?:/)?$"
+    },
+    {
+      "page": "/api/admin/dashboard",
+      "regex": "^/api/admin/dashboard(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/dashboard(?:/)?$"
+    },
+    {
+      "page": "/api/admin/guru",
+      "regex": "^/api/admin/guru(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/guru(?:/)?$"
+    },
+    {
+      "page": "/api/admin/jadwal",
+      "regex": "^/api/admin/jadwal(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/jadwal(?:/)?$"
+    },
+    {
+      "page": "/api/admin/jenis-tagihan",
+      "regex": "^/api/admin/jenis\\-tagihan(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/jenis\\-tagihan(?:/)?$"
+    },
+    {
+      "page": "/api/admin/kelas",
+      "regex": "^/api/admin/kelas(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/kelas(?:/)?$"
+    },
+    {
+      "page": "/api/admin/mapel",
+      "regex": "^/api/admin/mapel(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/mapel(?:/)?$"
+    },
+    {
+      "page": "/api/admin/me",
+      "regex": "^/api/admin/me(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/me(?:/)?$"
+    },
+    {
+      "page": "/api/admin/nilai",
+      "regex": "^/api/admin/nilai(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/nilai(?:/)?$"
+    },
+    {
+      "page": "/api/admin/pembayaran",
+      "regex": "^/api/admin/pembayaran(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/pembayaran(?:/)?$"
+    },
+    {
+      "page": "/api/admin/pengumuman",
+      "regex": "^/api/admin/pengumuman(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/pengumuman(?:/)?$"
+    },
+    {
+      "page": "/api/admin/permissions",
+      "regex": "^/api/admin/permissions(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/permissions(?:/)?$"
+    },
+    {
+      "page": "/api/admin/rapor",
+      "regex": "^/api/admin/rapor(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/rapor(?:/)?$"
+    },
+    {
+      "page": "/api/admin/roles",
+      "regex": "^/api/admin/roles(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/roles(?:/)?$"
+    },
+    {
+      "page": "/api/admin/santri",
+      "regex": "^/api/admin/santri(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/santri(?:/)?$"
+    },
+    {
+      "page": "/api/admin/settings",
+      "regex": "^/api/admin/settings(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/settings(?:/)?$"
+    },
+    {
+      "page": "/api/admin/tagihan",
+      "regex": "^/api/admin/tagihan(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/tagihan(?:/)?$"
+    },
+    {
+      "page": "/api/admin/tahun-ajaran",
+      "regex": "^/api/admin/tahun\\-ajaran(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/tahun\\-ajaran(?:/)?$"
+    },
+    {
+      "page": "/api/admin/users",
+      "regex": "^/api/admin/users(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/users(?:/)?$"
+    },
+    {
+      "page": "/api/admin/wali",
+      "regex": "^/api/admin/wali(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/wali(?:/)?$"
+    },
+    {
+      "page": "/api/debug/auth",
+      "regex": "^/api/debug/auth(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/debug/auth(?:/)?$"
+    },
+    {
+      "page": "/api/debug/db",
+      "regex": "^/api/debug/db(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/debug/db(?:/)?$"
+    },
+    {
+      "page": "/api/debug/env",
+      "regex": "^/api/debug/env(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/debug/env(?:/)?$"
+    },
+    {
+      "page": "/api/wali/login",
+      "regex": "^/api/wali/login(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/wali/login(?:/)?$"
+    },
+    {
+      "page": "/api/wali/me",
+      "regex": "^/api/wali/me(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/wali/me(?:/)?$"
+    },
+    {
+      "page": "/api/wali/request-otp",
+      "regex": "^/api/wali/request\\-otp(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/wali/request\\-otp(?:/)?$"
+    },
+    {
+      "page": "/api/wali/set-pin",
+      "regex": "^/api/wali/set\\-pin(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/wali/set\\-pin(?:/)?$"
+    },
+    {
+      "page": "/api/wali/verify-otp",
+      "regex": "^/api/wali/verify\\-otp(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/wali/verify\\-otp(?:/)?$"
+    }
+  ],
+  "dataRoutes": [],
+  "rsc": {
+    "header": "rsc",
+    "varyHeader": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+    "prefetchHeader": "next-router-prefetch",
+    "didPostponeHeader": "x-nextjs-postponed",
+    "contentTypeHeader": "text/x-component",
+    "suffix": ".rsc",
+    "prefetchSegmentHeader": "next-router-segment-prefetch",
+    "prefetchSegmentSuffix": ".segment.rsc",
+    "prefetchSegmentDirSuffix": ".segments",
+    "clientParamParsing": false,
+    "dynamicRSCPrerender": false
+  },
+  "rewriteHeaders": {
+    "pathHeader": "x-nextjs-rewritten-path",
+    "queryHeader": "x-nextjs-rewritten-query"
+  }
+}

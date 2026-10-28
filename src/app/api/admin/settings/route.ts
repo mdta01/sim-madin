@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiAuth, logAudit } from "@/lib/auth/guards"
 
-export async function GET() {
-  const guard = await requireApiAuth()
+export async function GET(req: NextRequest) {
+  const guard = await requireApiAuth(req)
   if (guard.error) return guard.error
   try {
     const settings = await db.systemSetting.findMany()
@@ -17,7 +17,7 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
-  const guard = await requireApiAuth()
+  const guard = await requireApiAuth(req)
   if (guard.error) return guard.error
   const session = guard.session
   if (!session.user.roles?.includes("SUPER_ADMIN")) {

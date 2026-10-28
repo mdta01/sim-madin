@@ -3,7 +3,7 @@ import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireApiPermission("wali:read")
+  const guard = await requireApiPermission("wali:read", req)
   if (guard.error) return guard.error
   try {
     const { id } = await params
@@ -20,7 +20,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireApiPermission("wali:update")
+  const guard = await requireApiPermission("wali:update", req)
   if (guard.error) return guard.error
   const session = guard.session
   try {
@@ -36,7 +36,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireApiPermission("wali:delete")
+  const guard = await requireApiPermission("wali:delete", req)
   if (guard.error) return guard.error
   const session = guard.session
   try {

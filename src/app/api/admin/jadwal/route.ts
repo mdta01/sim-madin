@@ -3,7 +3,7 @@ import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function GET(req: NextRequest) {
-  const guard = await requireApiPermission("jadwal:read")
+  const guard = await requireApiPermission("jadwal:read", req)
   if (guard.error) return guard.error
   try {
     const { searchParams } = new URL(req.url)
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const guard = await requireApiPermission("jadwal:create")
+  const guard = await requireApiPermission("jadwal:create", req)
   if (guard.error) return guard.error
   const session = guard.session
   try {

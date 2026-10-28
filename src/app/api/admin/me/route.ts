@@ -6,8 +6,8 @@ import bcrypt from "bcryptjs"
 /**
  * GET /api/admin/me — ambil profil user yang sedang login (lengkap dengan roles, permissions)
  */
-export async function GET() {
-  const guard = await requireApiAuth()
+export async function GET(req: NextRequest) {
+  const guard = await requireApiAuth(req)
   if (guard.error) return guard.error
   const session = guard.session
 
@@ -69,7 +69,7 @@ export async function GET() {
  * Bukan untuk password (lihat endpoint khusus di bawah)
  */
 export async function PUT(req: NextRequest) {
-  const guard = await requireApiAuth()
+  const guard = await requireApiAuth(req)
   if (guard.error) return guard.error
   const session = guard.session
 
@@ -119,7 +119,7 @@ export async function PUT(req: NextRequest) {
  * Body: { currentPassword, newPassword }
  */
 export async function POST(req: NextRequest) {
-  const guard = await requireApiAuth()
+  const guard = await requireApiAuth(req)
   if (guard.error) return guard.error
   const session = guard.session
 

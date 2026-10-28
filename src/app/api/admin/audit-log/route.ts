@@ -3,7 +3,7 @@ import { db } from "@/lib/db"
 import { requireApiAuth } from "@/lib/auth/guards"
 
 export async function GET(req: NextRequest) {
-  const guard = await requireApiAuth()
+  const guard = await requireApiAuth(req)
   if (guard.error) return guard.error
   const session = guard.session
   try {

@@ -4,7 +4,7 @@ import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 import { NILAI_BOBAT } from "@/lib/constants"
 
 export async function GET(req: NextRequest) {
-  const guard = await requireApiPermission("rapor:read")
+  const guard = await requireApiPermission("rapor:read", req)
   if (guard.error) return guard.error
   try {
     const { searchParams } = new URL(req.url)
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const guard = await requireApiPermission("rapor:create")
+  const guard = await requireApiPermission("rapor:create", req)
   if (guard.error) return guard.error
   const session = guard.session
   try {

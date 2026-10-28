@@ -8,7 +8,7 @@ import { NILAI_BOBAT } from "@/lib/constants"
  * Mengembalikan rapor + rekap nilai per mapel + rata-rata + ranking.
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireApiPermission("rapor:read")
+  const guard = await requireApiPermission("rapor:read", req)
   if (guard.error) return guard.error
   try {
     const { id } = await params
@@ -109,7 +109,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireApiPermission("rapor:update")
+  const guard = await requireApiPermission("rapor:update", req)
   if (guard.error) return guard.error
   const session = guard.session
   try {
@@ -125,7 +125,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireApiPermission("rapor:delete")
+  const guard = await requireApiPermission("rapor:delete", req)
   if (guard.error) return guard.error
   const session = guard.session
   try {

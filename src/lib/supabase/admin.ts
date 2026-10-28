@@ -77,32 +77,48 @@ export function getSupabaseAdmin(): SupabaseClient | null {
 /**
  * Verify Supabase JWT token (untuk mobile apps auth)
  *
- * Saat mobile apps login via Supabase Auth, dapatkan access_token (JWT).
- * Mobile kirim token via Authorization: Bearer <token>.
- * Server verify token ini via Supabase Admin SDK.
+ * Uses direct HTTP call to Supabase Auth API instead of @supabase/supabase-js
+ * for better serverless compatibility (no client initialization issues).
  *
  * Return AppSession jika valid, null jika tidak.
  */
 export async function verifySupabaseToken(token: string): Promise<AppSession | null> {
-  const admin = getSupabaseAdmin()
-  if (!admin) return null
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.error("[supabase] Missing env vars for token verification")
+    return null
+  }
 
   try {
-    const { data, error } = await admin.auth.getUser(token)
-    if (error || !data.user) {
+    // Call Supabase Auth API to get user from token
+    // Use anon key as apikey (not service_role) — Supabase Auth API requires anon key
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: {
+        "apikey": anonKey || serviceRoleKey,
+        "Authorization": `Bearer ${token}`,
+      },
+    })
+
+    if (!response.ok) {
+      console.error("[supabase] Token verification failed:", response.status)
       return null
     }
 
-    const user = data.user
+    const user = await response.json()
+    if (!user || !user.email) {
+      return null
+    }
 
     // Cari user di DB Prisma berdasarkan email atau Supabase user ID
-    // (assign ke import db di sini supaya tidak circular)
     const { db } = await import("@/lib/db")
     const dbUser = await db.user.findFirst({
       where: {
         OR: [
-          { email: user.email || "" },
-          { firebaseUid: user.id }, // reuse firebaseUid field untuk Supabase UID
+          { email: user.email },
+          { firebaseUid: user.id },
         ],
         deletedAt: null,
         isActive: true,
@@ -121,7 +137,10 @@ export async function verifySupabaseToken(token: string): Promise<AppSession | n
       },
     })
 
-    if (!dbUser) return null
+    if (!dbUser) {
+      console.error("[supabase] User not found in DB:", user.email)
+      return null
+    }
 
     // Sync Supabase UID ke field firebaseUid kalau belum ada
     if (!dbUser.firebaseUid) {

@@ -4,7 +4,7 @@ import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 import bcrypt from "bcryptjs"
 
 export async function GET(req: NextRequest) {
-  const guard = await requireApiPermission("user:read")
+  const guard = await requireApiPermission("user:read", req)
   if (guard.error) return guard.error
   try {
     const { searchParams } = new URL(req.url)
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const guard = await requireApiPermission("user:create")
+  const guard = await requireApiPermission("user:create", req)
   if (guard.error) return guard.error
   const session = guard.session
   try {

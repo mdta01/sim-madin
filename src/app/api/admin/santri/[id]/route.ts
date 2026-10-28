@@ -3,7 +3,7 @@ import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireApiPermission("santri:read")
+  const guard = await requireApiPermission("santri:read", req)
   if (guard.error) return guard.error
 
   try {
@@ -36,7 +36,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireApiPermission("santri:update")
+  const guard = await requireApiPermission("santri:update", req)
   if (guard.error) return guard.error
   const session = guard.session
 
@@ -62,7 +62,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireApiPermission("santri:delete")
+  const guard = await requireApiPermission("santri:delete", req)
   if (guard.error) return guard.error
   const session = guard.session
 

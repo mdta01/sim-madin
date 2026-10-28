@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
-export async function GET() {
-  const guard = await requireApiPermission("tahun_ajaran:read")
+export async function GET(req: NextRequest) {
+  const guard = await requireApiPermission("tahun_ajaran:read", req)
   if (guard.error) return guard.error
   try {
     const ta = await db.tahunAjaran.findMany({
@@ -18,7 +18,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const guard = await requireApiPermission("tahun_ajaran:create")
+  const guard = await requireApiPermission("tahun_ajaran:create", req)
   if (guard.error) return guard.error
   const session = guard.session
   try {

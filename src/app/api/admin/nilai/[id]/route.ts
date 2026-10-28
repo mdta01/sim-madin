@@ -3,7 +3,7 @@ import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireApiPermission("nilai:delete")
+  const guard = await requireApiPermission("nilai:delete", req)
   if (guard.error) return guard.error
   const session = guard.session
   try {

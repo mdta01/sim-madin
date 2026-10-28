@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiAuth, logAudit } from "@/lib/auth/guards"
 
-export async function GET() {
-  const guard = await requireApiAuth()
+export async function GET(req: NextRequest) {
+  const guard = await requireApiAuth(req)
   if (guard.error) return guard.error
   try {
     const jt = await db.jenisTagihan.findMany({ orderBy: { name: "asc" } })
@@ -16,7 +16,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   // Hanya super admin / bendahara yang bisa kelola jenis tagihan
-  const guard = await requireApiAuth()
+  const guard = await requireApiAuth(req)
   if (guard.error) return guard.error
   const session = guard.session
   const canManage = session.user.roles?.some(r => ["SUPER_ADMIN", "BENDAHARA"].includes(r))

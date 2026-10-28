@@ -3,7 +3,7 @@ import { db } from "@/lib/db"
 import { requireApiAuth, logAudit } from "@/lib/auth/guards"
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireApiAuth()
+  const guard = await requireApiAuth(req)
   if (guard.error) return guard.error
   const session = guard.session
   if (!session.user.roles?.includes("SUPER_ADMIN")) {
@@ -49,7 +49,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireApiAuth()
+  const guard = await requireApiAuth(req)
   if (guard.error) return guard.error
   const session = guard.session
   if (!session.user.roles?.includes("SUPER_ADMIN")) {

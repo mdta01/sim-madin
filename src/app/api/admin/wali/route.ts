@@ -3,7 +3,7 @@ import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function GET(req: NextRequest) {
-  const guard = await requireApiPermission("wali:read")
+  const guard = await requireApiPermission("wali:read", req)
   if (guard.error) return guard.error
 
   try {
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const guard = await requireApiPermission("wali:create")
+  const guard = await requireApiPermission("wali:create", req)
   if (guard.error) return guard.error
   const session = guard.session
 

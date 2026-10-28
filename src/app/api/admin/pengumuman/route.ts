@@ -3,7 +3,7 @@ import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
 export async function GET(req: NextRequest) {
-  const guard = await requireApiPermission("pengumuman:read")
+  const guard = await requireApiPermission("pengumuman:read", req)
   if (guard.error) return guard.error
   try {
     const { searchParams } = new URL(req.url)
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const guard = await requireApiPermission("pengumuman:create")
+  const guard = await requireApiPermission("pengumuman:create", req)
   if (guard.error) return guard.error
   const session = guard.session
   try {
