@@ -1,7 +1,5 @@
 "use client"
 
-/* eslint-disable react-hooks/set-state-in-effect */
-
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { Loader2, GraduationCap } from "lucide-react"
@@ -30,21 +28,28 @@ export function AuthGate() {
   useEffect(() => {
     if (mode !== "wali") return
 
+    let isMounted = true
     const savedToken = localStorage.getItem("waliToken")
     const savedWali = localStorage.getItem("waliData")
     const savedSantri = localStorage.getItem("waliSantri")
+
     if (savedToken && savedWali && savedSantri) {
-      const sessionData = verifyWaliToken(savedToken)
-      if (sessionData) {
-        setWaliToken(savedToken)
-        setWaliData(JSON.parse(savedWali))
-        setWaliSantriList(JSON.parse(savedSantri))
-      } else {
-        localStorage.removeItem("waliToken")
-        localStorage.removeItem("waliData")
-        localStorage.removeItem("waliSantri")
-      }
+      // verifyWaliToken is async (uses jose for browser compat)
+      verifyWaliToken(savedToken).then((sessionData) => {
+        if (!isMounted) return
+        if (sessionData) {
+          setWaliToken(savedToken)
+          setWaliData(JSON.parse(savedWali))
+          setWaliSantriList(JSON.parse(savedSantri))
+        } else {
+          // Token invalid/expired, clear
+          localStorage.removeItem("waliToken")
+          localStorage.removeItem("waliData")
+          localStorage.removeItem("waliSantri")
+        }
+      })
     }
+    return () => { isMounted = false }
   }, [mode])
 
   // WALI MODE

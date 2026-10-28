@@ -135,5 +135,24 @@ export const authOptions: NextAuthOptions = {
     error: "/",
   },
 
+  // ⚠️ trustHost WAJIB true untuk preview environment yang URL-nya dinamis
+  // (mis. preview-chat-xxx.space-z.ai). Tanpa ini, NextAuth akan reject
+  // cookie karena host tidak match dengan NEXTAUTH_URL.
+  // Di production dengan domain tetap, ini bisa di-set false untuk security.
+  trustHost: true,
+
+  // Cookie settings — long-lived session
+  cookies: {
+    sessionToken: {
+      name: "next-auth.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax", // lax cukup untuk same-origin, lebih kompatibel
+        path: "/",
+        secure: false, // false untuk HTTP preview; di production Vercel HTTPS, otomatis secure
+      },
+    },
+  },
+
   secret: process.env.NEXTAUTH_SECRET || "sim-madin-dev-secret-change-in-production",
 }

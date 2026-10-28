@@ -1,14 +1,23 @@
 /**
  * Client-side wali auth helpers
- * (Server-side pakai jsonwebtoken langsung, ini versi client yang pakai js-jwt)
  *
- * Untuk verifikasi yang aman di client, hanya decode (tidak verify signature).
- * Signature verification dilakukan di server saat API call.
+ * ⚠️ Pakai `jose` (bukan `jsonwebtoken`) karena jose browser-compatible
+ * (tidak butuh Node.js Buffer/crypto).
+ *
+ * Untuk security: signature verification di client hanya untuk UX (cek expired).
+ * Verification sebenarnya tetap dilakukan di server saat API call.
  */
 
-import jwt from "jsonwebtoken"
+import { jwtVerify, decodeJwt } from "jose"
 
-const JWT_SECRET = process.env.NEXTAUTH_SECRET || "sim-madin-dev-secret-change-in-production"
+// NEXT_PUBLIC_ prefix wajib agar ter-expose ke browser
+const JWT_SECRET_STRING =
+  process.env.NEXT_PUBLIC_WALI_JWT_SECRET ||
+  process.env.NEXT_PUBLIC_NEXTAUTH_SECRET ||
+  "sim-madin-dev-secret-change-in-production-2025"
+
+// Encode secret ke Uint8Array (format yang jose butuhkan)
+const JWT_SECRET = new TextEncoder().encode(JWT_SECRET_STRING)
 
 export interface WaliSession {
   waliId: string
@@ -18,16 +27,16 @@ export interface WaliSession {
 }
 
 /**
- * Decode wali JWT token (client-side, verify signature jika bisa)
+ * Verify wali JWT token (client-side, pakai jose untuk browser compat).
  */
-export function verifyWaliToken(token: string): WaliSession | null {
+export async function verifyWaliToken(token: string): Promise<WaliSession | null> {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any
+    const { payload } = await jwtVerify(token, JWT_SECRET)
     return {
-      waliId: decoded.waliId,
-      phone: decoded.phone,
-      name: decoded.name,
-      santriIds: decoded.santriIds || [],
+      waliId: payload.waliId as string,
+      phone: payload.phone as string,
+      name: payload.name as string,
+      santriIds: (payload.santriIds as string[]) || [],
     }
   } catch {
     return null
@@ -35,11 +44,11 @@ export function verifyWaliToken(token: string): WaliSession | null {
 }
 
 /**
- * Cek apakah token expired (tanpa verify signature)
+ * Cek apakah token expired (tanpa verify signature, lebih cepat)
  */
 export function isTokenExpired(token: string): boolean {
   try {
-    const decoded = jwt.decode(token) as any
+    const decoded = decodeJwt(token)
     if (!decoded?.exp) return false
     return Date.now() >= decoded.exp * 1000
   } catch {

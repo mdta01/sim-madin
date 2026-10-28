@@ -14,7 +14,10 @@ import bcrypt from "bcryptjs"
 import { db } from "@/lib/db"
 import { normalizeWhatsApp, isValidPINFormat, isWeakPIN } from "./helpers"
 
-const JWT_SECRET = process.env.NEXTAUTH_SECRET || "sim-madin-dev-secret-change-in-production"
+const JWT_SECRET =
+  process.env.NEXTAUTH_SECRET ||
+  process.env.NEXT_PUBLIC_WALI_JWT_SECRET ||
+  "sim-madin-dev-secret-change-in-production-2025" // HARUS sama dengan client default
 const JWT_EXPIRES_IN = "7d"
 
 export interface WaliSession {
