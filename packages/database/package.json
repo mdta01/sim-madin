@@ -1,0 +1,14 @@
+{
+  "name": "@sim-madin/database",
+  "version": "1.1.0",
+  "description": "Database schema, seed, dan migration untuk SIM MADIN monorepo",
+  "scripts": {
+    "db:push": "prisma db push --accept-data-loss --schema=./schema.prisma",
+    "db:generate": "prisma generate --schema=./schema.prisma",
+    "db:migrate": "prisma migrate dev --schema=./schema.prisma",
+    "db:seed": "bun run ./seed.ts",
+    "db:studio": "prisma studio --schema=./schema.prisma"
+  },
+  "keywords": ["madrasah", "database", "prisma"],
+  "license": "MIT"
+}

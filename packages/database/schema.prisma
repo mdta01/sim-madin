@@ -1,0 +1,532 @@
+# ============================================================================
+# PRISMA SCHEMA — SIM MADIN (Postgres-ready)
+# ============================================================================
+# File ini adalah versi portable dari schema.prisma yang aktif di app.
+# Bedanya: provider bisa di-switch antara sqlite (dev) dan postgresql (prod).
+#
+# Untuk migrasi ke Supabase Postgres:
+# 1. Copy file ini ke apps/super-admin/prisma/schema.prisma
+# 2. Set DATABASE_URL di .env ke connection string Supabase
+# 3. Ubah provider "sqlite" → "postgresql"
+# 4. Jalankan: bun run db:push (untuk inisialisasi) atau db:migrate (untuk migration file)
+# ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  // Untuk production (Supabase), ganti ke: provider = "postgresql"
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// 1. AUTENTIKASI, ROLE & PERMISSION
+// ============================================================================
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  username      String   @unique
+  passwordHash  String
+  name          String
+  phone         String?
+  avatarUrl     String?
+  firebaseUid   String?  @unique // untuk integrasi Firebase Auth
+  isActive      Boolean  @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deletedAt     DateTime?
+
+  userRoles     UserRole[]
+  auditLogs     AuditLog[]
+  payments      Payment[]      @relation("RecordedBy")
+  announcements Announcement[] @relation("CreatedBy")
+  santri        Santri?
+  guru          Guru?
+  wali          Wali?
+
+  @@index([isActive])
+  @@index([deletedAt])
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  sortOrder   Int      @default(0)
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userRoles   UserRole[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  module      String
+  description String?
+  createdAt   DateTime @default(now())
+
+  roles       RolePermission[]
+}
+
+model UserRole {
+  id        String   @id @default(cuid())
+  userId    String
+  roleId    String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [roleId], references: [id])
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+}
+
+model RolePermission {
+  id           String   @id @default(cuid())
+  roleId       String
+  permissionId String
+  createdAt    DateTime @default(now())
+
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+}
+
+// ============================================================================
+// 2. MASTER AKADEMIK
+// ============================================================================
+
+model TahunAjaran {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  semesters Semester[]
+  santri    Santri[]
+  jadwal    Jadwal[]
+  absensi   Absensi[]
+  nilai     Nilai[]
+  rapor     Rapor[]
+  tagihan   Tagihan[]
+  pembayaran Payment[]
+}
+
+model Semester {
+  id           String   @id @default(cuid())
+  tahunAjaranId String
+  code         String   @unique
+  name         String
+  type         String
+  startDate    DateTime
+  endDate      DateTime
+  isActive     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tahunAjaran  TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
+  jadwal       Jadwal[]
+  nilai        Nilai[]
+  rapor        Rapor[]
+
+  @@index([tahunAjaranId])
+}
+
+model Kelas {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  level       String
+  description String?
+  capacity    Int      @default(30)
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  waliKelasId String?
+  waliKelas   Guru?   @relation("KelasWali", fields: [waliKelasId], references: [id])
+
+  santri      Santri[]
+  jadwal      Jadwal[]
+  absensi     Absensi[]
+  nilai       Nilai[]
+  rapor       Rapor[]
+  tagihan     Tagihan[]
+
+  @@index([level])
+  @@index([isActive])
+  @@index([deletedAt])
+}
+
+model MataPelajaran {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  category    String
+  description String?
+  kkm         Float    @default(70)
+  durationMnt Int      @default(60)
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  jadwal      Jadwal[]
+  nilai       Nilai[]
+
+  @@index([category])
+  @@index([isActive])
+  @@index([deletedAt])
+}
+
+// ============================================================================
+// 3. DATA INDUK
+// ============================================================================
+
+model Wali {
+  id          String   @id @default(cuid())
+  userId      String?  @unique
+  name        String
+  nik         String?  @unique
+  phone       String
+  email       String?
+  occupation  String?
+  address     String?
+  relationship String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  user        User?    @relation(fields: [userId], references: [id])
+  santri      Santri[]
+
+  @@index([phone])
+  @@index([deletedAt])
+}
+
+model Santri {
+  id            String   @id @default(cuid())
+  nis           String   @unique
+  nisn          String?  @unique
+  name          String
+  gender        String
+  birthPlace    String?
+  birthDate     DateTime?
+  address      String?
+  phone         String?
+  photoUrl      String?
+  entryDate     DateTime @default(now())
+  status        String   @default("AKTIF")
+  waliId        String?
+  kelasId       String?
+  tahunAjaranId String?
+  userId        String?  @unique
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deletedAt     DateTime?
+
+  wali          Wali?        @relation(fields: [waliId], references: [id])
+  kelas         Kelas?       @relation(fields: [kelasId], references: [id])
+  tahunAjaran   TahunAjaran? @relation(fields: [tahunAjaranId], references: [id])
+  user          User?        @relation(fields: [userId], references: [id])
+  absensi       Absensi[]
+  nilai         Nilai[]
+  rapor         Rapor[]
+  tagihan       Tagihan[]
+  payments      Payment[]
+
+  @@index([kelasId])
+  @@index([waliId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model Guru {
+  id          String   @id @default(cuid())
+  userId      String?  @unique
+  nip         String?  @unique
+  nuptk       String?  @unique
+  name        String
+  gender      String
+  birthPlace  String?
+  birthDate   DateTime?
+  address     String?
+  phone       String?
+  email       String?
+  photoUrl    String?
+  joinDate    DateTime @default(now())
+  specialization String?
+  status      String   @default("AKTIF")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  user        User?    @relation(fields: [userId], references: [id])
+  kelasWali   Kelas[]  @relation("KelasWali")
+  jadwal      Jadwal[]
+  absensi     Absensi[] @relation("RecordedByGuru")
+  nilai       Nilai[]
+
+  @@index([status])
+  @@index([deletedAt])
+}
+
+// ============================================================================
+// 4. JADWAL PELAJARAN
+// ============================================================================
+
+model Jadwal {
+  id            String   @id @default(cuid())
+  tahunAjaranId String
+  semesterId    String
+  kelasId       String
+  mapelId       String
+  guruId        String
+  dayOfWeek     Int
+  startTime     String
+  endTime       String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tahunAjaran  TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
+  semester     Semester    @relation(fields: [semesterId], references: [id])
+  kelas        Kelas       @relation(fields: [kelasId], references: [id])
+  mapel        MataPelajaran @relation(fields: [mapelId], references: [id])
+  guru         Guru        @relation(fields: [guruId], references: [id])
+
+  @@unique([kelasId, mapelId, dayOfWeek, startTime, tahunAjaranId, semesterId])
+  @@index([kelasId, dayOfWeek])
+  @@index([guruId, dayOfWeek])
+}
+
+// ============================================================================
+// 5. AKADEMIK HARIAN
+// ============================================================================
+
+model Absensi {
+  id            String   @id @default(cuid())
+  tahunAjaranId String
+  santriId      String
+  kelasId       String
+  date          DateTime
+  status        String
+  note          String?
+  recordedByGuruId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tahunAjaran   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
+  santri        Santri      @relation(fields: [santriId], references: [id], onDelete: Cascade)
+  kelas         Kelas       @relation(fields: [kelasId], references: [id])
+  guru          Guru?       @relation("RecordedByGuru", fields: [recordedByGuruId], references: [id])
+
+  @@unique([santriId, date, tahunAjaranId])
+  @@index([kelasId, date])
+  @@index([santriId, date])
+  @@index([status, date])
+}
+
+model Nilai {
+  id            String   @id @default(cuid())
+  tahunAjaranId String
+  semesterId    String
+  santriId      String
+  kelasId       String
+  mapelId       String
+  guruId        String?
+  type          String
+  score         Float
+  notes         String?
+  assessmentDate DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tahunAjaran   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
+  semester     Semester    @relation(fields: [semesterId], references: [id])
+  santri        Santri      @relation(fields: [santriId], references: [id], onDelete: Cascade)
+  kelas         Kelas       @relation(fields: [kelasId], references: [id])
+  mapel         MataPelajaran @relation(fields: [mapelId], references: [id])
+  guru          Guru?       @relation(fields: [guruId], references: [id])
+
+  @@unique([santriId, mapelId, type, semesterId, tahunAjaranId])
+  @@index([kelasId, mapelId, type])
+  @@index([santriId, semesterId])
+}
+
+// ============================================================================
+// 6. RAPOR
+// ============================================================================
+
+model Rapor {
+  id            String   @id @default(cuid())
+  tahunAjaranId String
+  semesterId    String
+  santriId      String
+  kelasId       String
+  notes         String?
+  absensiHadir  Int     @default(0)
+  absensiSakit  Int     @default(0)
+  absensiIzin   Int     @default(0)
+  absensiAlfa   Int     @default(0)
+  published     Boolean @default(false)
+  publishedAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tahunAjaran   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
+  semester     Semester    @relation(fields: [semesterId], references: [id])
+  santri        Santri      @relation(fields: [santriId], references: [id], onDelete: Cascade)
+  kelas         Kelas       @relation(fields: [kelasId], references: [id])
+
+  @@unique([santriId, semesterId, tahunAjaranId])
+  @@index([kelasId, semesterId])
+}
+
+// ============================================================================
+// 7. KEUANGAN
+// ============================================================================
+
+model JenisTagihan {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  defaultAmount Int
+  category    String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tagihan     Tagihan[]
+}
+
+model Tagihan {
+  id            String   @id @default(cuid())
+  tahunAjaranId String
+  santriId      String
+  kelasId       String?
+  jenisTagihanId String
+  amount        Float
+  paidAmount    Float    @default(0)
+  description   String?
+  dueDate       DateTime?
+  status        String   @default("BELUM_BAYAR")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tahunAjaran   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
+  santri        Santri      @relation(fields: [santriId], references: [id], onDelete: Cascade)
+  kelas         Kelas?      @relation(fields: [kelasId], references: [id])
+  jenisTagihan  JenisTagihan @relation(fields: [jenisTagihanId], references: [id])
+  payments      Payment[]
+
+  @@index([santriId, status])
+  @@index([tahunAjaranId, status])
+  @@index([dueDate])
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  invoiceNo     String   @unique
+  tahunAjaranId String?
+  tagihanId     String?
+  santriId      String?
+  amount        Float
+  paymentMethod String
+  paymentDate   DateTime @default(now())
+  status        String   @default("VERIFIED")
+  note          String?
+  proofUrl      String?
+  recordedById  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tahunAjaran   TahunAjaran? @relation(fields: [tahunAjaranId], references: [id])
+  tagihan        Tagihan?     @relation(fields: [tagihanId], references: [id])
+  santri        Santri?      @relation(fields: [santriId], references: [id])
+  recordedBy    User?        @relation("RecordedBy", fields: [recordedById], references: [id])
+
+  @@index([santriId, paymentDate])
+  @@index([status, paymentDate])
+  @@index([tagihanId])
+}
+
+// ============================================================================
+// 8. PENGUMUMAN
+// ============================================================================
+
+model Announcement {
+  id          String   @id @default(cuid())
+  title       String
+  content     String
+  audience    String
+  kelasId     String?
+  priority    String   @default("NORMAL")
+  isPublished Boolean  @default(true)
+  publishedAt DateTime @default(now())
+  expiresAt   DateTime?
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy   User?    @relation("CreatedBy", fields: [createdById], references: [id])
+
+  @@index([isPublished, publishedAt])
+  @@index([audience])
+}
+
+// ============================================================================
+// 9. AUDIT LOG
+// ============================================================================
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  module    String
+  entityId  String?
+  entityType String?
+  changes   String?
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([module, action, createdAt])
+}
+
+// ============================================================================
+// 10. PENGATURAN SISTEM
+// ============================================================================
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  type      String   @default("STRING")
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}

@@ -1,21 +1,28 @@
 import { getServerSession } from "next-auth"
+import type { NextRequest } from "next/server"
 import { authOptions } from "@/lib/auth/auth-options"
 import { db } from "@/lib/db"
 import { NextResponse } from "next/server"
+import { verifyBearerToken, isFirebaseConfigured } from "@/lib/firebase/admin"
 
 /**
  * Auth Helpers — Server-side
  * ============================================================================
- * Mendukung pola:
- *   const session = await requireAuth()
- *   if (!session) return 401
- *   const ok = await requirePermission(session, "santri:create")
- *   if (!ok) return 403
+ * Mendukung 2 mode autentikasi:
  *
- * Atau yang lebih ringkas:
- *   const guard = await requireApiPermission("santri:create")
- *   if (guard.error) return guard.error
- *   const session = guard.session!
+ * 1. Web (NextAuth) — cookie-based, otomatis dikirim browser
+ *    const session = await getSession()
+ *
+ * 2. Mobile (Firebase Auth) — Bearer token via Authorization header
+ *    Client kirim: Authorization: Bearer <firebase-id-token>
+ *    Server verify via Firebase Admin SDK
+ *
+ * Auto-detect:
+ * - Cek Authorization header dulu (untuk mobile)
+ * - Fallback ke NextAuth session (untuk web)
+ *
+ * Helper functions tetap sama untuk caller.
+ * ============================================================================
  */
 
 export interface AppSession {
@@ -32,9 +39,20 @@ export interface AppSession {
 }
 
 /**
- * Ambil session saat ini (atau null jika belum login)
+ * Ambil session saat ini (atau null jika belum login).
+ * Auto-detect: cek Bearer token (mobile/Firebase) dulu, fallback ke NextAuth session (web).
  */
-export async function getSession(): Promise<AppSession | null> {
+export async function getSession(req?: { headers: Headers }): Promise<AppSession | null> {
+  // 1. Cek Firebase Bearer token (untuk mobile apps)
+  if (req?.headers && isFirebaseConfigured()) {
+    const authHeader = req.headers.get("authorization")
+    if (authHeader?.startsWith("Bearer ")) {
+      const firebaseSession = await verifyBearerToken(authHeader)
+      if (firebaseSession) return firebaseSession
+    }
+  }
+
+  // 2. Fallback ke NextAuth session (untuk web)
   const session = await getServerSession(authOptions)
   if (!session?.user) return null
   return session as unknown as AppSession
@@ -42,9 +60,10 @@ export async function getSession(): Promise<AppSession | null> {
 
 /**
  * Harus login. Return session atau null.
+ * Pass `req` jika ingin support Firebase Bearer token (mobile).
  */
-export async function requireAuth(): Promise<AppSession | null> {
-  return await getSession()
+export async function requireAuth(req?: NextRequest): Promise<AppSession | null> {
+  return await getSession(req ? { headers: req.headers } : undefined)
 }
 
 /**
@@ -71,14 +90,15 @@ export function hasRole(session: AppSession | null, ...roles: string[]): boolean
  * Return { session } jika lolos, atau { error: NextResponse 401/403 } jika gagal.
  *
  * @example
- * const guard = await requireApiPermission("santri:create")
+ * const guard = await requireApiPermission("santri:create", req)
  * if (guard.error) return guard.error
  * const session = guard.session!
  */
 export async function requireApiPermission(
   permission: string,
+  req?: NextRequest,
 ): Promise<{ session: AppSession; error?: undefined } | { session?: undefined; error: NextResponse }> {
-  const session = await getSession()
+  const session = await getSession(req ? { headers: req.headers } : undefined)
   if (!session) {
     return {
       error: NextResponse.json(
@@ -106,10 +126,10 @@ export async function requireApiPermission(
  * Variasi: hanya butuh login (sudah auth), tanpa permission check.
  * Cocok untuk endpoint yang spesifik per user (mis. profil sendiri).
  */
-export async function requireApiAuth(): Promise<
-  { session: AppSession; error?: undefined } | { session?: undefined; error: NextResponse }
-> {
-  const session = await getSession()
+export async function requireApiAuth(
+  req?: NextRequest,
+): Promise<{ session: AppSession; error?: undefined } | { session?: undefined; error: NextResponse }> {
+  const session = await getSession(req ? { headers: req.headers } : undefined)
   if (!session) {
     return {
       error: NextResponse.json(
