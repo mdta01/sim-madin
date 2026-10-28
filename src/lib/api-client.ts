@@ -1,7 +1,22 @@
 /**
  * API Helper untuk client-side fetching ke /api/admin/*
- * Tanpa rethrow, dengan typing minimal (any) agar fleksibel untuk MVP.
+ * Auto-include Supabase Auth Bearer token jika tersedia.
  */
+
+import { getSupabaseBrowserClient } from "@/lib/supabase/client"
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  if (typeof window !== "undefined") {
+    const supabase = getSupabaseBrowserClient()
+    if (supabase) {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) {
+        return { Authorization: `Bearer ${session.access_token}` }
+      }
+    }
+  }
+  return {}
+}
 
 export async function apiGet<T = any>(path: string, params?: Record<string, any>): Promise<T> {
   const url = new URL(path, window.location.origin)
@@ -10,7 +25,8 @@ export async function apiGet<T = any>(path: string, params?: Record<string, any>
       if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v))
     })
   }
-  const res = await fetch(url.toString(), { cache: "no-store" })
+  const headers = await getAuthHeaders()
+  const res = await fetch(url.toString(), { cache: "no-store", headers })
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}))
     throw new Error(errBody?.error || `Request failed: ${res.status}`)
@@ -19,10 +35,12 @@ export async function apiGet<T = any>(path: string, params?: Record<string, any>
 }
 
 export async function apiPost<T = any>(path: string, body?: any): Promise<T> {
+  const headers = await getAuthHeaders()
   const res = await fetch(path, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     body: body === undefined ? undefined : JSON.stringify(body),
+    credentials: "include",
   })
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}))
@@ -32,10 +50,12 @@ export async function apiPost<T = any>(path: string, body?: any): Promise<T> {
 }
 
 export async function apiPut<T = any>(path: string, body: any): Promise<T> {
+  const headers = await getAuthHeaders()
   const res = await fetch(path, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(body),
+    credentials: "include",
   })
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}))
@@ -45,7 +65,8 @@ export async function apiPut<T = any>(path: string, body: any): Promise<T> {
 }
 
 export async function apiDelete<T = any>(path: string): Promise<T> {
-  const res = await fetch(path, { method: "DELETE" })
+  const headers = await getAuthHeaders()
+  const res = await fetch(path, { method: "DELETE", headers, credentials: "include" })
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}))
     throw new Error(errBody?.error || `Request failed: ${res.status}`)

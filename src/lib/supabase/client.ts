@@ -7,25 +7,17 @@
  * ⚠️ Penting: JANGAN pakai service_role key di sini!
  * Hanya pakai anon key (public), aman untuk di-expose ke client.
  *
- * Cara pakai di Next.js client component:
- *   "use client"
- *   import { getSupabaseBrowserClient } from "@/lib/supabase/client"
- *   const supabase = getSupabaseBrowserClient()
- *   await supabase.auth.signInWithPassword({ email, password })
- *
- * Cara pakai di Expo (mobile apps):
- *   import { createClient } from "@supabase/supabase-js"
- *   import * as SecureStore from "expo-secure-store"
- *   const supabase = createClient(URL, ANON_KEY, {
- *     auth: { storage: SecureStoreAdapter, autoRefreshToken: true }
- *   })
+ * Singleton pattern untuk menghindari "Multiple GoTrueClient instances" warning.
  * ============================================================================
  */
 
 import { createClient, SupabaseClient } from "@supabase/supabase-js"
 
+let cachedClient: SupabaseClient | null = null
+
 /**
  * Get Supabase client untuk browser (anon key, aman untuk client)
+ * Singleton — hanya buat 1 instance per browser.
  */
 export function getSupabaseBrowserClient(): SupabaseClient | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -35,12 +27,16 @@ export function getSupabaseBrowserClient(): SupabaseClient | null {
     return null
   }
 
-  return createClient(url, anonKey, {
+  if (cachedClient) return cachedClient
+
+  cachedClient = createClient(url, anonKey, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
     },
   })
+
+  return cachedClient
 }
 
 /**

@@ -1,6 +1,6 @@
 "use client"
 
-import { useSession, signOut } from "next-auth/react"
+import { useSupabaseSession } from "@/hooks/use-supabase-session"
 import { useAdminStore } from "@/stores/admin-store"
 import { MENU_ITEMS, ROLE_LABELS } from "@/lib/constants"
 import { Button } from "@/components/ui/button"
@@ -28,11 +28,19 @@ export function Header({ onMenuClick }: HeaderProps) {
   const setView = useAdminStore((s) => s.setView)
   const menuItem = MENU_ITEMS.find((m) => m.id === currentView)
   const Icon = (Icons as any)[menuItem?.icon || "LayoutDashboard"] || Icons.Circle
-  const { data: session } = useSession()
-  const user = session?.user
-  const primaryRole = user?.roles?.[0]
+  const { user, signOut } = useSupabaseSession()
+  const primaryRole = user?.user_metadata?.role as string || user?.email
 
-  // Override title & icon untuk view yang bukan di menu utama
+  const handleLogout = async () => {
+    await signOut()
+    window.location.reload()
+  }
+
+  const handleProfile = () => {
+    setView("profile" as any)
+  }
+
+  // Override title & icon for views not in menu
   const viewOverrides: Record<string, { label: string; description: string; icon: string }> = {
     "profile": { label: "Profil Saya", description: "Kelola akun & keamanan", icon: "User" },
     "audit-log": { label: "Audit Log", description: "Riwayat aktivitas sistem", icon: "Activity" },
@@ -42,14 +50,9 @@ export function Header({ onMenuClick }: HeaderProps) {
   const description = override?.description || menuItem?.description || ""
   const OverrideIcon = override ? (Icons as any)[override.icon] || Icons.Circle : null
 
-  const handleLogout = async () => {
-    await signOut({ redirect: false })
-    window.location.reload()
-  }
-
-  const handleProfile = () => {
-    setView("profile" as any)
-  }
+  // Get user name from Supabase user_metadata or email
+  const userName = (user?.user_metadata?.name as string) || user?.email?.split("@")[0] || "User"
+  const userInitial = userName[0]?.toUpperCase() || "U"
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b bg-background/95 backdrop-blur px-4 sm:px-6">
@@ -62,12 +65,8 @@ export function Header({ onMenuClick }: HeaderProps) {
           {OverrideIcon ? <OverrideIcon className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
         </div>
         <div className="min-w-0">
-          <h2 className="font-semibold text-sm sm:text-base truncate">
-            {title}
-          </h2>
-          <p className="text-[11px] text-muted-foreground hidden sm:block truncate">
-            {description}
-          </p>
+          <h2 className="font-semibold text-sm sm:text-base truncate">{title}</h2>
+          <p className="text-[11px] text-muted-foreground hidden sm:block truncate">{description}</p>
         </div>
       </div>
 
@@ -88,15 +87,11 @@ export function Header({ onMenuClick }: HeaderProps) {
         <DropdownMenuTrigger asChild>
           <button className="flex items-center gap-2 pl-2 border-l hover:bg-muted/40 px-2 py-1.5 rounded-md transition-colors">
             <Avatar className="h-8 w-8">
-              <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                {user?.name?.[0] || "?"}
-              </AvatarFallback>
+              <AvatarFallback className="bg-primary text-primary-foreground text-xs">{userInitial}</AvatarFallback>
             </Avatar>
             <div className="hidden sm:block min-w-0 text-left">
-              <p className="text-xs font-medium truncate max-w-[120px]">{user?.name || "User"}</p>
-              <p className="text-[10px] text-muted-foreground truncate max-w-[120px]">
-                {primaryRole ? ROLE_LABELS[primaryRole] || primaryRole : "User"}
-              </p>
+              <p className="text-xs font-medium truncate max-w-[120px]">{userName}</p>
+              <p className="text-[10px] text-muted-foreground truncate max-w-[120px]">{user?.email}</p>
             </div>
             <ChevronDown className="h-3 w-3 text-muted-foreground hidden sm:block" />
           </button>
@@ -104,26 +99,17 @@ export function Header({ onMenuClick }: HeaderProps) {
         <DropdownMenuContent align="end" className="w-64">
           <DropdownMenuLabel className="font-normal">
             <div className="flex flex-col space-y-1">
-              <p className="text-sm font-medium leading-none">{user?.name}</p>
+              <p className="text-sm font-medium leading-none">{userName}</p>
               <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
-              <div className="flex flex-wrap gap-1 pt-1.5">
-                {user?.roles?.map((r: string) => (
-                  <Badge key={r} variant="secondary" className="text-[10px]">
-                    {ROLE_LABELS[r] || r}
-                  </Badge>
-                ))}
-              </div>
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleProfile} className="cursor-pointer">
             <UserIcon className="h-4 w-4 mr-2" /> Profil Saya
           </DropdownMenuItem>
-          {user?.roles?.includes("SUPER_ADMIN") && (
-            <DropdownMenuItem onClick={() => setView("audit-log" as any)} className="cursor-pointer">
-              <ShieldCheck className="h-4 w-4 mr-2" /> Audit Log
-            </DropdownMenuItem>
-          )}
+          <DropdownMenuItem onClick={() => setView("audit-log" as any)} className="cursor-pointer">
+            <ShieldCheck className="h-4 w-4 mr-2" /> Audit Log
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive focus:text-destructive">
             <LogOut className="h-4 w-4 mr-2" /> Keluar

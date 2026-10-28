@@ -1,30 +1,33 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useSession } from "next-auth/react"
 import { Loader2, GraduationCap } from "lucide-react"
 import { LoginOverlay } from "@/components/auth/login-overlay"
 import { AdminLayout } from "@/components/admin/admin-layout"
 import { WaliLoginOverlay } from "@/components/wali/wali-login-overlay"
 import { WaliDashboard } from "@/components/wali/wali-dashboard"
+import { useSupabaseSession } from "@/hooks/use-supabase-session"
 import { verifyWaliToken } from "@/lib/wali/auth-client"
 
 type Mode = "admin" | "wali"
 
 export function AuthGate() {
-  const { data: session, status } = useSession()
+  // Supabase Auth session (for admin mode)
+  const { session: supabaseSession, loading: supabaseLoading, signOut: supabaseSignOut } = useSupabaseSession()
+
+  // Wali session state (localStorage based, for wali mode)
   const [waliToken, setWaliToken] = useState<string | null>(null)
   const [waliData, setWaliData] = useState<{ id: string; name: string; phone: string; email?: string } | null>(null)
   const [waliSantriList, setWaliSantriList] = useState<any[]>([])
 
-  // Detect mode from URL query — pakai lazy initializer supaya tidak setState di effect
+  // Detect mode from URL query
   const [mode, setMode] = useState<Mode>(() => {
     if (typeof window === "undefined") return "admin"
     const url = new URL(window.location.href)
     return url.searchParams.get("mode") === "wali" ? "wali" : "admin"
   })
 
-  // Try restore wali session on mount (only if mode is wali)
+  // Restore wali session on mount
   useEffect(() => {
     if (mode !== "wali") return
 
@@ -34,7 +37,6 @@ export function AuthGate() {
     const savedSantri = localStorage.getItem("waliSantri")
 
     if (savedToken && savedWali && savedSantri) {
-      // verifyWaliToken is async (uses jose for browser compat)
       verifyWaliToken(savedToken).then((sessionData) => {
         if (!isMounted) return
         if (sessionData) {
@@ -42,7 +44,6 @@ export function AuthGate() {
           setWaliData(JSON.parse(savedWali))
           setWaliSantriList(JSON.parse(savedSantri))
         } else {
-          // Token invalid/expired, clear
           localStorage.removeItem("waliToken")
           localStorage.removeItem("waliData")
           localStorage.removeItem("waliSantri")
@@ -91,8 +92,8 @@ export function AuthGate() {
     )
   }
 
-  // ADMIN MODE
-  if (status === "loading") {
+  // ADMIN MODE — use Supabase Auth
+  if (supabaseLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-background">
         <div className="h-14 w-14 rounded-xl bg-primary flex items-center justify-center shadow-lg">
@@ -105,7 +106,7 @@ export function AuthGate() {
     )
   }
 
-  if (status === "unauthenticated" || !session?.user) {
+  if (!supabaseSession) {
     return <LoginOverlay onSwitchToWali={() => {
       setMode("wali")
       const url = new URL(window.location.href)

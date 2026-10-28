@@ -16,8 +16,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
 }
 
 // ============================================================================
@@ -36,6 +37,7 @@ model User {
   name          String
   phone         String?
   avatarUrl     String?
+  firebaseUid   String?  @unique // untuk integrasi Supabase Auth / Firebase Auth
   isActive      Boolean  @default(true)
   lastLoginAt   DateTime?
   createdAt     DateTime @default(now())

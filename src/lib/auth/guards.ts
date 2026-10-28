@@ -1,5 +1,6 @@
 import { getServerSession } from "next-auth"
 import type { NextRequest } from "next/server"
+import { headers } from "next/headers"
 import { authOptions } from "@/lib/auth/auth-options"
 import { db } from "@/lib/db"
 import { NextResponse } from "next/server"
@@ -52,9 +53,19 @@ export interface AppSession {
  * 3. NextAuth session cookie (web)
  */
 export async function getSession(req?: { headers: Headers }): Promise<AppSession | null> {
-  // 1. Cek Bearer token (untuk mobile apps) — Supabase dulu, lalu Firebase
-  if (req?.headers) {
-    const authHeader = req.headers.get("authorization")
+  // Get headers — either from req param or from Next.js headers() function
+  let headerObj: Headers | undefined = req?.headers
+  if (!headerObj) {
+    try {
+      headerObj = await headers()
+    } catch {
+      // headers() might not work in all contexts
+    }
+  }
+
+  // 1. Cek Bearer token (untuk API calls from browser with Supabase Auth)
+  if (headerObj) {
+    const authHeader = headerObj.get("authorization")
     if (authHeader?.startsWith("Bearer ")) {
       const token = authHeader.slice(7)
 
@@ -72,7 +83,7 @@ export async function getSession(req?: { headers: Headers }): Promise<AppSession
     }
   }
 
-  // 2. Fallback ke NextAuth session (untuk web)
+  // 2. Fallback ke NextAuth session (untuk web — cookie-based)
   const session = await getServerSession(authOptions)
   if (!session?.user) return null
   return session as unknown as AppSession
