@@ -2,30 +2,25 @@
  * ============================================================================
  * STORAGE ADAPTER — SIM MADIN
  * ============================================================================
- * Pattern: graceful fallback.
- * - Jika FIREBASE_PROJECT_ID + FIREBASE_STORAGE_BUCKET set → pakai Firebase Storage
- * - Jika tidak set → pakai local storage (public/uploads/)
+ * Pattern: graceful fallback dengan 3 mode.
+ *
+ * Priority (auto-detect via env vars):
+ * 1. Cloudflare R2 (preferred for production) — jika R2_* di-set
+ * 2. Firebase Storage — jika FIREBASE_STORAGE_BUCKET di-set
+ * 3. Local storage (dev fallback) — save ke public/uploads/
  *
  * Penggunaan di API route:
  *   const { url, filename } = await uploadFile(file, { prefix: "santri" })
- *
- * Production setup:
- * 1. Enable Firebase Storage di Firebase Console
- * 2. Set rules (allow read: if true; allow write: if request.auth != null;)
- * 3. Set env: FIREBASE_STORAGE_BUCKET=your-bucket.appspot.com
- *
- * Untuk mobile: gunakan Firebase SDK client-side langsung ke Storage (skip API),
- * tapi tetap perlu verify token via API route untuk dapatkan signed URL.
  * ============================================================================
  */
 
-import { writeFile, mkdir, readFile, unlink } from "fs/promises"
+import { writeFile, mkdir, unlink } from "fs/promises"
 import { existsSync } from "fs"
 import path from "path"
 import { randomBytes } from "crypto"
 
 export interface StorageAdapter {
-  type: "local" | "firebase"
+  type: "local" | "firebase" | "r2"
   upload(file: Buffer, options: UploadOptions): Promise<UploadResult>
   delete(url: string): Promise<void>
   getSignedUrl?(url: string, expiresIn?: number): Promise<string>
@@ -51,6 +46,18 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5 MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"]
 
 /**
+ * Detect apakah Cloudflare R2 dikonfigurasi (preferred production storage)
+ */
+export function isR2Configured(): boolean {
+  return !!(
+    process.env.R2_ACCOUNT_ID &&
+    process.env.R2_ACCESS_KEY_ID &&
+    process.env.R2_SECRET_ACCESS_KEY &&
+    process.env.R2_BUCKET_NAME
+  )
+}
+
+/**
  * Detect apakah Firebase Storage dikonfigurasi
  */
 export function isFirebaseStorageConfigured(): boolean {
@@ -63,12 +70,31 @@ export function isFirebaseStorageConfigured(): boolean {
 }
 
 /**
- * Get storage adapter berdasarkan env config
+ * Get storage type yang aktif
+ */
+export function getActiveStorageType(): "local" | "firebase" | "r2" {
+  if (isR2Configured()) return "r2"
+  if (isFirebaseStorageConfigured()) return "firebase"
+  return "local"
+}
+
+/**
+ * Get storage adapter berdasarkan env config (auto-detect)
+ * Priority: R2 > Firebase > Local
  */
 export async function getStorageAdapter(): Promise<StorageAdapter> {
+  // 1. Cloudflare R2 (preferred for production)
+  if (isR2Configured()) {
+    const { getR2StorageAdapter } = await import("./r2-adapter")
+    return await getR2StorageAdapter()
+  }
+
+  // 2. Firebase Storage (legacy/alternative)
   if (isFirebaseStorageConfigured()) {
     return await getFirebaseStorageAdapter()
   }
+
+  // 3. Local storage (dev fallback)
   return getLocalStorageAdapter()
 }
 

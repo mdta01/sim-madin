@@ -4,22 +4,26 @@ import { authOptions } from "@/lib/auth/auth-options"
 import { db } from "@/lib/db"
 import { NextResponse } from "next/server"
 import { verifyBearerToken, isFirebaseConfigured } from "@/lib/firebase/admin"
+import { verifySupabaseToken, isSupabaseConfigured } from "@/lib/supabase/admin"
 
 /**
  * Auth Helpers — Server-side
  * ============================================================================
- * Mendukung 2 mode autentikasi:
+ * Mendukung 3 mode autentikasi (priority order):
  *
- * 1. Web (NextAuth) — cookie-based, otomatis dikirim browser
- *    const session = await getSession()
+ * 1. Supabase Auth (production) — Bearer token via Authorization header
+ *    Mobile apps login via Supabase Auth SDK, kirim access_token ke API.
+ *    Server verify via Supabase Admin SDK.
  *
- * 2. Mobile (Firebase Auth) — Bearer token via Authorization header
- *    Client kirim: Authorization: Bearer <firebase-id-token>
- *    Server verify via Firebase Admin SDK
+ * 2. Firebase Auth (legacy/alternative) — Bearer token via Authorization header
+ *    Untuk mobile apps yang pakai Firebase Auth.
+ *
+ * 3. NextAuth (web admin) — cookie-based, otomatis dikirim browser
+ *    Untuk web Super Admin.
  *
  * Auto-detect:
- * - Cek Authorization header dulu (untuk mobile)
- * - Fallback ke NextAuth session (untuk web)
+ * - Cek Authorization header dulu (Supabase → Firebase → fallback ke NextAuth)
+ * - Fallback ke NextAuth session cookie (web)
  *
  * Helper functions tetap sama untuk caller.
  * ============================================================================
@@ -40,15 +44,31 @@ export interface AppSession {
 
 /**
  * Ambil session saat ini (atau null jika belum login).
- * Auto-detect: cek Bearer token (mobile/Firebase) dulu, fallback ke NextAuth session (web).
+ * Auto-detect: cek Bearer token (mobile) dulu, fallback ke NextAuth session (web).
+ *
+ * Priority:
+ * 1. Supabase Bearer token (jika SUPABASE_* env di-set)
+ * 2. Firebase Bearer token (jika FIREBASE_* env di-set)
+ * 3. NextAuth session cookie (web)
  */
 export async function getSession(req?: { headers: Headers }): Promise<AppSession | null> {
-  // 1. Cek Firebase Bearer token (untuk mobile apps)
-  if (req?.headers && isFirebaseConfigured()) {
+  // 1. Cek Bearer token (untuk mobile apps) — Supabase dulu, lalu Firebase
+  if (req?.headers) {
     const authHeader = req.headers.get("authorization")
     if (authHeader?.startsWith("Bearer ")) {
-      const firebaseSession = await verifyBearerToken(authHeader)
-      if (firebaseSession) return firebaseSession
+      const token = authHeader.slice(7)
+
+      // Try Supabase token verification
+      if (isSupabaseConfigured()) {
+        const supabaseSession = await verifySupabaseToken(token)
+        if (supabaseSession) return supabaseSession
+      }
+
+      // Fallback: Firebase token verification
+      if (isFirebaseConfigured()) {
+        const firebaseSession = await verifyBearerToken(authHeader)
+        if (firebaseSession) return firebaseSession
+      }
     }
   }
 

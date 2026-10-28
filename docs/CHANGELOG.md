@@ -6,6 +6,50 @@ Format: `[STATUS]` di awal tiap item — ✅ done / ⚠️ partial / ❌ not sta
 
 ---
 
+## Versi 1.4 — Production-Ready Adapters (28 Okt 2025)
+
+### ✅ Done
+- **Cloudflare R2 storage adapter** (`src/lib/storage/r2-adapter.ts`) — alternatif Cloudinary, free 10GB + no egress
+  - Pakai AWS S3 SDK (R2 S3-compatible)
+  - Auto-detect via env vars: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL`
+  - Support public URL (untuk foto profil) atau signed URL (untuk dokumen privat)
+- **Storage adapter 3-mode** (`src/lib/storage/adapter.ts`) — auto-detect priority:
+  1. Cloudflare R2 (production preferred)
+  2. Firebase Storage (legacy/alternative)
+  3. Local storage (dev fallback)
+- **Supabase adapter** (`src/lib/supabase/admin.ts` & `client.ts`) — env-driven, ready to use
+  - `getSupabaseAdmin()` — server-side Supabase client dengan service_role key (bypass RLS)
+  - `verifySupabaseToken()` — verify JWT dari mobile apps (untuk auth via Supabase)
+  - `isSupabaseConfigured()` — detect env vars
+- **Auth guards support 3 mode** (`src/lib/auth/guards.ts`):
+  1. Supabase Bearer token (mobile apps, production)
+  2. Firebase Bearer token (mobile apps, legacy)
+  3. NextAuth session cookie (web admin)
+- **Upload status endpoint** (`/api/admin/upload/status`) — return info storage yang aktif (local/firebase/r2)
+- **Setup guides** (3 file baru di `docs/`):
+  - `docs/SETUP-SUPABASE.md` (9KB) — step-by-step bikin akun Supabase, ambil credentials, push schema
+  - `docs/SETUP-R2.md` (12KB) — step-by-step bikin Cloudflare R2 bucket, API token, public access
+  - `docs/SETUP-FCM.md` (10KB) — step-by-step bikin Firebase project untuk FCM only (push notif)
+- **Updated `.env.example`** (komprehensif) — semua env vars untuk dev + production + mobile
+- **Schema Postgres-ready** — Prisma schema tinggal switch `provider = "sqlite"` → `"postgresql"` saat migrate ke Supabase
+- **Lint bersih** (0 error, 0 warning)
+- **Dev mode tetap jalan** — fallback ke local storage & NextAuth saat env vars cloud tidak di-set
+
+### ⚠️ Partial
+- Supabase Auth belum diimplementasi full (baru adapter pattern). Migration dari NextAuth → Supabase Auth akan dilakukan di V1.5
+- Firebase FCM belum ada API endpoint untuk kirim push (baru adapter). Akan diimplement di V1.6
+- Cloudflare R2 belum di-test dengan akun asli (code sudah ready, tinggal set env vars)
+- Migrasi data SQLite → Postgres belum ada script (perlu bikin `scripts/migrate-to-supabase.ts`)
+
+### ❌ Not Started
+- Migration aktual dari SQLite ke Supabase Postgres (perlu user setup akun Supabase)
+- Setup akun cloud asli (Supabase, Cloudflare R2, Firebase FCM) — perlu user lakukan sendiri
+- Test production end-to-end (setelah user setup akun cloud)
+- Mobile apps (Expo React Native) — roadmap V2+
+
+
+---
+
 ## Versi 1.3 — Wali Auth + NIS Auto (28 Okt 2025)
 
 ### ✅ Done
