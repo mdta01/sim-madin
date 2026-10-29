@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast"
 import { getSupabaseBrowserClient, isSupabaseClientAvailable } from "@/lib/supabase/client"
 import { GraduationCap, Loader2, Lock, Mail, Eye, EyeOff, ShieldCheck, AlertCircle, Smartphone } from "lucide-react"
 
-export function LoginOverlay({ onSwitchToWali }: { onSwitchToWali?: () => void }) {
+export function LoginOverlay() {
   const [email, setEmail] = useState("admin@madrasah.test")
   const [password, setPassword] = useState("admin123")
   const [showPass, setShowPass] = useState(false)
@@ -182,23 +182,11 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...`}
                     <li>• <strong>Kepala Madrasah</strong> → App "SIM MADIN - Kepala"</li>
                     <li>• <strong>Bendahara</strong> → App "SIM MADIN - Bendahara"</li>
                     <li>• <strong>Guru</strong> → App "SIM MADIN - Guru"</li>
-                    <li>• <strong>Wali Santri</strong> → App "SIM MADIN - Wali" atau login wali di bawah</li>
+                    <li>• <strong>Wali Santri</strong> → App "SIM MADIN - Wali"</li>
                   </ul>
                 </div>
               </div>
             </div>
-
-            {/* Wali login link */}
-            {onSwitchToWali && (
-              <div className="text-center mt-4">
-                <button
-                  onClick={onSwitchToWali}
-                  className="text-sm text-emerald-600 hover:text-emerald-700 hover:underline"
-                >
-                  Login sebagai Wali Santri →
-                </button>
-              </div>
-            )}
           </CardContent>
         </Card>
 
