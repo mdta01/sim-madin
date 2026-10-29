@@ -11,9 +11,14 @@
 
 ---
 
-## 📅 Status Saat Ini: V2.0 (29 Okt 2025)
+## 📅 Status Saat Ini: V2.0 FINAL (29 Okt 2025)
 
-**V2 — Akademik & Pembelajaran selesai.** 5 modul baru: Materi, Tugas+Pengumpulan, Pertemuan+Absensi per pertemuan, Kompetensi, Rekap Perkembangan untuk Wali. 13 endpoint API baru, 4 UI view baru, sample data V2 di seed script.
+**V2 — Akademik & Pembelajaran FINAL.** 15 task plan selesai (5 modul inti + 10 penyempurnaan dalam 3 batch: A=kritis, B=UX guru, C=UX wali/mobile). 19 endpoint API V2, 4 UI views, mobile-wali & mobile-guru integration, schema migration (kompetensiId di Nilai), performance optimization. **Siap lanjut ke V3.**
+
+**Yang belum ada di V2 (direncanakan di versi lain):**
+- 🔔 Sistem notifikasi (FCM push) → V1.6 atau V6
+- 📱 Build APK/IPA mobile apps → setelah V3 stabil
+- mobile-kepala/bendahara V2 integration → low priority (fokus keuangan)
 
 ---
 
@@ -70,26 +75,47 @@
 ---
 
 ### V2 — Akademik & Pembelajaran (Berdasarkan roadmap.pdf)
-**Estimasi:** 5-7 hari
+**Estimasi:** 5-7 hari → Realisasi: 1 hari (29 Okt 2025)
 **Tujuan:** Materi pembelajaran, tugas, nilai harian terstruktur.
-**Status:** ✅ Done (29 Okt 2025)
+**Status:** ✅ Done FINAL (29 Okt 2025) — 15 task selesai (Batch A+B+C)
 
-**Modul yang Ditambahkan:**
-- [x] Materi Pembelajaran (upload PDF, foto, video per mapel)
-- [x] Tugas dari guru ke santri
-- [x] Pengumpulan tugas
-- [x] Status tugas (belum/selesai/terlambat)
-- [x] Catatan guru per tugas (feedback saat grading)
-- [x] Kompetensi/capaian pembelajaran per mapel
+**Modul yang Ditambahkan (5 modul inti):**
+- [x] Materi Pembelajaran (upload PDF, foto, video per mapel) + thumbnail preview untuk FOTO
+- [x] Tugas dari guru ke santri (4 tipe: INDIVIDU/KELOMPOK/PRAKTIK/HAFALAN)
+- [x] Pengumpulan tugas + submit endpoint untuk wali/santri
+- [x] Status tugas (belum/selesai/terlambat) dengan auto-detect LATE
+- [x] Catatan guru per tugas (feedback saat grading) + bulk grading mode
+- [x] Kompetensi/capaian pembelajaran per mapel (5 kategori) + link ke Nilai
 - [x] Target pembelajaran (via Kompetensi schema)
-- [x] Rekap perkembangan (`/api/wali/perkembangan/[santriId]`)
+- [x] Rekap perkembangan (`/api/wali/perkembangan/[santriId]`) dengan trend NAIK/TURUN/STABIL
 - [x] Nilai harian (terstruktur per pertemuan)
-- [x] Nilai tugas (auto-upsert ke Nilai type=TUGAS saat grading)
+- [x] Nilai tugas (auto-upsert ke Nilai type=TUGAS, **rata-rata semua tugas dinilai per mapel**)
 - [x] Nilai praktik (via Tugas type=PRAKTIK)
 - [x] Nilai ujian (jika V3 sudah jadi) — _pending V3_
-- [x] Absensi per pertemuan (lebih granular dari V1)
+- [x] Absensi per pertemuan (lebih granular dari V1) dengan tombol "Tandai Semua Hadir"
 - [x] Persentase kehadiran otomatis (rekap 90 hari)
-- [x] Wali bisa lihat perkembangan akademik anak berkala
+- [x] Wali bisa lihat perkembangan akademik anak berkala (web + mobile)
+
+**Penyempurnaan Batch A (Task Kritis):**
+- [x] Fix bug nilai TUGAS menimpa → sekarang rata-rata semua tugas
+- [x] Validasi akses guru ke kelas+mapel (security gap fix, 8 API routes)
+- [x] Wali dashboard pakai rekap V2 (web + mobile)
+- [x] Auto-generate pertemuan dari Jadwal dengan preview mode
+- [x] Endpoint submit tugas untuk wali/santri + mobile-wali integration
+
+**Penyempurnaan Batch B (UX Guru):**
+- [x] Auto-mark pertemuan completed (compute-on-read + cron endpoint)
+- [x] Link Kompetensi ↔ Nilai (schema migration: kompetensiId di Nilai)
+- [x] Bulk grading pengumpulan tugas (1 transaction untuk semua santri)
+- [x] Tab materi di pertemuan detail
+- [x] Dashboard admin stats V2 (6 widget clickable)
+
+**Penyempurnaan Batch C (UX Wali + Mobile):**
+- [x] mobile-wali: tab "Rekap" dengan trend nilai, materi, pertemuan
+- [x] mobile-guru: V2 quick stats dashboard
+- [x] Filter & pagination pengumpulan list (admin web)
+- [x] Materi thumbnail preview untuk tipe FOTO
+- [x] Optimasi rekap wali performance (N+1 → batch query, ~80% reduction DB calls)
 
 ---
 
@@ -300,7 +326,7 @@ Sisanya bisa follow-up sesuai kebutuhan madrasah.
 | V1.4 — Supabase Auth migration | 🚧 Next | 5 Nov 2025 | - |
 | V1.5 — Wali Management UI | 📋 Planned | 10 Nov 2025 | - |
 | V1.6 — Firebase FCM Push Notif | 📋 Planned | 15 Nov 2025 | - |
-| V2 — Akademik & Pembelajaran | ✅ Done | 30 Nov 2025 | 29 Okt 2025 |
+| V2 — Akademik & Pembelajaran | ✅ Done FINAL | 30 Nov 2025 | 29 Okt 2025 |
 | V3 — Ujian & Rapor | 📋 Planned | 20 Des 2025 | - |
 | V4 — Perkembangan Santri | 📋 Planned | 15 Jan 2026 | - |
 | V5 — Keuangan Lanjutan | 📋 Planned | 10 Feb 2026 | - |

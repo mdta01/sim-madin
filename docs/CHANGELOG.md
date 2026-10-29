@@ -6,7 +6,9 @@ Format: `[STATUS]` di awal tiap item — ✅ done / ⚠️ partial / ❌ not sta
 
 ---
 
-## Versi 2.0 — Akademik & Pembelajaran (29 Okt 2025)
+## Versi 2.0 — Akademik & Pembelajaran (Final: 29 Okt 2025)
+
+> **Status Final**: 15 dari 15 task plan selesai (Batch A: 5 task kritis + Batch B: 5 task UX guru + Batch C: 5 task UX wali/mobile). Sistem siap produksi.
 
 ### ✅ Done
 - **Materi Pembelajaran** (`/api/admin/materi` + UI view)
@@ -50,6 +52,49 @@ Format: `[STATUS]` di awal tiap item — ✅ done / ⚠️ partial / ❌ not sta
 - Tidak ada migration breaking — semua V2 ditambah tanpa modifikasi tabel V1
 - 4 view baru: `materi-view.tsx`, `tugas-view.tsx`, `pertemuan-view.tsx`, `kompetensi-view.tsx`
 - File baru total: 13 API routes + 4 UI views = 17 file baru
+
+### Batch A — Task Kritis (29 Okt 2025)
+
+**Bug fix & security gap:**
+- **#3 Fix bug nilai TUGAS menimpa**: Saat guru beri nilai tugas, Nilai type=TUGAS di-recompute sebagai **rata-rata semua tugas dinilai** untuk mapel itu — bukan lagi ditimpa tugas terakhir. Normalisasi 0-100 untuk multi-tugas dengan maxScore berbeda.
+- **#12 Validasi akses guru**: Helper baru `src/lib/auth/guru-access.ts` cek Jadwal mengajar aktif. Diintegrasikan ke **8 API routes**: materi (POST/PUT), tugas (POST/PUT), pertemuan (POST/PUT), absensi+nilai per pertemuan, kompetensi (POST/PUT). SUPER_ADMIN bypass, GURU hanya bisa akses kelas+mapel yang dia ajar.
+
+**Flow inti:**
+- **#1 Wali Dashboard pakai rekap V2**: Fetch `/api/wali/perkembangan` paralel dengan detail V1. Quick stats pakai persentase kehadiran 90 hari, mini-card status tugas, tab "Tugas" baru, tab Nilai dengan card Rekap per Mapel + trend NAIK/TURUN/STABIL.
+- **#4 Auto-generate pertemuan dari jadwal**: Endpoint `/api/admin/pertemuan/generate-from-jadwal` + UI dialog dengan **preview mode** (dryRun). Idempotent: skip jika pertemuan sudah ada untuk tanggal itu.
+- **#2 Endpoint santri/wali submit tugas**: `POST /api/wali/tugas/[tugasId]/submit` (multipart or JSON), `GET /api/wali/tugas?santriId=xxx` list dengan stats. Mobile-wali App.tsx: tab "Tugas" baru + `TugasListSection` + `TugasSubmitModal`.
+
+### Batch B — UX Guru (29 Okt 2025)
+
+- **#5 Auto-mark pertemuan completed**: Helper `markOverduePertemuanCompleted()` + cron endpoint `/api/cron/pertemuan-auto-complete?key=xxx` + compute-on-read di GET list & detail. Pertemuan lampau >24h otomatis `isCompleted=true`.
+- **#6 Link Kompetensi ↔ Nilai**: Schema update — tambah field `kompetensiId` di tabel Nilai + relasi `kompetensi`. Apply via Supabase Management API (prisma_user tidak owner table). API nilai + pertemuan/[id]/nilai support `kompetensiId` per entry.
+- **#7 Bulk grading pengumpulan**: Endpoint baru `PUT /api/admin/pengumpulan/bulk-grade` (1 transaction, recompute Nilai type=TUGAS per affected santri+mapel). UI: toggle "Mode Penilaian Massal" + quick-action "Set semua: 85/75/100" + default feedback untuk semua.
+- **#8 Tab materi di pertemuan detail**: GET `/api/admin/pertemuan/[id]` sekarang return `relatedMateri`. UI: tab "Materi" baru di dialog detail dengan empty state yang mengarahkan ke menu materi.
+- **#9 Dashboard admin stats V2**: Endpoint `/api/admin/dashboard` tambah `v2Stats`: materi bulan ini, tugas aktif/overdue, pending grading, pertemuan minggu ini vs minggu lalu (dengan trend indicator). UI: section baru "Akademik & Pembelajaran (V2)" dengan 6 widget clickable.
+
+### Batch C — UX Wali + Mobile (29 Okt 2025)
+
+- **#9a Update mobile-wali App.tsx**: Tab baru "Rekap" (icon stats-chart). `PerkembanganV2Section` component: persentase kehadiran 90 hari, rekap nilai per mapel dengan trend icon (trending-up/down/sparkles), materi terbaru, pertemuan terbaru dengan status absensi, status tugas summary.
+- **#9b Update mobile-guru App.tsx**: V2 quick stats row di DashboardScreen: pertemuan hari ini, perlu dinilai (highlighted), materi saya, tugas aktif. Endpoint baru `/api/admin/guru/stats` — guru-specific filter (hanya tugas/materi/pertemuan milik guru), admin/kepala gets aggregated stats.
+- **#11 Filter & pagination pengumpulan list**: API `/api/admin/tugas/[id]/pengumpulan` support `?status=` filter (SUBMITTED/LATE/GRADED/NOT_SUBMITTED) + `?limit=&offset=` pagination. UI: dropdown filter dengan count badge per status, auto-reload on filter change, tombol Reset.
+- **#13 Materi thumbnail preview**: Di tabel materi, type FOTO dengan fileUrl → render `<img>` thumbnail 12×12 clickable. Di form edit: image preview 16×16 dengan link "Lihat file" + URL display. Fallback ke icon untuk type lain.
+- **#15 Optimasi rekap wali performance**: Eliminasi N+1 query di `/api/wali/perkembangan/[santriId]`. Lama: 1 query per pertemuan (5 pertemuan = 5 queries). Baru: 1 batch query dengan date range + Map lookup → ~80% reduction DB calls.
+
+### 📊 Statistik Akhir V2
+
+- **Endpoint API**: 19 endpoint V2 total (13 dari V2 awal + 6 tambahan dari Batch A/B/C)
+- **File baru**: ~25 file (API routes, UI views, helpers, scripts)
+- **File modified**: ~20 file (constants, store, layout, dashboard, mobile apps, dll)
+- **Schema migration**: tambah kolom `kompetensiId` di tabel Nilai (TEXT + index, FK di app layer)
+- **Build status**: ✅ Next.js production build sukses dalam 21s, 41 static pages, 19 endpoint V2 terdaftar, **0 error/warning baru**
+- **TypeScript**: 103 errors (pre-existing — Firebase adapter, NextAuth trustHost, mobile RN module resolution), **0 regression** dari V1
+
+### 🐛 Known Issues & Limitations
+
+- **Sistem notifikasi belum ada** (tugas baru, jatuh tempo, pengumpulan dinilai) — direncanakan untuk V1.6 (Firebase FCM) atau V6 (Komunikasi & Notifikasi)
+- **Mobile apps belum di-build ke APK/IPA** — code siap, butuh Expo build pipeline
+- **mobile-kepala & mobile-bendahara belum integrate V2** — fokus keuangan, tidak terdampak langsung V2
+- **Validasi pertemuanKe sequential** belum di-enforce (bisa skip 1→3 tanpa 2) — low priority
 
 ---
 

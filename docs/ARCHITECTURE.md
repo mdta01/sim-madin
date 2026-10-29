@@ -199,6 +199,118 @@ export async function POST(req: NextRequest) {
 }
 ```
 
+### V2 — Akademik & Pembelajaran Patterns (Added 29 Okt 2025)
+
+#### Guru Access Validation Pattern
+Untuk modul V2 yang punya scope per kelas+mapel (materi, tugas, pertemuan, kompetensi), gunakan helper `validateGuruAccess()`:
+
+```typescript
+import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateGuruAccess } from "@/lib/auth/guru-access"
+
+export async function POST(req: NextRequest) {
+  const guard = await requireApiPermission("materi:create", req)
+  if (guard.error) return guard.error
+  const session = guard.session
+
+  // V2 security: validate GURU has teaching access to this kelas+mapel
+  const accessCheck = await validateGuruAccess(session, {
+    kelasId: body.kelasId,
+    mapelId: body.mapelId,
+    guruId: body.guruId, // pass to disallow guru A from assigning to guru B
+  }, req)
+  if (!accessCheck.allowed && accessCheck.error) return accessCheck.error
+
+  // Auto-bind guruId to current guru if not provided
+  let guruId = body.guruId
+  if (!guruId && accessCheck.guru) guruId = accessCheck.guru.id
+
+  // ... business logic
+}
+```
+
+Rules:
+- **SUPER_ADMIN**: bypass — full access
+- **KEPALA**: bypass — monitoring role, read-only by permission
+- **GURU**: must have active Jadwal entry linking them to kelas+mapel (active TA+Semester)
+- Other roles: denied by default
+
+#### Compute-on-read Pattern (Auto-complete)
+Untuk task yang butuh auto-update status (e.g., pertemuan overdue), gunakan compute-on-read:
+
+```typescript
+import { markOverduePertemuanCompletedSafe } from "@/lib/pertemuan/auto-complete"
+
+export async function GET(req: NextRequest) {
+  const guard = await requireApiPermission("pertemuan:read", req)
+  if (guard.error) return guard.error
+  try {
+    // Silent background auto-complete (failures don't break list request)
+    await markOverduePertemuanCompletedSafe()
+    // ... fetch list
+  }
+}
+```
+
+For high-traffic: schedule via Vercel Cron at `/api/cron/pertemuan-auto-complete?key=CRON_SECRET`.
+
+#### N+1 Optimization Pattern (Batch Query + Map Lookup)
+Hindari `Promise.all(items.map(async (i) => await db.x.findFirst(...)))`:
+
+```typescript
+// ❌ BAD: N+1 queries
+const items = await Promise.all(
+  pertemuanList.map(async (p) => {
+    const absensi = await db.absensi.findFirst({ where: { ... } })
+    return { ...p, absensi }
+  })
+)
+
+// ✅ GOOD: 1 batch query + Map lookup
+const minDate = ...; const maxDate = ...
+const allRecords = await db.absensi.findMany({
+  where: { date: { gte: minDate, lte: maxDate }, ... },
+})
+const lookup = new Map(allRecords.map((r) => [dateKey(r.date), r]))
+const items = pertemuanList.map((p) => ({
+  ...p,
+  absensi: lookup.get(dateKey(p.date)) || null,
+}))
+```
+
+#### Bulk Operation Pattern (1 Transaction)
+Untuk bulk update (e.g., grading multiple submissions):
+
+```typescript
+// Pre-fetch all in 1 query (avoid N+1)
+const submissions = await db.pengumpulanTugas.findMany({
+  where: { id: { in: submissionIds } },
+})
+
+// Process each with individual try/catch (1 failure doesn't break all)
+const updated = []
+const failed = []
+for (const entry of entries) {
+  try { /* update + push to updated */ }
+  catch (e) { failed.push({ id, error: e.message }) }
+}
+
+// Recompute aggregates after bulk update
+const affectedKeys = new Set(updated.map((u) => `${u.santriId}|${u.mapelId}`))
+for (const key of affectedKeys) { /* recompute Nilai aggregate */ }
+```
+
+#### Schema Migration via Supabase Management API
+prisma_user tidak owner tabel tertentu, jadi `prisma db push` gagal. Solusi:
+
+```bash
+# Set env: SUPABASE_ACCESS_TOKEN=sbp_xxx (Personal Access Token, bukan service_role)
+# Run: bun run scripts/apply-v2-6-schema-supabase.ts
+# Uses: POST https://api.supabase.com/v1/projects/{ref}/database/query
+```
+
+Referential integrity di-handle di app layer (Prisma onDelete: SetNull) untuk avoid cross-table ownership issue.
+
 ---
 
 ## 🚀 Deployment Strategy
@@ -276,6 +388,7 @@ Detail lengkap di `docs/DEPLOYMENT.md`.
 
 ## 🔄 Update Log Arsitektur
 
+- **2025-10-29 V2.0 FINAL**: Akademik & Pembelajaran complete. 19 endpoint V2, 4 UI views, mobile-wali + mobile-guru integration. Patterns baru: `validateGuruAccess()` (security per kelas+mapel), compute-on-read auto-complete, N+1 optimization (batch query + Map lookup), bulk operation pattern, schema migration via Supabase Management API. Schema migration: tambah `kompetensiId` di Nilai. Performance: 80% reduction DB calls di rekap wali.
 - **2025-10-28 V1.4**: Keputusan final — Supabase all + Firebase FCM only + R2. Simplify auth dari 3 sistem → 1 sistem (Supabase Auth).
 - **2025-10-27 V1.3**: Implementasi wali auth (WhatsApp+PIN) + NIS auto-generate. Tambah SantriWali pivot untuk multi-wali.
 - **2025-10-27 V1.2**: Tambah Firebase Admin SDK adapter (sekarang deprecated, ganti Supabase Auth).
