@@ -383,6 +383,8 @@ model Santri {
   // V6 — Komunikasi & Notifikasi
   notifikasi         Notifikasi[]
   chatRooms          ChatRoom[]
+  // V7 — Administrasi & Dokumen
+  surat              Surat[]
 
   @@index([kelasId])
   @@index([waliId])
@@ -431,6 +433,8 @@ model Guru {
   // V6 — Komunikasi & Notifikasi
   chatRooms          ChatRoom[]
   chatMessages       ChatMessage[]
+  // V7 — Administrasi & Dokumen
+  surat              Surat[]
 
   @@index([status])
   @@index([deletedAt])
@@ -1375,4 +1379,44 @@ model ChatMessage {
 
   @@index([chatRoomId, createdAt])
   @@index([senderType, isRead])
+}
+
+// ============================================================================
+// 17. V7 — ADMINISTRASI & DOKUMEN
+// ============================================================================
+// Sesuai roadmap.pdf V7:
+// - Surat otomatis: aktif, izin, tugas, undangan, keterangan, keputusan, kelulusan
+// - Dokumen: sertifikat, piagam, kartu santri, kartu ujian, berita acara
+// - Data diambil otomatis dari database
+// ============================================================================
+
+model Surat {
+  id            String   @id @default(cuid())
+  nomorSurat   String   @unique // "001/SKT/X/2025" — auto-generated
+  type          String   // "AKTIF" | "IZIN" | "TUGAS" | "UNDANGAN" | "KETERANGAN" | "KEPUTUSAN" | "KELULUSAN"
+  title         String   // "Surat Keterangan Aktif Santri"
+  // Penerima (siapa yang di-surat)
+  santriId      String?  // untuk surat yang terkait santri
+  guruId        String?  // untuk surat yang terkait guru (surat tugas)
+  // Content
+  content       String   // body surat (HTML/plain text)
+  periodeMulai  DateTime? // untuk surat izin/tugas (rentang waktu)
+  periodeSelesai DateTime?
+  tempat        String?  // tempat dikeluarkan surat
+  tanggalSurat  DateTime @default(now())
+  // Status
+  status        String   @default("DRAFT") // "DRAFT" | "DITERBITKAN" | "DIARSIP"
+  signedBy      String?  // penandatangan (nama kepala madrasah)
+  signedAt      DateTime?
+  // Metadata
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  santri        Santri?  @relation(fields: [santriId], references: [id], onDelete: SetNull)
+  guru          Guru?    @relation(fields: [guruId], references: [id], onDelete: SetNull)
+
+  @@index([type, status])
+  @@index([santriId])
+  @@index([tanggalSurat])
 }

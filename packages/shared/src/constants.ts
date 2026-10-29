@@ -403,6 +403,37 @@ export const CHAT_SENDER_TYPES = [
 ]
 
 // ============================================================================
+// V7 — ADMINISTRASI & DOKUMEN
+// ============================================================================
+
+// Tipe Surat Otomatis (sesuai roadmap.pdf V7)
+export const SURAT_TYPES = [
+  { value: "AKTIF", label: "Surat Keterangan Aktif", desc: "Keterangan santri masih aktif" },
+  { value: "IZIN", label: "Surat Izin", desc: "Surat izin untuk santri/guru" },
+  { value: "TUGAS", label: "Surat Tugas", desc: "Surat penugasan guru" },
+  { value: "UNDANGAN", label: "Surat Undangan", desc: "Undangan untuk wali santri" },
+  { value: "KETERANGAN", label: "Surat Keterangan", desc: "Keterangan umum" },
+  { value: "KEPUTUSAN", label: "Surat Keputusan", desc: "Keputusan madrasah" },
+  { value: "KELULUSAN", label: "Surat Kelulusan", desc: "Keterangan kelulusan santri" },
+]
+
+// Status Surat
+export const SURAT_STATUS: Record<string, { label: string; variant: BadgeVariant }> = {
+  DRAFT: { label: "Draft", variant: "secondary" },
+  DITERBITKAN: { label: "Diterbitkan", variant: "success" },
+  DIARSIP: { label: "Diarsip", variant: "outline" },
+}
+
+// Tipe Dokumen (sesuai roadmap.pdf V7)
+export const DOKUMEN_TYPES = [
+  { value: "SERTIFIKAT", label: "Sertifikat", desc: "Sertifikat kegiatan/prestasi" },
+  { value: "PIAGAM", label: "Piagam", desc: "Piagam penghargaan" },
+  { value: "KARTU_SANTRI", label: "Kartu Santri", desc: "Kartu identitas santri digital" },
+  { value: "KARTU_UJIAN", label: "Kartu Ujian", desc: "Kartu ujian per santri" },
+  { value: "BERITA_ACARA", label: "Berita Acara", desc: "Berita acara kegiatan" },
+]
+
+// ============================================================================
 // JENIS TAGIHAN
 // ============================================================================
 export const JENIS_TAGIHAN_CATEGORY = [
@@ -476,6 +507,9 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: "notifikasi", label: "Notifikasi", icon: "Bell", group: "sistem", description: "Notifikasi otomatis ke wali" },
   { id: "chat", label: "Chat Internal", icon: "MessageCircle", group: "sistem", description: "Chat wali ↔ wali kelas ↔ madrasah" },
   // End V6
+  // V7 — Administrasi & Dokumen
+  { id: "surat", label: "Surat & Dokumen", icon: "FileText", group: "sistem", description: "Surat otomatis, sertifikat, kartu, berita acara" },
+  // End V7
   { id: "users", label: "User & Hak Akses", icon: "ShieldCheck", group: "sistem" },
   { id: "pengaturan", label: "Pengaturan Sistem", icon: "Settings", group: "sistem" },
 ]

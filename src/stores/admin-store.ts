@@ -39,6 +39,9 @@ export type AdminView =
   | "notifikasi"
   | "chat"
   // End V6
+  // V7 — Administrasi & Dokumen
+  | "surat"
+  // End V7
   | "users"
   | "pengaturan"
   | "profile"

@@ -37,6 +37,8 @@ import { HonorGuruView } from "./views/honor-guru-view"
 // V6 — Komunikasi & Notifikasi
 import { NotifikasiView } from "./views/notifikasi-view"
 import { ChatView } from "./views/chat-view"
+// V7 — Administrasi & Dokumen
+import { SuratView } from "./views/surat-view"
 
 export function AdminLayout() {
   const currentView = useAdminStore((s) => s.currentView)
@@ -79,6 +81,9 @@ export function AdminLayout() {
       case "notifikasi": return <NotifikasiView />
       case "chat": return <ChatView />
       // End V6
+      // V7 — Administrasi & Dokumen
+      case "surat": return <SuratView />
+      // End V7
       case "users": return <UsersView />
       case "pengaturan": return <PengaturanView />
       case "profile": return <ProfileView />

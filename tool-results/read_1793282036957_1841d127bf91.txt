@@ -1,0 +1,762 @@
+     1→"use client"
+     2→
+     3→import { useEffect, useState, useCallback } from "react"
+     4→import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api-client"
+     5→import { PageHeader } from "@/components/admin/shared/page-header"
+     6→import { DataTableToolbar } from "@/components/admin/shared/data-table-toolbar"
+     7→import { LoadingState, ErrorState, EmptyState } from "@/components/admin/shared/states"
+     8→import { Card, CardContent } from "@/components/ui/card"
+     9→import { Button } from "@/components/ui/button"
+    10→import { Input } from "@/components/ui/input"
+    11→import { Label } from "@/components/ui/label"
+    12→import { Textarea } from "@/components/ui/textarea"
+    13→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+    14→import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+    15→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+    16→import { Badge } from "@/components/ui/badge"
+    17→import { Switch } from "@/components/ui/switch"
+    18→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+    19→import { useToast } from "@/hooks/use-toast"
+    20→import { UJIAN_TYPES, formatDate } from "@/lib/constants"
+    21→import { FileQuestion, Plus, Pencil, Trash2, Eye, Save, Library, Users, Award, Trophy, Loader2, ExternalLink, Printer } from "lucide-react"
+    22→
+    23→export function UjianView() {
+    24→  const [data, setData] = useState<any[]>([])
+    25→  const [mapelList, setMapelList] = useState<any[]>([])
+    26→  const [kelasList, setKelasList] = useState<any[]>([])
+    27→  const [guruList, setGuruList] = useState<any[]>([])
+    28→  const [loading, setLoading] = useState(true)
+    29→  const [error, setError] = useState<string | null>(null)
+    30→  const [search, setSearch] = useState("")
+    31→  const [mapelFilter, setMapelFilter] = useState("")
+    32→  const [statusFilter, setStatusFilter] = useState("")
+    33→  const [dialogOpen, setDialogOpen] = useState(false)
+    34→  const [editing, setEditing] = useState<any | null>(null)
+    35→  const [detailOpen, setDetailOpen] = useState(false)
+    36→  const [detailUjian, setDetailUjian] = useState<any | null>(null)
+    37→  const { toast } = useToast()
+    38→
+    39→  const load = useCallback(async () => {
+    40→    try {
+    41→      setLoading(true)
+    42→      setError(null)
+    43→      const params: any = {}
+    44→      if (search) params.search = search
+    45→      if (mapelFilter) params.mapelId = mapelFilter
+    46→      if (statusFilter) params.status = statusFilter
+    47→      const [res, mapelRes, kelasRes, guruRes] = await Promise.all([
+    48→        apiGet("/api/admin/ujian", params),
+    49→        apiGet("/api/admin/mapel"),
+    50→        apiGet("/api/admin/kelas"),
+    51→        apiGet("/api/admin/guru"),
+    52→      ])
+    53→      setData(res.data)
+    54→      setMapelList(mapelRes.data)
+    55→      setKelasList(kelasRes.data)
+    56→      setGuruList(guruRes.data)
+    57→    } catch (e: any) {
+    58→      setError(e.message)
+    59→    } finally {
+    60→      setLoading(false)
+    61→    }
+    62→  }, [search, mapelFilter, statusFilter])
+    63→
+    64→  useEffect(() => { load() }, [load])
+    65→
+    66→  const handleDelete = async (id: string, title: string) => {
+    67→    if (!confirm(`Yakin ingin menghapus ujian "${title}"?`)) return
+    68→    try {
+    69→      await apiDelete(`/api/admin/ujian/${id}`)
+    70→      toast({ title: "Berhasil", description: "Ujian dihapus" })
+    71→      load()
+    72→    } catch (e: any) {
+    73→      toast({ title: "Gagal", description: e.message, variant: "destructive" })
+    74→    }
+    75→  }
+    76→
+    77→  return (
+    78→    <div>
+    79→      <PageHeader
+    80→        title="Ujian"
+    81→        description="Jadwal ujian UTS/UAS/Quiz + peserta + nilai + leger"
+    82→        icon={<FileQuestion className="h-5 w-5" />}
+    83→        actions={<Button onClick={() => { setEditing(null); setDialogOpen(true) }}><Plus className="h-4 w-4 mr-1" /> Tambah Ujian</Button>}
+    84→      />
+    85→      <DataTableToolbar
+    86→        searchValue={search}
+    87→        onSearchChange={setSearch}
+    88→        searchPlaceholder="Cari judul ujian..."
+    89→        filters={
+    90→          <>
+    91→            <Select value={mapelFilter} onValueChange={(v) => setMapelFilter(v === "all" ? "" : v)}>
+    92→              <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Semua Mapel" /></SelectTrigger>
+    93→              <SelectContent>
+    94→                <SelectItem value="all">Semua Mapel</SelectItem>
+    95→                {mapelList.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+    96→              </SelectContent>
+    97→            </Select>
+    98→            <Select value={statusFilter} onValueChange={setStatusFilter}>
+    99→              <SelectTrigger className="w-[140px] h-9"><SelectValue placeholder="Status" /></SelectTrigger>
+   100→              <SelectContent>
+   101→                <SelectItem value="all">Semua Status</SelectItem>
+   102→                <SelectItem value="upcoming">Akan Datang</SelectItem>
+   103→                <SelectItem value="ongoing">Sedang Berlangsung</SelectItem>
+   104→                <SelectItem value="completed">Selesai</SelectItem>
+   105→              </SelectContent>
+   106→            </Select>
+   107→          </>
+   108→        }
+   109→      />
+   110→      <Card>
+   111→        <CardContent className="p-0">
+   112→          {loading ? <LoadingState /> :
+   113→            error ? <ErrorState message={error} onRetry={load} /> :
+   114→            data.length === 0 ? <EmptyState icon={<FileQuestion className="h-5 w-5" />} title="Belum ada ujian" description="Buat ujian pertama untuk kelas & mapel." /> :
+   115→            <div className="overflow-x-auto">
+   116→              <Table>
+   117→                <TableHeader>
+   118→                  <TableRow>
+   119→                    <TableHead className="min-w-[200px]">Judul Ujian</TableHead>
+   120→                    <TableHead>Tipe</TableHead>
+   121→                    <TableHead>Mapel</TableHead>
+   122→                    <TableHead>Kelas</TableHead>
+   123→                    <TableHead>Waktu</TableHead>
+   124→                    <TableHead>Status</TableHead>
+   125→                    <TableHead className="text-center">Peserta/Nilai</TableHead>
+   126→                    <TableHead className="text-right">Aksi</TableHead>
+   127→                  </TableRow>
+   128→                </TableHeader>
+   129→                <TableBody>
+   130→                  {data.map((u) => (
+   131→                    <TableRow key={u.id}>
+   132→                      <TableCell>
+   133→                        <p className="font-medium text-sm">{u.title}</p>
+   134→                        {u.description && <p className="text-xs text-muted-foreground truncate max-w-[250px]">{u.description}</p>}
+   135→                      </TableCell>
+   136→                      <TableCell><Badge variant="outline" className="text-xs">{UJIAN_TYPES.find(t => t.value === u.type)?.label || u.type}</Badge></TableCell>
+   137→                      <TableCell className="text-sm">{u.mapel?.name}</TableCell>
+   138→                      <TableCell className="text-sm">{u.kelas?.name}</TableCell>
+   139→                      <TableCell className="text-xs">
+   140→                        <div>{formatDate(u.startTime, true)}</div>
+   141→                        <div className="text-muted-foreground">{u.durationMnt} mnt</div>
+   142→                      </TableCell>
+   143→                      <TableCell>
+   144→                        {u.status === "UPCOMING" ? <Badge variant="warning">Akan Datang</Badge> :
+   145→                         u.status === "ONGOING" ? <Badge variant="success">Berlangsung</Badge> :
+   146→                         <Badge variant="secondary">Selesai</Badge>}
+   147→                      </TableCell>
+   148→                      <TableCell className="text-center">
+   149→                        <div className="flex flex-col gap-0.5">
+   150→                          <Badge variant="outline" className="text-[10px]">{u._count?.peserta || 0} peserta</Badge>
+   151→                          <Badge variant="outline" className="text-[10px]">{u._count?.nilai || 0} dinilai</Badge>
+   152→                        </div>
+   153→                      </TableCell>
+   154→                      <TableCell className="text-right">
+   155→                        <div className="flex justify-end gap-1">
+   156→                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Detail & kelola" onClick={() => { setDetailUjian(u); setDetailOpen(true) }}><Eye className="h-3.5 w-3.5" /></Button>
+   157→                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditing(u); setDialogOpen(true) }}><Pencil className="h-3.5 w-3.5" /></Button>
+   158→                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(u.id, u.title)}><Trash2 className="h-3.5 w-3.5" /></Button>
+   159→                        </div>
+   160→                      </TableCell>
+   161→                    </TableRow>
+   162→                  ))}
+   163→                </TableBody>
+   164→              </Table>
+   165→            </div>
+   166→          }
+   167→        </CardContent>
+   168→      </Card>
+   169→
+   170→      <UjianForm
+   171→        open={dialogOpen}
+   172→        onOpenChange={setDialogOpen}
+   173→        editing={editing}
+   174→        onSuccess={load}
+   175→        mapelList={mapelList}
+   176→        kelasList={kelasList}
+   177→        guruList={guruList}
+   178→      />
+   179→
+   180→      <UjianDetailDialog
+   181→        open={detailOpen}
+   182→        onOpenChange={setDetailOpen}
+   183→        ujian={detailUjian}
+   184→        onSuccess={load}
+   185→      />
+   186→    </div>
+   187→  )
+   188→}
+   189→
+   190→function UjianForm({ open, onOpenChange, editing, onSuccess, mapelList, kelasList, guruList }: any) {
+   191→  const [form, setForm] = useState<any>({})
+   192→  const [saving, setSaving] = useState(false)
+   193→  const { toast } = useToast()
+   194→
+   195→  useEffect(() => {
+   196→    if (editing) {
+   197→      setForm({
+   198→        ...editing,
+   199→        startTime: editing.startTime ? new Date(editing.startTime).toISOString().slice(0, 16) : "",
+   200→        endTime: editing.endTime ? new Date(editing.endTime).toISOString().slice(0, 16) : "",
+   201→      })
+   202→    } else {
+   203→      const now = new Date()
+   204→      const later = new Date(now.getTime() + 2 * 3600000)
+   205→      setForm({
+   206→        type: "UTS",
+   207→        durationMnt: 90,
+   208→        maxScore: 100,
+   209→        isPublished: false,
+   210→        // V3: ujian selalu offline (manual input nilai)
+   211→        startTime: now.toISOString().slice(0, 16),
+   212→        endTime: later.toISOString().slice(0, 16),
+   213→      })
+   214→    }
+   215→  }, [editing, open])
+   216→
+   217→  const handleSave = async () => {
+   218→    if (!form.title || !form.type || !form.mapelId || !form.kelasId || !form.startTime || !form.endTime) {
+   219→      toast({ title: "Validasi gagal", description: "Semua field wajib diisi", variant: "destructive" })
+   220→      return
+   221→    }
+   222→    setSaving(true)
+   223→    try {
+   224→      if (editing) {
+   225→        await apiPut(`/api/admin/ujian/${editing.id}`, form)
+   226→        toast({ title: "Berhasil", description: "Ujian diperbarui" })
+   227→      } else {
+   228→        await apiPost("/api/admin/ujian", form)
+   229→        toast({ title: "Berhasil", description: "Ujian baru dibuat" })
+   230→      }
+   231→      onOpenChange(false)
+   232→      onSuccess()
+   233→    } catch (e: any) {
+   234→      toast({ title: "Gagal", description: e.message, variant: "destructive" })
+   235→    } finally {
+   236→      setSaving(false)
+   237→    }
+   238→  }
+   239→
+   240→  return (
+   241→    <Dialog open={open} onOpenChange={onOpenChange}>
+   242→      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+   243→        <DialogHeader><DialogTitle>{editing ? "Edit Ujian" : "Tambah Ujian"}</DialogTitle></DialogHeader>
+   244→        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-2">
+   245→          <div className="space-y-1 sm:col-span-2">
+   246→            <Label className="text-xs">Judul Ujian *</Label>
+   247→            <Input value={form.title || ""} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="UTS Ganjil 2025/2026 - Fiqih Kelas 5" />
+   248→          </div>
+   249→          <div className="space-y-1">
+   250→            <Label className="text-xs">Tipe Ujian *</Label>
+   251→            <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v })}>
+   252→              <SelectTrigger><SelectValue /></SelectTrigger>
+   253→              <SelectContent>
+   254→                {UJIAN_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+   255→              </SelectContent>
+   256→            </Select>
+   257→          </div>
+   258→          <div className="space-y-1">
+   259→            <Label className="text-xs">Durasi (menit)</Label>
+   260→            <Input type="number" value={form.durationMnt || 90} onChange={(e) => setForm({ ...form, durationMnt: Number(e.target.value) })} />
+   261→          </div>
+   262→          <div className="space-y-1">
+   263→            <Label className="text-xs">Mapel *</Label>
+   264→            <Select value={form.mapelId} onValueChange={(v) => setForm({ ...form, mapelId: v })}>
+   265→              <SelectTrigger><SelectValue placeholder="Pilih Mapel" /></SelectTrigger>
+   266→              <SelectContent>
+   267→                {mapelList.map((m: any) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+   268→              </SelectContent>
+   269→            </Select>
+   270→          </div>
+   271→          <div className="space-y-1">
+   272→            <Label className="text-xs">Kelas *</Label>
+   273→            <Select value={form.kelasId} onValueChange={(v) => setForm({ ...form, kelasId: v })}>
+   274→              <SelectTrigger><SelectValue placeholder="Pilih Kelas" /></SelectTrigger>
+   275→              <SelectContent>
+   276→                {kelasList.map((k: any) => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+   277→              </SelectContent>
+   278→            </Select>
+   279→          </div>
+   280→          <div className="space-y-1">
+   281→            <Label className="text-xs">Waktu Mulai *</Label>
+   282→            <Input type="datetime-local" value={form.startTime || ""} onChange={(e) => setForm({ ...form, startTime: e.target.value })} />
+   283→          </div>
+   284→          <div className="space-y-1">
+   285→            <Label className="text-xs">Waktu Selesai *</Label>
+   286→            <Input type="datetime-local" value={form.endTime || ""} onChange={(e) => setForm({ ...form, endTime: e.target.value })} />
+   287→          </div>
+   288→          <div className="space-y-1">
+   289→            <Label className="text-xs">Skor Maksimal</Label>
+   290→            <Input type="number" value={form.maxScore || 100} onChange={(e) => setForm({ ...form, maxScore: Number(e.target.value) })} />
+   291→          </div>
+   292→          <div className="space-y-1">
+   293→            <Label className="text-xs">Passing Score (KKM)</Label>
+   294→            <Input type="number" value={form.passingScore ?? ""} onChange={(e) => setForm({ ...form, passingScore: e.target.value ? Number(e.target.value) : null })} placeholder="Default: KKM mapel" />
+   295→          </div>
+   296→          <div className="space-y-1">
+   297→            <Label className="text-xs">Guru Pengampu</Label>
+   298→            <Select value={form.guruId || "none"} onValueChange={(v) => setForm({ ...form, guruId: v === "none" ? null : v })}>
+   299→              <SelectTrigger><SelectValue placeholder="Pilih Guru" /></SelectTrigger>
+   300→              <SelectContent>
+   301→                <SelectItem value="none">— Tidak ada —</SelectItem>
+   302→                {guruList.map((g: any) => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
+   303→              </SelectContent>
+   304→            </Select>
+   305→          </div>
+   306→          <div className="space-y-1">
+   307→            <Label className="text-xs">Ruang Ujian</Label>
+   308→            <Input value={form.ruang || ""} onChange={(e) => setForm({ ...form, ruang: e.target.value })} placeholder="Aula Utama" />
+   309→          </div>
+   310→          <div className="space-y-1 sm:col-span-2">
+   311→            <Label className="text-xs">Pengawas</Label>
+   312→            <Input value={form.pengawas || ""} onChange={(e) => setForm({ ...form, pengawas: e.target.value })} placeholder="Ust. Ahmad, Ust. Salim" />
+   313→          </div>
+   314→          <div className="space-y-1 sm:col-span-2">
+   315→            <Label className="text-xs">Deskripsi</Label>
+   316→            <Textarea value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} placeholder="Materi ujian, aturan, dll" />
+   317→          </div>
+   318→          <div className="flex items-center gap-2">
+   319→            <Switch checked={form.isPublished} onCheckedChange={(v) => setForm({ ...form, isPublished: v })} id="ujian-publish" />
+   320→            <Label htmlFor="ujian-publish" className="text-sm cursor-pointer">Publikasikan ke wali/santri</Label>
+   321→          </div>
+   322→        </div>
+   323→        <DialogFooter>
+   324→          <Button variant="outline" onClick={() => onOpenChange(false)}>Batal</Button>
+   325→          <Button onClick={handleSave} disabled={saving}>{saving ? "Menyimpan..." : "Simpan"}</Button>
+   326→        </DialogFooter>
+   327→      </DialogContent>
+   328→    </Dialog>
+   329→  )
+   330→}
+   331→
+   332→function UjianDetailDialog({ open, onOpenChange, ujian, onSuccess }: any) {
+   333→  const [activeTab, setActiveTab] = useState("soal")
+   334→
+   335→  if (!ujian) return null
+   336→
+   337→  return (
+   338→    <Dialog open={open} onOpenChange={onOpenChange}>
+   339→      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+   340→        <DialogHeader>
+   341→          <DialogTitle>{ujian.title}</DialogTitle>
+   342→          <p className="text-sm text-muted-foreground">
+   343→            {UJIAN_TYPES.find(t => t.value === ujian.type)?.label} • {ujian.mapel?.name} • {ujian.kelas?.name}
+   344→          </p>
+   345→        </DialogHeader>
+   346→
+   347→        <Tabs value={activeTab} onValueChange={setActiveTab}>
+   348→          <TabsList className="grid grid-cols-4 w-full">
+   349→            <TabsTrigger value="soal"><Library className="h-4 w-4 mr-1" /> Soal</TabsTrigger>
+   350→            <TabsTrigger value="peserta"><Users className="h-4 w-4 mr-1" /> Peserta</TabsTrigger>
+   351→            <TabsTrigger value="nilai"><Award className="h-4 w-4 mr-1" /> Nilai</TabsTrigger>
+   352→            <TabsTrigger value="leger"><Trophy className="h-4 w-4 mr-1" /> Leger</TabsTrigger>
+   353→          </TabsList>
+   354→
+   355→          <TabsContent value="soal" className="mt-3">
+   356→            <UjianSoalTab ujianId={ujian.id} />
+   357→          </TabsContent>
+   358→
+   359→          <TabsContent value="peserta" className="mt-3">
+   360→            <UjianPesertaTab ujianId={ujian.id} />
+   361→          </TabsContent>
+   362→
+   363→          <TabsContent value="nilai" className="mt-3">
+   364→            <UjianNilaiTab ujianId={ujian.id} maxScore={ujian.maxScore} onSuccess={onSuccess} />
+   365→          </TabsContent>
+   366→
+   367→          <TabsContent value="leger" className="mt-3">
+   368→            <UjianLegerTab ujianId={ujian.id} />
+   369→          </TabsContent>
+   370→        </Tabs>
+   371→      </DialogContent>
+   372→    </Dialog>
+   373→  )
+   374→}
+   375→
+   376→function UjianSoalTab({ ujianId }: { ujianId: string }) {
+   377→  const [soalLinks, setSoalLinks] = useState<any[]>([])
+   378→  const [bankSoalList, setBankSoalList] = useState<any[]>([])
+   379→  const [loading, setLoading] = useState(true)
+   380→  const [assignOpen, setAssignOpen] = useState(false)
+   381→  const [selectedSoal, setSelectedSoal] = useState<string[]>([])
+   382→  const { toast } = useToast()
+   383→
+   384→  const load = useCallback(async () => {
+   385→    try {
+   386→      setLoading(true)
+   387→      const [linksRes, bankRes] = await Promise.all([
+   388→        apiGet(`/api/admin/ujian/${ujianId}/soal`),
+   389→        apiGet("/api/admin/bank-soal"),
+   390→      ])
+   391→      setSoalLinks(linksRes.data)
+   392→      setBankSoalList(bankRes.data)
+   393→    } catch (e: any) {
+   394→      toast({ title: "Gagal", description: e.message, variant: "destructive" })
+   395→    } finally {
+   396→      setLoading(false)
+   397→    }
+   398→  }, [ujianId, toast])
+   399→
+   400→  useEffect(() => { load() }, [load])
+   401→
+   402→  const handleAssign = async () => {
+   403→    if (selectedSoal.length === 0) {
+   404→      toast({ title: "Validasi", description: "Pilih minimal 1 soal" })
+   405→      return
+   406→    }
+   407→    try {
+   408→      const res = await apiPost(`/api/admin/ujian/${ujianId}/soal`, { soalIds: selectedSoal })
+   409→      toast({ title: "Berhasil", description: `${res.count} soal ditambahkan` })
+   410→      setAssignOpen(false)
+   411→      setSelectedSoal([])
+   412→      load()
+   413→    } catch (e: any) {
+   414→      toast({ title: "Gagal", description: e.message, variant: "destructive" })
+   415→    }
+   416→  }
+   417→
+   418→  const handleRemove = async (linkId: string) => {
+   419→    if (!confirm("Hapus soal ini dari ujian?")) return
+   420→    try {
+   421→      await apiDelete(`/api/admin/ujian/${ujianId}/soal?linkId=${linkId}`)
+   422→      toast({ title: "Berhasil", description: "Soal dihapus dari ujian" })
+   423→      load()
+   424→    } catch (e: any) {
+   425→      toast({ title: "Gagal", description: e.message, variant: "destructive" })
+   426→    }
+   427→  }
+   428→
+   429→  if (loading) return <LoadingState />
+   430→
+   431→  return (
+   432→    <div>
+   433→      <div className="flex justify-between items-center mb-3">
+   434→        <p className="text-sm text-muted-foreground">{soalLinks.length} soal di ujian ini</p>
+   435→        <Button size="sm" onClick={() => setAssignOpen(true)}><Plus className="h-4 w-4 mr-1" /> Tambah Soal</Button>
+   436→      </div>
+   437→      {soalLinks.length === 0 ? (
+   438→        <EmptyState icon={<Library className="h-5 w-5" />} title="Belum ada soal" description="Tambahkan soal dari Bank Soal" />
+   439→      ) : (
+   440→        <div className="space-y-2">
+   441→          {soalLinks.map((link) => (
+   442→            <Card key={link.id}>
+   443→              <CardContent className="p-3 flex items-start gap-3">
+   444→                <Badge variant="secondary" className="text-xs">#{link.urutan}</Badge>
+   445→                <div className="flex-1 min-w-0">
+   446→                  <div className="flex items-center gap-2 mb-1">
+   447→                    <Badge variant="outline" className="text-[10px] font-mono">{link.bankSoal.code}</Badge>
+   448→                    <Badge variant="outline" className="text-[10px]">{link.bankSoal.type}</Badge>
+   449→                    {link.bankSoal.difficulty && (
+   450→                      <Badge variant={link.bankSoal.difficulty === "MUDAH" ? "success" : link.bankSoal.difficulty === "SULIT" ? "destructive" : "warning"} className="text-[10px]">
+   451→                        {link.bankSoal.difficulty}
+   452→                      </Badge>
+   453→                    )}
+   454→                  </div>
+   455→                  <p className="text-sm">{link.bankSoal.question}</p>
+   456→                </div>
+   457→                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleRemove(link.id)}>
+   458→                  <Trash2 className="h-3 w-3" />
+   459→                </Button>
+   460→              </CardContent>
+   461→            </Card>
+   462→          ))}
+   463→        </div>
+   464→      )}
+   465→
+   466→      <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
+   467→        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+   468→          <DialogHeader><DialogTitle>Pilih Soal dari Bank Soal</DialogTitle></DialogHeader>
+   469→          <div className="space-y-2">
+   470→            {bankSoalList.filter(s => !soalLinks.some(l => l.bankSoalId === s.id)).map((s) => (
+   471→              <label key={s.id} className="flex items-start gap-2 p-2 border rounded cursor-pointer hover:bg-accent/30">
+   472→                <input
+   473→                  type="checkbox"
+   474→                  checked={selectedSoal.includes(s.id)}
+   475→                  onChange={(e) => {
+   476→                    if (e.target.checked) setSelectedSoal([...selectedSoal, s.id])
+   477→                    else setSelectedSoal(selectedSoal.filter(id => id !== s.id))
+   478→                  }}
+   479→                  className="mt-1"
+   480→                />
+   481→                <div className="flex-1 min-w-0">
+   482→                  <div className="flex items-center gap-2">
+   483→                    <span className="font-mono text-xs">{s.code}</span>
+   484→                    <Badge variant="outline" className="text-[10px]">{s.type}</Badge>
+   485→                  </div>
+   486→                  <p className="text-sm truncate">{s.question}</p>
+   487→                </div>
+   488→              </label>
+   489→            ))}
+   490→          </div>
+   491→          <DialogFooter>
+   492→            <Button variant="outline" onClick={() => setAssignOpen(false)}>Batal</Button>
+   493→            <Button onClick={handleAssign} disabled={selectedSoal.length === 0}>
+   494→              Tambah {selectedSoal.length > 0 ? `(${selectedSoal.length})` : ""}
+   495→            </Button>
+   496→          </DialogFooter>
+   497→        </DialogContent>
+   498→      </Dialog>
+   499→    </div>
+   500→  )
+   501→}
+   502→
+   503→function UjianPesertaTab({ ujianId }: { ujianId: string }) {
+   504→  const [peserta, setPeserta] = useState<any[]>([])
+   505→  const [loading, setLoading] = useState(true)
+   506→  const { toast } = useToast()
+   507→
+   508→  const load = useCallback(async () => {
+   509→    try {
+   510→      setLoading(true)
+   511→      const res = await apiGet(`/api/admin/ujian/${ujianId}/peserta`)
+   512→      setPeserta(res.data)
+   513→    } catch (e: any) {
+   514→      toast({ title: "Gagal", description: e.message, variant: "destructive" })
+   515→    } finally {
+   516→      setLoading(false)
+   517→    }
+   518→  }, [ujianId, toast])
+   519→
+   520→  useEffect(() => { load() }, [load])
+   521→
+   522→  const handleAssignAll = async () => {
+   523→    try {
+   524→      const res = await apiPost(`/api/admin/ujian/${ujianId}/peserta`, { all: true, isHadir: true })
+   525→      toast({ title: "Berhasil", description: `${res.count} peserta ditambahkan` })
+   526→      load()
+   527→    } catch (e: any) {
+   528→      toast({ title: "Gagal", description: e.message, variant: "destructive" })
+   529→    }
+   530→  }
+   531→
+   532→  const handleToggleHadir = async (santriId: string, isHadir: boolean) => {
+   533→    try {
+   534→      await apiPost(`/api/admin/ujian/${ujianId}/peserta`, { santriId, isHadir: !isHadir })
+   535→      load()
+   536→    } catch (e: any) {
+   537→      toast({ title: "Gagal", description: e.message, variant: "destructive" })
+   538→    }
+   539→  }
+   540→
+   541→  if (loading) return <LoadingState />
+   542→
+   543→  return (
+   544→    <div>
+   545→      <div className="flex justify-between items-center mb-3">
+   546→        <p className="text-sm text-muted-foreground">{peserta.filter(p => p.isAssigned !== false).length} peserta terdaftar</p>
+   547→        <Button size="sm" onClick={handleAssignAll}><Users className="h-4 w-4 mr-1" /> Tambah Semua Santri Kelas</Button>
+   548→      </div>
+   549→      {peserta.length === 0 ? (
+   550→        <EmptyState icon={<Users className="h-5 w-5" />} title="Belum ada peserta" />
+   551→      ) : (
+   552→        <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
+   553→          {peserta.map((p) => (
+   554→            <div key={p.id} className="flex items-center justify-between p-2 border rounded">
+   555→              <div className="flex items-center gap-2">
+   556→                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">
+   557→                  {p.santri?.name?.[0] || "?"}
+   558→                </div>
+   559→                <div>
+   560→                  <p className="text-sm font-medium">{p.santri?.name}</p>
+   561→                  <p className="text-[10px] text-muted-foreground font-mono">{p.santri?.nis}</p>
+   562→                </div>
+   563→              </div>
+   564→              <div className="flex items-center gap-2">
+   565→                {p.isHadir === null || p.isHadir === undefined ? (
+   566→                  <Badge variant="outline" className="text-[10px]">Belum di-set</Badge>
+   567→                ) : p.isHadir ? (
+   568→                  <Badge variant="success" className="text-[10px]">Hadir</Badge>
+   569→                ) : (
+   570→                  <Badge variant="destructive" className="text-[10px]">Absen</Badge>
+   571→                )}
+   572→                {p.isAssigned !== false && (
+   573→                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => handleToggleHadir(p.santriId, p.isHadir)}>
+   574→                    Toggle
+   575→                  </Button>
+   576→                )}
+   577→              </div>
+   578→            </div>
+   579→          ))}
+   580→        </div>
+   581→      )}
+   582→    </div>
+   583→  )
+   584→}
+   585→
+   586→function UjianNilaiTab({ ujianId, maxScore, onSuccess }: any) {
+   587→  const [nilaiData, setNilaiData] = useState<any[]>([])
+   588→  const [stats, setStats] = useState<any>(null)
+   589→  const [loading, setLoading] = useState(true)
+   590→  const [entries, setEntries] = useState<Record<string, string>>({})
+   591→  const [saving, setSaving] = useState(false)
+   592→  const { toast } = useToast()
+   593→
+   594→  const load = useCallback(async () => {
+   595→    try {
+   596→      setLoading(true)
+   597→      const res = await apiGet(`/api/admin/ujian/${ujianId}/nilai`)
+   598→      setNilaiData(res.data)
+   599→      setStats(res.stats)
+   600→      const init: Record<string, string> = {}
+   601→      res.data.forEach((p: any) => {
+   602→        if (p.nilai) init[p.santriId] = String(p.nilai.score)
+   603→      })
+   604→      setEntries(init)
+   605→    } catch (e: any) {
+   606→      toast({ title: "Gagal", description: e.message, variant: "destructive" })
+   607→    } finally {
+   608→      setLoading(false)
+   609→    }
+   610→  }, [ujianId, toast])
+   611→
+   612→  useEffect(() => { load() }, [load])
+   613→
+   614→  const handleSave = async () => {
+   615→    const payload = Object.entries(entries)
+   616→      .filter(([, v]) => v !== "" && v !== null)
+   617→      .map(([santriId, v]) => ({ santriId, score: Number(v) }))
+   618→    if (payload.length === 0) {
+   619→      toast({ title: "Info", description: "Tidak ada nilai untuk disimpan" })
+   620→      return
+   621→    }
+   622→    setSaving(true)
+   623→    try {
+   624→      const res = await apiPost(`/api/admin/ujian/${ujianId}/nilai`, { entries: payload })
+   625→      toast({ title: "Berhasil", description: `${res.count} nilai tersimpan` })
+   626→      load()
+   627→      onSuccess()
+   628→    } catch (e: any) {
+   629→      toast({ title: "Gagal", description: e.message, variant: "destructive" })
+   630→    } finally {
+   631→      setSaving(false)
+   632→    }
+   633→  }
+   634→
+   635→  if (loading) return <LoadingState />
+   636→
+   637→  return (
+   638→    <div>
+   639→      {stats && (
+   640→        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3">
+   641→          <Card><CardContent className="p-2"><p className="text-[10px] text-muted-foreground">Total</p><p className="text-lg font-bold">{stats.total}</p></CardContent></Card>
+   642→          <Card><CardContent className="p-2"><p className="text-[10px] text-muted-foreground">Dinilai</p><p className="text-lg font-bold text-green-600">{stats.graded}</p></CardContent></Card>
+   643→          <Card><CardContent className="p-2"><p className="text-[10px] text-muted-foreground">Rata-rata</p><p className="text-lg font-bold text-blue-600">{stats.avgScore}</p></CardContent></Card>
+   644→          <Card><CardContent className="p-2"><p className="text-[10px] text-muted-foreground">Lulus</p><p className="text-lg font-bold text-green-600">{stats.lulus}</p></CardContent></Card>
+   645→          <Card><CardContent className="p-2"><p className="text-[10px] text-muted-foreground">Tidak Lulus</p><p className="text-lg font-bold text-red-600">{stats.tidakLulus}</p></CardContent></Card>
+   646→        </div>
+   647→      )}
+   648→      <div className="space-y-1.5 max-h-[400px] overflow-y-auto mb-3">
+   649→        {nilaiData.map((p) => (
+   650→          <div key={p.id} className="flex items-center gap-2 p-2 border rounded">
+   651→            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">
+   652→              {p.santri?.name?.[0] || "?"}
+   653→            </div>
+   654→            <div className="flex-1 min-w-0">
+   655→              <p className="text-sm font-medium truncate">{p.santri?.name}</p>
+   656→              <p className="text-[10px] text-muted-foreground font-mono">{p.santri?.nis}</p>
+   657→            </div>
+   658→            <Input
+   659→              type="number"
+   660→              min={0}
+   661→              max={maxScore}
+   662→              value={entries[p.santriId] || ""}
+   663→              onChange={(e) => setEntries({ ...entries, [p.santriId]: e.target.value })}
+   664→              placeholder="-"
+   665→              className="w-20 h-8"
+   666→            />
+   667→            <span className="text-xs text-muted-foreground shrink-0">/ {maxScore}</span>
+   668→            {p.isGraded && <Badge variant="success" className="text-[10px]">Sudah dinilai</Badge>}
+   669→          </div>
+   670→        ))}
+   671→      </div>
+   672→      <div className="flex justify-end">
+   673→        <Button onClick={handleSave} disabled={saving}>
+   674→          <Save className="h-4 w-4 mr-1" /> {saving ? "Menyimpan..." : `Simpan ${Object.values(entries).filter(v => v).length} Nilai`}
+   675→        </Button>
+   676→      </div>
+   677→    </div>
+   678→  )
+   679→}
+   680→
+   681→function UjianLegerTab({ ujianId }: { ujianId: string }) {
+   682→  const [leger, setLeger] = useState<any[]>([])
+   683→  const [stats, setStats] = useState<any>(null)
+   684→  const [ujianInfo, setUjianInfo] = useState<any>(null)
+   685→  const [loading, setLoading] = useState(true)
+   686→  const { toast } = useToast()
+   687→
+   688→  const load = useCallback(async () => {
+   689→    try {
+   690→      setLoading(true)
+   691→      const res = await apiGet(`/api/admin/ujian/${ujianId}/leger`)
+   692→      setLeger(res.data)
+   693→      setStats(res.stats)
+   694→      setUjianInfo(res.ujian)
+   695→    } catch (e: any) {
+   696→      toast({ title: "Gagal", description: e.message, variant: "destructive" })
+   697→    } finally {
+   698→      setLoading(false)
+   699→    }
+   700→  }, [ujianId, toast])
+   701→
+   702→  useEffect(() => { load() }, [load])
+   703→
+   704→  if (loading) return <LoadingState />
+   705→
+   706→  return (
+   707→    <div>
+   708→      {stats && (
+   709→        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3">
+   710→          <Card><CardContent className="p-2"><p className="text-[10px] text-muted-foreground">Total Peserta</p><p className="text-lg font-bold">{stats.total}</p></CardContent></Card>
+   711→          <Card><CardContent className="p-2"><p className="text-[10px] text-muted-foreground">Rata-rata</p><p className="text-lg font-bold text-blue-600">{stats.avgScore}</p></CardContent></Card>
+   712→          <Card><CardContent className="p-2"><p className="text-[10px] text-muted-foreground">Tertinggi</p><p className="text-lg font-bold text-green-600">{stats.maxScore}</p></CardContent></Card>
+   713→          <Card><CardContent className="p-2"><p className="text-[10px] text-muted-foreground">Terendah</p><p className="text-lg font-bold text-orange-600">{stats.minScore}</p></CardContent></Card>
+   714→          <Card><CardContent className="p-2"><p className="text-[10px] text-muted-foreground">% Lulus</p><p className="text-lg font-bold text-green-600">{stats.persentaseLulus}%</p></CardContent></Card>
+   715→        </div>
+   716→      )}
+   717→      {leger.length === 0 ? (
+   718→        <EmptyState icon={<Trophy className="h-5 w-5" />} title="Belum ada nilai" description="Input nilai di tab Nilai terlebih dahulu" />
+   719→      ) : (
+   720→        <div className="overflow-x-auto">
+   721→          <Table>
+   722→            <TableHeader>
+   723→              <TableRow>
+   724→                <TableHead className="text-center">Rank</TableHead>
+   725→                <TableHead>Nama</TableHead>
+   726→                <TableHead className="text-center">NIS</TableHead>
+   727→                <TableHead className="text-center">Nilai</TableHead>
+   728→                <TableHead className="text-center">Predikat</TableHead>
+   729→                <TableHead className="text-center">Status</TableHead>
+   730→              </TableRow>
+   731→            </TableHeader>
+   732→            <TableBody>
+   733→              {leger.map((l) => (
+   734→                <TableRow key={l.santriId}>
+   735→                  <TableCell className="text-center">
+   736→                    <Badge variant={l.rank === 1 ? "default" : l.rank <= 3 ? "secondary" : "outline"}>
+   737→                      #{l.rank}
+   738→                    </Badge>
+   739→                  </TableCell>
+   740→                  <TableCell className="text-sm font-medium">{l.santriName}</TableCell>
+   741→                  <TableCell className="text-center text-xs font-mono">{l.nis}</TableCell>
+   742→                  <TableCell className="text-center font-bold text-lg">{l.score}</TableCell>
+   743→                  <TableCell className="text-center">
+   744→                    <Badge variant={l.score >= 90 ? "success" : l.score >= 70 ? "secondary" : "destructive"}>
+   745→                      {l.score >= 90 ? "A" : l.score >= 80 ? "B" : l.score >= 70 ? "C" : l.score >= 60 ? "D" : "E"}
+   746→                    </Badge>
+   747→                  </TableCell>
+   748→                  <TableCell className="text-center">
+   749→                    <Badge variant={l.isLulus ? "success" : "destructive"} className="text-xs">
+   750→                      {l.isLulus ? "Lulus" : "Remedial"}
+   751→                    </Badge>
+   752→                  </TableCell>
+   753→                </TableRow>
+   754→              ))}
+   755→            </TableBody>
+   756→          </Table>
+   757→        </div>
+   758→      )}
+   759→    </div>
+   760→  )
+   761→}
+   762→
