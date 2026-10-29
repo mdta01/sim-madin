@@ -45,6 +45,9 @@ export type AdminView =
   // V8 — QR Code & Digitalisasi
   | "qr"
   // End V8
+  // V10 — Kelulusan & Alumni
+  | "alumni"
+  // End V10
   | "users"
   | "pengaturan"
   | "profile"

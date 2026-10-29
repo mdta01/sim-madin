@@ -149,6 +149,8 @@ model TahunAjaran {
   // V5 — Keuangan Lanjutan
   transaksiKas       TransaksiKas[]
   honorGuru          HonorGuru[]
+  // V10 — Kelulusan & Alumni
+  alumniLulus        Alumni[]
 }
 
 model Semester {
@@ -385,6 +387,8 @@ model Santri {
   chatRooms          ChatRoom[]
   // V7 — Administrasi & Dokumen
   surat              Surat[]
+  // V10 — Kelulusan & Alumni
+  alumni             Alumni[]
 
   @@index([kelasId])
   @@index([waliId])
@@ -1445,4 +1449,55 @@ model QRScan {
   @@index([qrType, entityId])
   @@index([scanType, createdAt])
   @@index([createdAt])
+}
+
+// ============================================================================
+// 19. V10 — KELULUSAN & ALUMNI
+// ============================================================================
+// Sesuai roadmap.pdf V10:
+// - Kelulusan: persyaratan, ujian akhir, nilai akhir, penentuan, berita acara, sertifikat, piagam, surat lulus
+// - Alumni: tahun lulus, pendidikan lanjutan, pekerjaan, kontak, domisili, aktivitas
+// - Santri → Lulus → Alumni (data tetap tersimpan)
+// ============================================================================
+
+model Alumni {
+  id            String   @id @default(cuid())
+  santriId      String   @unique // link ke Santri (data tetap tersimpan)
+  tahunLulus    Int      // 2025
+  tahunAjaranLulusId String? // link ke TahunAjaran saat lulus
+  // Status kelulusan
+  statusKelulusan String @default("LULUS") // "LULUS" | "TIDAK_LULUS" | "PENDING"
+  nilaiAkhir    Float?   // nilai akhir gabungan semua mapel
+  predikatAkhir String?  // "A" | "B" | "C" | "D"
+  // Persyaratan kelulusan (checklist)
+  syaratNilaiLengkap Boolean @default(false)
+  syaratAbsensiCukup  Boolean @default(false)
+  syaratTagihanLunas  Boolean @default(false)
+  syaratUjianAkhir    Boolean @default(false) // sudah ikut ujian akhir
+  syaratLainnya       String? // catatan persyaratan lain
+  // Dokumen kelulusan
+  suratKeteranganLulus Boolean @default(false) // sudah dibuatkan surat?
+  sertifikat           Boolean @default(false)
+  piagam               Boolean @default(false) // jika ada prestasi
+  beritaAcaraId        String? // link ke Surat berita acara (V7)
+  // Data alumni (setelah lulus)
+  pendidikanLanjutan String?  // "SMP Al-Azhar", "MTs Negeri 1", "Sekolah Rumah"
+  pekerjaan          String?  // jika sudah bekerja
+  telepon            String?  // kontak alumni
+  email              String?  // email alumni
+  domisiliKota       String?  // kota domisili sekarang
+  domisiliAlamat     String?  // alamat lengkap
+  aktivitasAlumni    String?  // "Kegiatan dakwah", "Wirausaha", "Melanjutkan kuliah"
+  catatan            String?  // catatan admin
+  // Metadata
+  tanggalLulus    DateTime? // tanggal resmi kelulusan
+  createdById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  santri          Santri   @relation(fields: [santriId], references: [id], onDelete: Cascade)
+  tahunAjaranLulus TahunAjaran? @relation(fields: [tahunAjaranLulusId], references: [id])
+
+  @@index([tahunLulus])
+  @@index([statusKelulusan])
 }

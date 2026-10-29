@@ -1,0 +1,767 @@
+     1→"use client"
+     2→
+     3→import { useEffect, useState, useCallback } from "react"
+     4→import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api-client"
+     5→import { useAdminStore } from "@/stores/admin-store"
+     6→import { PageHeader } from "@/components/admin/shared/page-header"
+     7→import { DataTableToolbar } from "@/components/admin/shared/data-table-toolbar"
+     8→import { LoadingState, ErrorState, EmptyState } from "@/components/admin/shared/states"
+     9→import { StatusBadge } from "@/components/admin/shared/status-badge"
+    10→import { Breadcrumb } from "@/components/admin/shared/breadcrumb"
+    11→import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+    12→import { Button } from "@/components/ui/button"
+    13→import { Input } from "@/components/ui/input"
+    14→import { Label } from "@/components/ui/label"
+    15→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+    16→import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+    17→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
+    18→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+    19→import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+    20→import { Badge } from "@/components/ui/badge"
+    21→import { useToast } from "@/hooks/use-toast"
+    22→import { ToastContainer } from "@/components/ui/toaster"
+    23→import { GENDER_LABELS, KELAS_LEVELS, formatDate, formatRupiah } from "@/lib/constants"
+    24→import { GraduationCap, Plus, Pencil, Trash2, ArrowLeft, User, Users, Phone, MapPin, Calendar, BookOpen, Wallet, FileText, ClipboardCheck } from "lucide-react"
+    25→import { PhotoUpload } from "@/components/admin/shared/photo-upload"
+    26→
+    27→export function SantriView() {
+    28→  const selectedId = useAdminStore((s) => s.selectedEntityId)
+    29→  if (selectedId) return <SantriDetail id={selectedId} />
+    30→  return <SantriList />
+    31→}
+    32→
+    33→function SantriList() {
+    34→  const [data, setData] = useState<any[]>([])
+    35→  const [kelasList, setKelasList] = useState<any[]>([])
+    36→  const [loading, setLoading] = useState(true)
+    37→  const [error, setError] = useState<string | null>(null)
+    38→  const [search, setSearch] = useState("")
+    39→  const [kelasFilter, setKelasFilter] = useState("")
+    40→  const [statusFilter, setStatusFilter] = useState("")
+    41→  const [dialogOpen, setDialogOpen] = useState(false)
+    42→  const [editing, setEditing] = useState<any | null>(null)
+    43→  const { toast } = useToast()
+    44→  const selectEntity = useAdminStore((s) => s.selectEntity)
+    45→
+    46→  const load = useCallback(async () => {
+    47→    try {
+    48→      setLoading(true)
+    49→      setError(null)
+    50→      const params: any = {}
+    51→      if (search) params.search = search
+    52→      if (kelasFilter) params.kelasId = kelasFilter
+    53→      if (statusFilter) params.status = statusFilter
+    54→      const [res, kelasRes] = await Promise.all([
+    55→        apiGet("/api/admin/santri", params),
+    56→        apiGet("/api/admin/kelas"),
+    57→      ])
+    58→      setData(res.data)
+    59→      setKelasList(kelasRes.data)
+    60→    } catch (e: any) {
+    61→      setError(e.message)
+    62→    } finally {
+    63→      setLoading(false)
+    64→    }
+    65→  }, [search, kelasFilter, statusFilter])
+    66→
+    67→  useEffect(() => { load() }, [load])
+    68→
+    69→  const handleDelete = async (id: string) => {
+    70→    if (!confirm("Yakin ingin menghapus data santri ini? (soft delete)")) return
+    71→    try {
+    72→      await apiDelete(`/api/admin/santri/${id}`)
+    73→      toast({ title: "Berhasil", description: "Santri telah dihapus" })
+    74→      load()
+    75→    } catch (e: any) {
+    76→      toast({ title: "Gagal", description: e.message, variant: "destructive" })
+    77→    }
+    78→  }
+    79→
+    80→  return (
+    81→    <div>
+    82→      <PageHeader
+    83→        title="Data Santri"
+    84→        description="Kelola seluruh data santri madrasah"
+    85→        icon={<GraduationCap className="h-5 w-5" />}
+    86→        actions={
+    87→          <Button onClick={() => { setEditing(null); setDialogOpen(true) }}>
+    88→            <Plus className="h-4 w-4 mr-1" /> Tambah Santri
+    89→          </Button>
+    90→        }
+    91→      />
+    92→      <DataTableToolbar
+    93→        searchValue={search}
+    94→        onSearchChange={setSearch}
+    95→        searchPlaceholder="Cari nama, NIS, NISN..."
+    96→        filters={
+    97→          <>
+    98→            <Select value={kelasFilter} onValueChange={(v) => setKelasFilter(v === "all" ? "" : v)}>
+    99→              <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Semua Kelas" /></SelectTrigger>
+   100→              <SelectContent>
+   101→                <SelectItem value="all">Semua Kelas</SelectItem>
+   102→                {kelasList.map((k) => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+   103→              </SelectContent>
+   104→            </Select>
+   105→            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v === "all" ? "" : v)}>
+   106→              <SelectTrigger className="w-[140px] h-9"><SelectValue placeholder="Status" /></SelectTrigger>
+   107→              <SelectContent>
+   108→                <SelectItem value="all">Semua Status</SelectItem>
+   109→                <SelectItem value="AKTIF">Aktif</SelectItem>
+   110→                <SelectItem value="LULUS">Lulus</SelectItem>
+   111→                <SelectItem value="PINDAH">Pindah</SelectItem>
+   112→                <SelectItem value="KELUAR">Keluar</SelectItem>
+   113→              </SelectContent>
+   114→            </Select>
+   115→          </>
+   116→        }
+   117→      />
+   118→
+   119→      <Card>
+   120→        <CardContent className="p-0">
+   121→          {loading ? <LoadingState /> :
+   122→            error ? <ErrorState message={error} onRetry={load} /> :
+   123→            data.length === 0 ? <EmptyState icon={<GraduationCap className="h-5 w-5" />} title="Belum ada data santri" description="Tambahkan data santri pertama Anda" /> :
+   124→            <div className="overflow-x-auto">
+   125→              <Table>
+   126→                <TableHeader>
+   127→                  <TableRow>
+   128→                    <TableHead className="min-w-[200px]">Santri</TableHead>
+   129→                    <TableHead>NIS</TableHead>
+   130→                    <TableHead>Kelas</TableHead>
+   131→                    <TableHead>L/P</TableHead>
+   132→                    <TableHead>Wali</TableHead>
+   133→                    <TableHead>Status Wali</TableHead>
+   134→                    <TableHead>Status</TableHead>
+   135→                    <TableHead className="text-right">Aksi</TableHead>
+   136→                  </TableRow>
+   137→                </TableHeader>
+   138→                <TableBody>
+   139→                  {data.map((s) => (
+   140→                    <TableRow key={s.id} className="cursor-pointer hover:bg-muted/50" onClick={() => selectEntity(s.id)}>
+   141→                      <TableCell>
+   142→                        <div className="flex items-center gap-2">
+   143→                          <Avatar className="h-8 w-8">
+   144→                            {s.photoUrl ? (
+   145→                              <img src={s.photoUrl} alt={s.name} className="h-full w-full object-cover" />
+   146→                            ) : (
+   147→                              <AvatarFallback className="bg-primary/10 text-primary text-xs">{s.name[0]}</AvatarFallback>
+   148→                            )}
+   149→                          </Avatar>
+   150→                          <div>
+   151→                            <p className="font-medium text-sm">{s.name}</p>
+   152→                            <p className="text-[11px] text-muted-foreground">{s.birthPlace}</p>
+   153→                          </div>
+   154→                        </div>
+   155→                      </TableCell>
+   156→                      <TableCell className="font-mono text-xs">{s.nis}</TableCell>
+   157→                      <TableCell>{s.kelas?.name || "-"}</TableCell>
+   158→                      <TableCell><Badge variant="outline">{s.gender}</Badge></TableCell>
+   159→                      <TableCell className="text-xs">
+   160→                        <p>{s.wali?.name || "-"}</p>
+   161→                        <p className="text-muted-foreground">{s.wali?.phone}</p>
+   162→                      </TableCell>
+   163→                      <TableCell>
+   164→                        {s.wali ? (
+   165→                          <Badge
+   166→                            variant="outline"
+   167→                            className={
+   168→                              s.wali.activationStatus === "ACTIVE" ? "bg-emerald-100 text-emerald-700 border-emerald-200" :
+   169→                              s.wali.activationStatus === "PENDING" ? "bg-amber-100 text-amber-700 border-amber-200" :
+   170→                              s.wali.activationStatus === "PENDING_NO_PHONE" ? "bg-orange-100 text-orange-700 border-orange-200" :
+   171→                              s.wali.activationStatus === "SUSPENDED" ? "bg-red-100 text-red-700 border-red-200" :
+   172→                              ""
+   173→                            }
+   174→                            title={s.wali.activationStatus}
+   175→                          >
+   176→                            {s.wali.activationStatus === "ACTIVE" ? "✓ Aktif" :
+   177→                              s.wali.activationStatus === "PENDING" ? "⏳ Pending" :
+   178→                              s.wali.activationStatus === "PENDING_NO_PHONE" ? "⚠️ No WA" :
+   179→                              s.wali.activationStatus === "SUSPENDED" ? "🚫 Suspended" :
+   180→                              s.wali.activationStatus}
+   181→                          </Badge>
+   182→                        ) : (
+   183→                          <span className="text-xs text-muted-foreground">-</span>
+   184→                        )}
+   185→                      </TableCell>
+   186→                      <TableCell><StatusBadge status={s.status} /></TableCell>
+   187→                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+   188→                        <div className="flex justify-end gap-1">
+   189→                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditing(s); setDialogOpen(true) }}>
+   190→                            <Pencil className="h-3.5 w-3.5" />
+   191→                          </Button>
+   192→                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(s.id)}>
+   193→                            <Trash2 className="h-3.5 w-3.5" />
+   194→                          </Button>
+   195→                        </div>
+   196→                      </TableCell>
+   197→                    </TableRow>
+   198→                  ))}
+   199→                </TableBody>
+   200→              </Table>
+   201→            </div>
+   202→          }
+   203→        </CardContent>
+   204→      </Card>
+   205→
+   206→      <SantriForm
+   207→        open={dialogOpen}
+   208→        onOpenChange={setDialogOpen}
+   209→        editing={editing}
+   210→        kelasList={kelasList}
+   211→        onSuccess={load}
+   212→      />
+   213→    </div>
+   214→  )
+   215→}
+   216→
+   217→function SantriForm({ open, onOpenChange, editing, kelasList, onSuccess }: {
+   218→  open: boolean
+   219→  onOpenChange: (v: boolean) => void
+   220→  editing: any | null
+   221→  kelasList: any[]
+   222→  onSuccess: () => void
+   223→}) {
+   224→  const [form, setForm] = useState<any>({})
+   225→  const [waliList, setWaliList] = useState<any[]>([])
+   226→  const [taList, setTaList] = useState<any[]>([])
+   227→  const [saving, setSaving] = useState(false)
+   228→  const { toast } = useToast()
+   229→
+   230→  useEffect(() => {
+   231→    if (open) {
+   232→      apiGet("/api/admin/wali").then((r) => setWaliList(r.data)).catch(() => {})
+   233→      apiGet("/api/admin/tahun-ajaran").then((r) => setTaList(r.data)).catch(() => {})
+   234→    }
+   235→  }, [open])
+   236→
+   237→  useEffect(() => {
+   238→    if (editing) {
+   239→      setForm({
+   240→        ...editing,
+   241→        birthDate: editing.birthDate ? new Date(editing.birthDate).toISOString().split("T")[0] : "",
+   242→        entryDate: editing.entryDate ? new Date(editing.entryDate).toISOString().split("T")[0] : "",
+   243→      })
+   244→    } else {
+   245→      setForm({ gender: "L", status: "AKTIF" })
+   246→    }
+   247→  }, [editing, open])
+   248→
+   249→  const handleSave = async () => {
+   250→    // Saat create, NIS opsional (auto-generate). Saat edit, NIS wajib.
+   251→    if (editing && !form.nis) {
+   252→      toast({ title: "Validasi gagal", description: "NIS wajib diisi saat edit", variant: "destructive" })
+   253→      return
+   254→    }
+   255→    if (!form.name || !form.gender) {
+   256→      toast({ title: "Validasi gagal", description: "Nama dan Jenis Kelamin wajib diisi", variant: "destructive" })
+   257→      return
+   258→    }
+   259→    // Jika createNewWali aktif, wajib isi nama wali
+   260→    if (form.createNewWali && !form.waliName) {
+   261→      toast({ title: "Validasi gagal", description: "Nama wali wajib diisi jika membuat wali baru", variant: "destructive" })
+   262→      return
+   263→    }
+   264→    setSaving(true)
+   265→    try {
+   266→      if (editing) {
+   267→        await apiPut(`/api/admin/santri/${editing.id}`, form)
+   268→        toast({ title: "Berhasil", description: "Data santri diperbarui" })
+   269→      } else {
+   270→        const result = await apiPost<any>("/api/admin/santri", form)
+   271→        // Tampilkan info NIS + aktivasi wali
+   272→        const nisInfo = result.nis ? `NIS: ${result.nis}` : ""
+   273→        let waliInfo = ""
+   274→        if (result.waliActivation) {
+   275→          const wa = result.waliActivation
+   276→          waliInfo = ` | Wali: ${wa.waliName}`
+   277→          if (wa.otpCode) {
+   278→            waliInfo += ` | OTP: ${wa.otpCode} (dev mode)`
+   279→          }
+   280→          waliInfo += ` | Aktivasi: ${wa.activationUrl}`
+   281→        }
+   282→        toast({
+   283→          title: "✅ Santri ditambahkan",
+   284→          description: `${nisInfo}${waliInfo}`.trim(),
+   285→          duration: 10000, // tampilkan lebih lama agar bisa baca OTP
+   286→        })
+   287→      }
+   288→      onOpenChange(false)
+   289→      onSuccess()
+   290→    } catch (e: any) {
+   291→      toast({ title: "Gagal", description: e.message, variant: "destructive" })
+   292→    } finally {
+   293→      setSaving(false)
+   294→    }
+   295→  }
+   296→
+   297→  return (
+   298→    <Dialog open={open} onOpenChange={onOpenChange}>
+   299→      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+   300→        <DialogHeader>
+   301→          <DialogTitle>{editing ? "Edit Santri" : "Tambah Santri Baru"}</DialogTitle>
+   302→        </DialogHeader>
+   303→        <div className="mb-3 pb-3 border-b">
+   304→          <Label className="text-xs mb-2 block">Foto Profil</Label>
+   305→          <PhotoUpload
+   306→            value={form.photoUrl}
+   307→            onChange={(url) => setForm({ ...form, photoUrl: url })}
+   308→            name={form.name}
+   309→            prefix="santri"
+   310→          />
+   311→        </div>
+   312→        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-2">
+   313→          <div className="space-y-1">
+   314→            <Label className="text-xs">NIS {editing ? "*" : "(kosongkan untuk auto-generate)"}</Label>
+   315→            <Input
+   316→              value={form.nis || ""}
+   317→              onChange={(e) => setForm({ ...form, nis: e.target.value })}
+   318→              placeholder={editing ? "Wajib diisi" : "Auto: YYNNNNNN (mis. 26000001)"}
+   319→              disabled={!!editing}
+   320→            />
+   321→            {!editing && (
+   322→              <p className="text-[10px] text-muted-foreground">
+   323→                💡 NIS = identitas permanen santri. Format: 2 digit tahun + 6 digit urut.
+   324→              </p>
+   325→            )}
+   326→          </div>
+   327→          <div className="space-y-1">
+   328→            <Label className="text-xs">NISN</Label>
+   329→            <Input value={form.nisn || ""} onChange={(e) => setForm({ ...form, nisn: e.target.value })} />
+   330→          </div>
+   331→          <div className="space-y-1 sm:col-span-2">
+   332→            <Label className="text-xs">Nama Lengkap *</Label>
+   333→            <Input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+   334→          </div>
+   335→          <div className="space-y-1">
+   336→            <Label className="text-xs">Jenis Kelamin *</Label>
+   337→            <Select value={form.gender} onValueChange={(v) => setForm({ ...form, gender: v })}>
+   338→              <SelectTrigger><SelectValue /></SelectTrigger>
+   339→              <SelectContent>
+   340→                <SelectItem value="L">Laki-laki</SelectItem>
+   341→                <SelectItem value="P">Perempuan</SelectItem>
+   342→              </SelectContent>
+   343→            </Select>
+   344→          </div>
+   345→          <div className="space-y-1">
+   346→            <Label className="text-xs">Tempat Lahir</Label>
+   347→            <Input value={form.birthPlace || ""} onChange={(e) => setForm({ ...form, birthPlace: e.target.value })} />
+   348→          </div>
+   349→          <div className="space-y-1">
+   350→            <Label className="text-xs">Tanggal Lahir</Label>
+   351→            <Input type="date" value={form.birthDate || ""} onChange={(e) => setForm({ ...form, birthDate: e.target.value })} />
+   352→          </div>
+   353→          <div className="space-y-1">
+   354→            <Label className="text-xs">No. HP Santri (opsional)</Label>
+   355→            <Input value={form.phone || ""} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+   356→          </div>
+   357→          <div className="space-y-1">
+   358→            <Label className="text-xs">Kelas</Label>
+   359→            <Select value={form.kelasId} onValueChange={(v) => setForm({ ...form, kelasId: v })}>
+   360→              <SelectTrigger><SelectValue placeholder="Pilih Kelas" /></SelectTrigger>
+   361→              <SelectContent>
+   362→                {kelasList.map((k) => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+   363→              </SelectContent>
+   364→            </Select>
+   365→          </div>
+   366→
+   367→          {/* WALI SECTION — pilih existing ATAU buat baru */}
+   368→          <div className="sm:col-span-2 mt-2 pt-3 border-t">
+   369→            <div className="flex items-center justify-between mb-2">
+   370→              <Label className="text-xs font-medium">Wali Santri</Label>
+   371→              <Button
+   372→                type="button"
+   373→                variant="outline"
+   374→                size="sm"
+   375→                onClick={() => setForm({ ...form, createNewWali: !form.createNewWali, waliId: form.createNewWali ? form.waliId : null })}
+   376→              >
+   377→                {form.createNewWali ? "← Pilih Wali Existing" : "+ Buat Wali Baru"}
+   378→              </Button>
+   379→            </div>
+   380→
+   381→            {!form.createNewWali ? (
+   382→              <Select value={form.waliId} onValueChange={(v) => setForm({ ...form, waliId: v })}>
+   383→                <SelectTrigger><SelectValue placeholder="Pilih Wali Existing" /></SelectTrigger>
+   384→                <SelectContent>
+   385→                  {waliList.map((w) => (
+   386→                    <SelectItem key={w.id} value={w.id}>
+   387→                      {w.name} {w.phone ? `(${w.phone})` : "(no WA)"} {w.activationStatus === "ACTIVE" ? "✓" : "⏳"}
+   388→                    </SelectItem>
+   389→                  ))}
+   390→                </SelectContent>
+   391→              </Select>
+   392→            ) : (
+   393→              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-3 rounded border bg-muted/20">
+   394→                <div className="space-y-1">
+   395→                  <Label className="text-xs">Nama Wali *</Label>
+   396→                  <Input
+   397→                    value={form.waliName || ""}
+   398→                    onChange={(e) => setForm({ ...form, waliName: e.target.value })}
+   399→                    placeholder="Mis. Bapak Ahmad"
+   400→                  />
+   401→                </div>
+   402→                <div className="space-y-1">
+   403→                  <Label className="text-xs">No. WhatsApp Wali</Label>
+   404→                  <Input
+   405→                    value={form.waliPhone || ""}
+   406→                    onChange={(e) => setForm({ ...form, waliPhone: e.target.value })}
+   407→                    placeholder="08xxx atau 628xxx"
+   408→                  />
+   409→                  <p className="text-[10px] text-muted-foreground">
+   410→                    Kosongkan jika wali belum punya WA. Akun akan berstatus PENDING_NO_PHONE.
+   411→                  </p>
+   412→                </div>
+   413→                <div className="space-y-1">
+   414→                  <Label className="text-xs">Hubungan</Label>
+   415→                  <Select
+   416→                    value={form.waliRelationship || "WALI"}
+   417→                    onValueChange={(v) => setForm({ ...form, waliRelationship: v })}
+   418→                  >
+   419→                    <SelectTrigger><SelectValue /></SelectTrigger>
+   420→                    <SelectContent>
+   421→                      <SelectItem value="AYAH">Ayah</SelectItem>
+   422→                      <SelectItem value="IBU">Ibu</SelectItem>
+   423→                      <SelectItem value="WALI">Wali</SelectItem>
+   424→                      <SelectItem value="KAKEK">Kakek</SelectItem>
+   425→                      <SelectItem value="NENEK">Nenek</SelectItem>
+   426→                      <SelectItem value="PAMAN">Paman</SelectItem>
+   427→                      <SelectItem value="BIBI">Bibi</SelectItem>
+   428→                    </SelectContent>
+   429→                  </Select>
+   430→                </div>
+   431→                {form.waliPhone && (
+   432→                  <p className="text-[10px] text-emerald-600 sm:col-span-3">
+   433→                    ✨ Wali akan otomatis dibuat dengan status PENDING. OTP & link aktivasi akan ditampilkan setelah santri disimpan.
+   434→                  </p>
+   435→                )}
+   436→                {!form.waliPhone && form.waliName && (
+   437→                  <p className="text-[10px] text-amber-600 sm:col-span-3">
+   438→                    ⚠️ Wali tanpa nomor WhatsApp akan dibuat dengan status PENDING_NO_PHONE. Admin bisa tambahkan nomor WA nanti.
+   439→                  </p>
+   440→                )}
+   441→              </div>
+   442→            )}
+   443→          </div>
+   444→
+   445→          <div className="space-y-1 sm:col-span-2">
+   446→            <Label className="text-xs">Alamat</Label>
+   447→            <Input value={form.address || ""} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+   448→          </div>
+   449→          <div className="space-y-1">
+   450→            <Label className="text-xs">Status</Label>
+   451→            <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
+   452→              <SelectTrigger><SelectValue /></SelectTrigger>
+   453→              <SelectContent>
+   454→                <SelectItem value="AKTIF">Aktif</SelectItem>
+   455→                <SelectItem value="LULUS">Lulus</SelectItem>
+   456→                <SelectItem value="PINDAH">Pindah</SelectItem>
+   457→                <SelectItem value="KELUAR">Keluar</SelectItem>
+   458→              </SelectContent>
+   459→            </Select>
+   460→          </div>
+   461→        </div>
+   462→        <DialogFooter>
+   463→          <Button variant="outline" onClick={() => onOpenChange(false)}>Batal</Button>
+   464→          <Button onClick={handleSave} disabled={saving}>{saving ? "Menyimpan..." : "Simpan"}</Button>
+   465→        </DialogFooter>
+   466→      </DialogContent>
+   467→    </Dialog>
+   468→  )
+   469→}
+   470→
+   471→function SantriDetail({ id }: { id: string }) {
+   472→  const [data, setData] = useState<any>(null)
+   473→  const [loading, setLoading] = useState(true)
+   474→  const [error, setError] = useState<string | null>(null)
+   475→  const [activeTab, setActiveTab] = useState("profile")
+   476→  const selectEntity = useAdminStore((s) => s.selectEntity)
+   477→
+   478→  const load = useCallback(async () => {
+   479→    try {
+   480→      setLoading(true)
+   481→      setError(null)
+   482→      const res = await apiGet(`/api/admin/santri/${id}`)
+   483→      setData(res.data)
+   484→    } catch (e: any) {
+   485→      setError(e.message)
+   486→    } finally {
+   487→      setLoading(false)
+   488→    }
+   489→  }, [id])
+   490→
+   491→  useEffect(() => { load() }, [load])
+   492→
+   493→  if (loading) return <LoadingState className="py-20" />
+   494→  if (error || !data) return <ErrorState message={error || "Data tidak ditemukan"} onRetry={load} />
+   495→
+   496→  return (
+   497→    <div>
+   498→      <Breadcrumb
+   499→        items={[
+   500→          { label: "Data Santri", onClick: () => selectEntity(null) },
+   501→          { label: data.name },
+   502→        ]}
+   503→      />
+   504→      <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
+   505→        <Avatar className="h-20 w-20">
+   506→          {data.photoUrl ? (
+   507→            <img src={data.photoUrl} alt={data.name} className="h-full w-full object-cover" />
+   508→          ) : (
+   509→            <AvatarFallback className="bg-primary/10 text-primary text-2xl">{data.name[0]}</AvatarFallback>
+   510→          )}
+   511→        </Avatar>
+   512→        <div className="flex-1">
+   513→          <h1 className="text-2xl font-bold">{data.name}</h1>
+   514→          <div className="flex flex-wrap items-center gap-2 mt-1 text-sm text-muted-foreground">
+   515→            <Badge variant="outline">{data.nis}</Badge>
+   516→            <Badge variant="outline">{GENDER_LABELS[data.gender] || data.gender}</Badge>
+   517→            <StatusBadge status={data.status} />
+   518→            {data.kelas && <Badge variant="secondary">{data.kelas.name}</Badge>}
+   519→          </div>
+   520→        </div>
+   521→        <Button variant="outline" onClick={() => selectEntity(null)}>
+   522→          <ArrowLeft className="h-4 w-4 mr-1" /> Kembali
+   523→        </Button>
+   524→      </div>
+   525→
+   526→      <Tabs value={activeTab} onValueChange={setActiveTab}>
+   527→        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-6 mb-4">
+   528→          <TabsTrigger value="profile" className="text-xs sm:text-sm"><User className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Profil</span></TabsTrigger>
+   529→          <TabsTrigger value="wali" className="text-xs sm:text-sm"><Users className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Wali</span></TabsTrigger>
+   530→          <TabsTrigger value="absensi" className="text-xs sm:text-sm"><ClipboardCheck className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Absensi</span></TabsTrigger>
+   531→          <TabsTrigger value="nilai" className="text-xs sm:text-sm"><BookOpen className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Nilai</span></TabsTrigger>
+   532→          <TabsTrigger value="tagihan" className="text-xs sm:text-sm"><Wallet className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Tagihan</span></TabsTrigger>
+   533→          <TabsTrigger value="rapor" className="text-xs sm:text-sm"><FileText className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Rapor</span></TabsTrigger>
+   534→        </TabsList>
+   535→
+   536→        <TabsContent value="profile">
+   537→          <Card>
+   538→            <CardHeader><CardTitle className="text-base">Informasi Pribadi</CardTitle></CardHeader>
+   539→            <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   540→              <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="Tempat Lahir" value={data.birthPlace || "-"} />
+   541→              <InfoRow icon={<Calendar className="h-3.5 w-3.5" />} label="Tanggal Lahir" value={data.birthDate ? formatDate(data.birthDate) : "-"} />
+   542→              <InfoRow icon={<Phone className="h-3.5 w-3.5" />} label="No. HP" value={data.phone || "-"} />
+   543→              <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="Alamat" value={data.address || "-"} />
+   544→              <InfoRow icon={<Calendar className="h-3.5 w-3.5" />} label="Tgl Masuk" value={data.entryDate ? formatDate(data.entryDate) : "-"} />
+   545→              <InfoRow icon={<User className="h-3.5 w-3.5" />} label="Tahun Ajaran" value={data.tahunAjaran?.name || "-"} />
+   546→            </CardContent>
+   547→          </Card>
+   548→          {data.wali && (
+   549→            <Card className="mt-4">
+   550→              <CardHeader><CardTitle className="text-base">Data Wali</CardTitle></CardHeader>
+   551→              <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   552→                <InfoRow icon={<User className="h-3.5 w-3.5" />} label="Nama Wali" value={data.wali.name} />
+   553→                <InfoRow icon={<Phone className="h-3.5 w-3.5" />} label="No. HP" value={data.wali.phone} />
+   554→                <InfoRow icon={<User className="h-3.5 w-3.5" />} label="Hubungan" value={data.wali.relationship} />
+   555→                <InfoRow icon={<Phone className="h-3.5 w-3.5" />} label="Email" value={data.wali.email || "-"} />
+   556→              </CardContent>
+   557→            </Card>
+   558→          )}
+   559→          {data.wali?.santri && data.wali.santri.length > 1 && (
+   560→            <Card className="mt-4">
+   561→              <CardHeader><CardTitle className="text-base">Saudara di Madrasah Ini</CardTitle></CardHeader>
+   562→              <CardContent>
+   563→                <div className="flex flex-wrap gap-2">
+   564→                  {data.wali.santri.filter((s: any) => s.id !== data.id).map((s: any) => (
+   565→                    <Badge key={s.id} variant="secondary" className="cursor-pointer" onClick={() => selectEntity(s.id)}>
+   566→                      {s.name} - {s.kelas?.name || "Tanpa Kelas"}
+   567→                    </Badge>
+   568→                  ))}
+   569→                </div>
+   570→              </CardContent>
+   571→            </Card>
+   572→          )}
+   573→        </TabsContent>
+   574→
+   575→        <TabsContent value="wali">
+   576→          <Card>
+   577→            <CardHeader>
+   578→              <CardTitle className="text-base flex items-center gap-2">
+   579→                <Users className="h-4 w-4" /> Wali Santri ({data.waliLinks?.length || 0})
+   580→              </CardTitle>
+   581→            </CardHeader>
+   582→            <CardContent>
+   583→              {(data.waliLinks?.length || 0) === 0 ? (
+   584→                <EmptyState
+   585→                  icon={<Users className="h-5 w-5" />}
+   586→                  title="Belum ada wali terhubung"
+   587→                  description="Tambah wali via form edit santri atau kelola dari menu Data Wali"
+   588→                />
+   589→              ) : (
+   590→                <div className="space-y-2">
+   591→                  {data.waliLinks.map((wl: any) => (
+   592→                    <div key={wl.id} className="flex items-center gap-3 p-3 rounded border bg-card">
+   593→                      <Avatar className="h-10 w-10">
+   594→                        <AvatarFallback className="bg-primary/10 text-primary">
+   595→                          {wl.wali.name[0]}
+   596→                        </AvatarFallback>
+   597→                      </Avatar>
+   598→                      <div className="flex-1 min-w-0">
+   599→                        <div className="flex items-center gap-2">
+   600→                          <p className="font-medium text-sm">{wl.wali.name}</p>
+   601→                          {wl.isPrimary && (
+   602→                            <Badge variant="default" className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 text-[10px]">
+   603→                              ⭐ Wali Utama
+   604→                            </Badge>
+   605→                          )}
+   606→                        </div>
+   607→                        <div className="flex flex-wrap items-center gap-2 mt-0.5">
+   608→                          <Badge variant="outline" className="text-[10px]">{wl.relationship}</Badge>
+   609→                          {wl.wali.phone && (
+   610→                            <span className="text-[11px] text-muted-foreground">{wl.wali.phone}</span>
+   611→                          )}
+   612→                          <Badge
+   613→                            variant="outline"
+   614→                            className={
+   615→                              wl.wali.activationStatus === "ACTIVE" ? "bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px]" :
+   616→                              wl.wali.activationStatus === "PENDING" ? "bg-amber-100 text-amber-700 border-amber-200 text-[10px]" :
+   617→                              wl.wali.activationStatus === "PENDING_NO_PHONE" ? "bg-orange-100 text-orange-700 border-orange-200 text-[10px]" :
+   618→                              "text-[10px]"
+   619→                            }
+   620→                          >
+   621→                            {wl.wali.activationStatus === "ACTIVE" ? "✓ Aktif" :
+   622→                              wl.wali.activationStatus === "PENDING" ? "⏳ Pending" :
+   623→                              wl.wali.activationStatus === "PENDING_NO_PHONE" ? "⚠️ No WA" :
+   624→                              wl.wali.activationStatus}
+   625→                          </Badge>
+   626→                          {!wl.canAccess && (
+   627→                            <Badge variant="outline" className="text-[10px] text-red-600 border-red-200">
+   628→                              🚫 Akses Ditolak
+   629→                            </Badge>
+   630→                          )}
+   631→                        </div>
+   632→                      </div>
+   633→                    </div>
+   634→                  ))}
+   635→                  <div className="mt-3 pt-3 border-t">
+   636→                    <p className="text-xs text-muted-foreground mb-2">
+   637→                      💡 Untuk menambah wali (mis. ayah + ibu), kelola dari menu <strong>Data Wali</strong> lalu hubungkan ke santri ini.
+   638→                      Saat ini API sudah support, UI manajemen multi-wali akan ditambahkan di V1.5.
+   639→                    </p>
+   640→                  </div>
+   641→                </div>
+   642→              )}
+   643→            </CardContent>
+   644→          </Card>
+   645→        </TabsContent>
+   646→
+   647→        <TabsContent value="absensi">
+   648→          <Card>
+   649→            <CardHeader><CardTitle className="text-base">Riwayat Absensi (30 Hari Terakhir)</CardTitle></CardHeader>
+   650→            <CardContent>
+   651→              {data.absensi?.length === 0 ? <EmptyState title="Belum ada absensi" /> : (
+   652→                <div className="space-y-1.5 max-h-96 overflow-y-auto pr-2">
+   653→                  {data.absensi.map((a: any) => (
+   654→                    <div key={a.id} className="flex items-center justify-between p-2 rounded border bg-card hover:bg-muted/30">
+   655→                      <span className="text-sm">{formatDate(a.date)}</span>
+   656→                      <StatusBadge status={a.status} />
+   657→                    </div>
+   658→                  ))}
+   659→                </div>
+   660→              )}
+   661→            </CardContent>
+   662→          </Card>
+   663→        </TabsContent>
+   664→
+   665→        <TabsContent value="nilai">
+   666→          <Card>
+   667→            <CardHeader><CardTitle className="text-base">Daftar Nilai</CardTitle></CardHeader>
+   668→            <CardContent>
+   669→              {data.nilai?.length === 0 ? <EmptyState title="Belum ada nilai" /> : (
+   670→                <div className="overflow-x-auto">
+   671→                  <Table>
+   672→                    <TableHeader>
+   673→                      <TableRow>
+   674→                        <TableHead>Mata Pelajaran</TableHead>
+   675→                        <TableHead>Jenis</TableHead>
+   676→                        <TableHead>Nilai</TableHead>
+   677→                        <TableHead>Tanggal</TableHead>
+   678→                        <TableHead>Guru</TableHead>
+   679→                      </TableRow>
+   680→                    </TableHeader>
+   681→                    <TableBody>
+   682→                      {data.nilai.map((n: any) => (
+   683→                        <TableRow key={n.id}>
+   684→                          <TableCell className="text-sm">{n.mapel?.name}</TableCell>
+   685→                          <TableCell><Badge variant="outline">{n.type}</Badge></TableCell>
+   686→                          <TableCell className="font-mono font-semibold">{n.score}</TableCell>
+   687→                          <TableCell className="text-xs text-muted-foreground">{formatDate(n.assessmentDate)}</TableCell>
+   688→                          <TableCell className="text-xs">{n.guru?.name || "-"}</TableCell>
+   689→                        </TableRow>
+   690→                      ))}
+   691→                    </TableBody>
+   692→                  </Table>
+   693→                </div>
+   694→              )}
+   695→            </CardContent>
+   696→          </Card>
+   697→        </TabsContent>
+   698→
+   699→        <TabsContent value="tagihan">
+   700→          <Card>
+   701→            <CardHeader><CardTitle className="text-base">Daftar Tagihan</CardTitle></CardHeader>
+   702→            <CardContent>
+   703→              {data.tagihan?.length === 0 ? <EmptyState title="Tidak ada tagihan" /> : (
+   704→                <div className="space-y-2">
+   705→                  {data.tagihan.map((t: any) => (
+   706→                    <div key={t.id} className="flex items-center justify-between p-3 rounded border bg-card">
+   707→                      <div>
+   708→                        <p className="font-medium text-sm">{t.jenisTagihan?.name}</p>
+   709→                        <p className="text-xs text-muted-foreground">{t.description || formatDate(t.dueDate || t.createdAt)}</p>
+   710→                      </div>
+   711→                      <div className="text-right">
+   712→                        <p className="font-semibold text-sm">{formatRupiah(t.amount)}</p>
+   713→                        <StatusBadge status={t.status} />
+   714→                      </div>
+   715→                    </div>
+   716→                  ))}
+   717→                </div>
+   718→              )}
+   719→            </CardContent>
+   720→          </Card>
+   721→        </TabsContent>
+   722→
+   723→        <TabsContent value="rapor">
+   724→          <Card>
+   725→            <CardHeader><CardTitle className="text-base">Rapor</CardTitle></CardHeader>
+   726→            <CardContent>
+   727→              {data.rapor?.length === 0 ? <EmptyState title="Belum ada rapor" /> : (
+   728→                <div className="space-y-2">
+   729→                  {data.rapor.map((r: any) => (
+   730→                    <div key={r.id} className="p-3 rounded border bg-card">
+   731→                      <div className="flex items-center justify-between mb-2">
+   732→                        <div>
+   733→                          <p className="font-medium text-sm">{r.semester?.name} - {r.tahunAjaran?.name}</p>
+   734→                          <p className="text-xs text-muted-foreground">{r.kelas?.name}</p>
+   735→                        </div>
+   736→                        {r.published ? <Badge variant="secondary">Sudah Terbit</Badge> : <Badge variant="outline">Draft</Badge>}
+   737→                      </div>
+   738→                      <div className="grid grid-cols-4 gap-2 text-xs text-center">
+   739→                        <div className="p-1.5 rounded bg-muted/50"><p className="text-muted-foreground">Hadir</p><p className="font-bold text-emerald-600">{r.absensiHadir}</p></div>
+   740→                        <div className="p-1.5 rounded bg-muted/50"><p className="text-muted-foreground">Sakit</p><p className="font-bold text-amber-600">{r.absensiSakit}</p></div>
+   741→                        <div className="p-1.5 rounded bg-muted/50"><p className="text-muted-foreground">Izin</p><p className="font-bold text-blue-600">{r.absensiIzin}</p></div>
+   742→                        <div className="p-1.5 rounded bg-muted/50"><p className="text-muted-foreground">Alfa</p><p className="font-bold text-red-600">{r.absensiAlfa}</p></div>
+   743→                      </div>
+   744→                    </div>
+   745→                  ))}
+   746→                </div>
+   747→              )}
+   748→            </CardContent>
+   749→          </Card>
+   750→        </TabsContent>
+   751→      </Tabs>
+   752→    </div>
+   753→  )
+   754→}
+   755→
+   756→function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+   757→  return (
+   758→    <div className="flex items-start gap-2">
+   759→      <div className="text-muted-foreground mt-0.5">{icon}</div>
+   760→      <div className="min-w-0">
+   761→        <p className="text-xs text-muted-foreground">{label}</p>
+   762→        <p className="text-sm font-medium">{value}</p>
+   763→      </div>
+   764→    </div>
+   765→  )
+   766→}
+   767→

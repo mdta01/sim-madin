@@ -460,6 +460,32 @@ export const QR_SCAN_RESULT: Record<string, { label: string; variant: BadgeVaria
 }
 
 // ============================================================================
+// V10 — KELULUSAN & ALUMNI
+// ============================================================================
+
+// Status Kelulusan (sesuai roadmap.pdf V10)
+export const KELULUSAN_STATUS: Record<string, { label: string; variant: BadgeVariant }> = {
+  LULUS: { label: "Lulus", variant: "success" },
+  TIDAK_LULUS: { label: "Tidak Lulus", variant: "destructive" },
+  PENDING: { label: "Pending", variant: "warning" },
+}
+
+// Persyaratan Kelulusan (sesuai roadmap.pdf V10)
+export const SYARAT_KELULUSAN = [
+  { value: "syaratNilaiLengkap", label: "Nilai Lengkap", desc: "Semua mapel sudah dinilai" },
+  { value: "syaratAbsensiCukup", label: "Absensi Cukup", desc: "Kehadiran memenuhi syarat" },
+  { value: "syaratTagihanLunas", label: "Tagihan Lunas", desc: "Semua tagihan keuangan lunas" },
+  { value: "syaratUjianAkhir", label: "Ujian Akhir", desc: "Sudah mengikuti ujian akhir" },
+]
+
+// Dokumen Kelulusan (sesuai roadmap.pdf V10)
+export const DOKUMEN_KELULUSAN = [
+  { value: "suratKeteranganLulus", label: "Surat Keterangan Lulus", desc: "Surat resmi kelulusan" },
+  { value: "sertifikat", label: "Sertifikat", desc: "Sertifikat kelulusan" },
+  { value: "piagam", label: "Piagam", desc: "Piagam penghargaan (jika ada prestasi)" },
+]
+
+// ============================================================================
 // JENIS TAGIHAN
 // ============================================================================
 export const JENIS_TAGIHAN_CATEGORY = [
@@ -539,6 +565,9 @@ export const MENU_ITEMS: MenuItem[] = [
   // V8 — QR Code & Digitalisasi
   { id: "qr", label: "QR & Digital Card", icon: "QrCode", group: "sistem", description: "QR santri/guru, scan absensi, digital card" },
   // End V8
+  // V10 — Kelulusan & Alumni
+  { id: "alumni", label: "Kelulusan & Alumni", icon: "AcademicCap", group: "akademik", description: "Kelulusan santri + tracking alumni" },
+  // End V10
   { id: "users", label: "User & Hak Akses", icon: "ShieldCheck", group: "sistem" },
   { id: "pengaturan", label: "Pengaturan Sistem", icon: "Settings", group: "sistem" },
 ]
