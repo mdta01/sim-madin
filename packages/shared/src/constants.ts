@@ -568,6 +568,9 @@ export const MENU_ITEMS: MenuItem[] = [
   // V10 — Kelulusan & Alumni
   { id: "alumni", label: "Kelulusan & Alumni", icon: "AcademicCap", group: "akademik", description: "Kelulusan santri + tracking alumni" },
   // End V10
+  // V11 — Dashboard & Analitik
+  { id: "dashboard-kepala", label: "Dashboard Kepala", icon: "BarChart3", group: "main", description: "Analitik & grafik madrasah" },
+  // End V11
   { id: "users", label: "User & Hak Akses", icon: "ShieldCheck", group: "sistem" },
   { id: "pengaturan", label: "Pengaturan Sistem", icon: "Settings", group: "sistem" },
 ]

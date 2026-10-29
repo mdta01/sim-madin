@@ -26,7 +26,7 @@ async function main() {
   ])
 
   // 2. PERMISSIONS (matrix per modul)
-  const modules = ["santri","wali","guru","kelas","mapel","jadwal","absensi","nilai","rapor","tagihan","pembayaran","pengumuman","user","tahun_ajaran","pengaturan","materi","tugas","pengumpulan","pertemuan","kompetensi","ujian","bank_soal","ujian_peserta","ujian_nilai","rapor_mapel","rapor_catatan","perkembangan","kas","honor_guru","notifikasi","chat","surat","qr","alumni"]
+  const modules = ["santri","wali","guru","kelas","mapel","jadwal","absensi","nilai","rapor","tagihan","pembayaran","pengumuman","user","tahun_ajaran","pengaturan","materi","tugas","pengumpulan","pertemuan","kompetensi","ujian","bank_soal","ujian_peserta","ujian_nilai","rapor_mapel","rapor_catatan","perkembangan","kas","honor_guru","notifikasi","chat","surat","qr","alumni","dashboard"]
   const actions = ["create","read","update","delete"]
   const permissions: { id: string; code: string; module: string }[] = []
   for (const mod of modules) {

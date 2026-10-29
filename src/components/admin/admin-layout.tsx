@@ -43,6 +43,8 @@ import { SuratView } from "./views/surat-view"
 import { QrView } from "./views/qr-view"
 // V10 — Kelulusan & Alumni
 import { AlumniView } from "./views/alumni-view"
+// V11 — Dashboard & Analitik
+import { DashboardKepalaView } from "./views/dashboard-kepala-view"
 
 export function AdminLayout() {
   const currentView = useAdminStore((s) => s.currentView)
@@ -94,6 +96,9 @@ export function AdminLayout() {
       // V10 — Kelulusan & Alumni
       case "alumni": return <AlumniView />
       // End V10
+      // V11 — Dashboard & Analitik
+      case "dashboard-kepala": return <DashboardKepalaView />
+      // End V11
       case "users": return <UsersView />
       case "pengaturan": return <PengaturanView />
       case "profile": return <ProfileView />

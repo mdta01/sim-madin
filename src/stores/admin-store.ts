@@ -48,6 +48,9 @@ export type AdminView =
   // V10 — Kelulusan & Alumni
   | "alumni"
   // End V10
+  // V11 — Dashboard & Analitik
+  | "dashboard-kepala"
+  // End V11
   | "users"
   | "pengaturan"
   | "profile"
