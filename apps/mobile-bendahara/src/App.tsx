@@ -138,7 +138,8 @@ function DashboardScreen({ onLogout, navigation }: { onLogout: () => void; navig
   const menuItems = [
     { id: "bayar", title: "Input Pembayaran", icon: "cash", color: Colors.success, bg: Colors.successLight, onPress: () => navigation.navigate("PembayaranInput") },
     { id: "tunggakan", title: "Daftar Tunggakan", icon: "warning", color: Colors.danger, bg: Colors.dangerLight, onPress: () => navigation.navigate("TunggakanList") },
-    { id: "riwayat", title: "Riwayat Pembayaran", icon: "time", color: Colors.primary, bg: Colors.primaryLight, onPress: () => navigation.navigate("RiwayatList") },
+    { id: "tagihan", title: "Data Tagihan", icon: "receipt", color: Colors.primary, bg: Colors.primaryLight, onPress: () => navigation.navigate("TagihanList") },
+    { id: "riwayat", title: "Riwayat Pembayaran", icon: "time", color: Colors.info || "#3b82f6", bg: "#dbeafe", onPress: () => navigation.navigate("RiwayatList") },
   ]
 
   return (
@@ -527,6 +528,92 @@ function RiwayatListScreen({ navigation }: { navigation: any }) {
 }
 
 // ============================================================================
+// TAGIHAN LIST SCREEN (all tagihan, not just tunggakan)
+// ============================================================================
+function TagihanListScreen({ navigation }: { navigation: any }) {
+  const [tagihan, setTagihan] = useState<any[]>([])
+  const [filter, setFilter] = useState<string>("")
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true)
+      const params = filter ? `?status=${filter}` : ""
+      const res = await apiGet(`/api/admin/tagihan${params}`)
+      setTagihan(res.data || [])
+    } catch (e: any) { Alert.alert("Error", e.message) }
+    finally { setLoading(false) }
+  }, [filter])
+
+  useEffect(() => { load() }, [load])
+
+  const filters = [
+    { value: "", label: "Semua" },
+    { value: "LUNAS", label: "Lunas" },
+    { value: "CICIL", label: "Cicil" },
+    { value: "BELUM_BAYAR", label: "Belum Bayar" },
+  ]
+
+  return (
+    <SafeAreaView style={styles.screen}>
+      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Data Tagihan</Text>
+        <View style={{ width: 24 }} />
+      </View>
+
+      {/* Filter pills */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
+        {filters.map(f => (
+          <TouchableOpacity
+            key={f.value}
+            style={[styles.methodBtn, filter === f.value && styles.methodBtnActive]}
+            onPress={() => setFilter(f.value)}
+          >
+            <Text style={[styles.methodBtnText, filter === f.value && styles.methodBtnTextActive]}>{f.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {loading ? (
+        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+      ) : (
+        <FlatList
+          data={tagihan}
+          keyExtractor={item => item.id}
+          renderItem={({ item }) => (
+            <View style={styles.tunggakanCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.tunggakanName}>{item.santri?.name}</Text>
+                <Text style={styles.tunggakanNis}>{item.santri?.nis} • {item.kelas?.name || "-"}</Text>
+                <Text style={styles.tunggakanJenis}>{item.jenisTagihan?.name}</Text>
+                <Text style={styles.tunggakanDesc}>{item.description || formatDate(item.dueDate || item.createdAt)}</Text>
+              </View>
+              <View style={{ alignItems: "flex-end" }}>
+                <Text style={styles.tunggakanAmount}>{formatRupiah(item.amount)}</Text>
+                {item.paidAmount > 0 && <Text style={{ fontSize: 11, color: Colors.success }}>Terbayar: {formatRupiah(item.paidAmount)}</Text>}
+                <View style={[styles.statusBadge, { backgroundColor: item.status === "LUNAS" ? Colors.successLight : item.status === "CICIL" ? Colors.warningLight : Colors.dangerLight }]}>
+                  <Text style={[styles.statusText, { color: item.status === "LUNAS" ? Colors.success : item.status === "CICIL" ? Colors.warning : Colors.danger }]}>
+                    {STATUS_STYLES[item.status]?.label || item.status}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
+          ListEmptyComponent={() => (
+            <View style={styles.emptyCard}><Text style={styles.emptyText}>Tidak ada tagihan</Text></View>
+          )}
+          contentContainerStyle={{ padding: 16 }}
+        />
+      )}
+    </SafeAreaView>
+  )
+}
+
+// ============================================================================
 // APP ROOT
 // ============================================================================
 const Stack = createNativeStackNavigator()
@@ -567,6 +654,7 @@ export default function App() {
             </Stack.Screen>
             <Stack.Screen name="PembayaranInput" component={PembayaranInputScreen} />
             <Stack.Screen name="TunggakanList" component={TunggakanListScreen} />
+            <Stack.Screen name="TagihanList" component={TagihanListScreen} />
             <Stack.Screen name="RiwayatList" component={RiwayatListScreen} />
           </>
         ) : (

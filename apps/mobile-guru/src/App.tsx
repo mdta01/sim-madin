@@ -142,7 +142,9 @@ function DashboardScreen({ onLogout, navigation }: { onLogout: () => void; navig
   const menuItems = [
     { id: "absensi", title: "Input Absensi", icon: "checkmark-done", color: Colors.success, bg: Colors.successLight, onPress: () => navigation.navigate("AbsensiInput") },
     { id: "nilai", title: "Input Nilai", icon: "school", color: Colors.primary, bg: Colors.primaryLight, onPress: () => navigation.navigate("NilaiInput") },
+    { id: "santri", title: "Daftar Santri", icon: "people", color: "#7c3aed", bg: "#ede9fe", onPress: () => navigation.navigate("SantriList") },
     { id: "jadwal", title: "Lihat Jadwal", icon: "calendar", color: Colors.info, bg: Colors.infoLight, onPress: () => navigation.navigate("JadwalList") },
+    { id: "info", title: "Pengumuman", icon: "megaphone", color: Colors.warning, bg: Colors.warningLight, onPress: () => navigation.navigate("PengumumanList") },
   ]
 
   return (
@@ -626,6 +628,163 @@ function JadwalListScreen({ navigation }: { navigation: any }) {
 }
 
 // ============================================================================
+// SANTRI LIST SCREEN
+// ============================================================================
+function SantriListScreen({ navigation }: { navigation: any }) {
+  const [kelasList, setKelasList] = useState<any[]>([])
+  const [selectedKelas, setSelectedKelas] = useState("")
+  const [santriList, setSantriList] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const loadKelas = useCallback(async () => {
+    try {
+      const res = await apiGet("/api/admin/kelas")
+      setKelasList(res.data || [])
+      if (res.data?.length > 0) setSelectedKelas(res.data[0].id)
+    } catch (e: any) { Alert.alert("Error", e.message) }
+  }, [])
+
+  const loadSantri = useCallback(async () => {
+    if (!selectedKelas) return
+    try {
+      setLoading(true)
+      const res = await apiGet(`/api/admin/santri?kelasId=${selectedKelas}&status=AKTIF`)
+      setSantriList(res.data || [])
+    } catch (e: any) { Alert.alert("Error", e.message) }
+    finally { setLoading(false) }
+  }, [selectedKelas])
+
+  useEffect(() => { loadKelas() }, [loadKelas])
+  useEffect(() => { if (selectedKelas) loadSantri() }, [selectedKelas, loadSantri])
+
+  return (
+    <SafeAreaView style={styles.screen}>
+      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Daftar Santri</Text>
+        <View style={{ width: 24 }} />
+      </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pickerScroll}>
+        {kelasList.map(k => (
+          <TouchableOpacity
+            key={k.id}
+            style={[styles.pill, selectedKelas === k.id && styles.pillActive]}
+            onPress={() => setSelectedKelas(k.id)}
+          >
+            <Text style={[styles.pillText, selectedKelas === k.id && styles.pillTextActive]}>{k.name}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {loading ? (
+        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+      ) : (
+        <FlatList
+          data={santriList}
+          keyExtractor={item => item.id}
+          renderItem={({ item }) => (
+            <View style={styles.jadwalCard}>
+              <View style={[styles.jadwalTime, { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primaryLight, justifyContent: "center", alignItems: "center" }]}>
+                <Text style={{ fontSize: 18, fontWeight: "bold", color: Colors.primary }}>{item.name[0]}</Text>
+              </View>
+              <View style={styles.jadwalInfo}>
+                <Text style={styles.jadwalMapel}>{item.name}</Text>
+                <Text style={styles.jadwalKelas}>NIS: {item.nis} • {item.gender === "L" ? "Laki-laki" : "Perempuan"}</Text>
+                {item.wali && <Text style={[styles.jadwalKelas, { fontSize: 11 }]}>Wali: {item.wali.name}</Text>}
+              </View>
+              <View style={[styles.statusBadge, { backgroundColor: item.status === "AKTIF" ? Colors.successLight : Colors.dangerLight }]}>
+                <Text style={[styles.statusText, { color: item.status === "AKTIF" ? Colors.success : Colors.danger, fontSize: 10 }]}>
+                  {item.status}
+                </Text>
+              </View>
+            </View>
+          )}
+          ListEmptyComponent={() => (
+            <View style={styles.emptyCard}><Text style={styles.emptyText}>Belum ada santri di kelas ini</Text></View>
+          )}
+          contentContainerStyle={{ padding: 16 }}
+        />
+      )}
+    </SafeAreaView>
+  )
+}
+
+// ============================================================================
+// PENGUMUMAN LIST SCREEN
+// ============================================================================
+function PengumumanListScreen({ navigation }: { navigation: any }) {
+  const [announcements, setAnnouncements] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true)
+      const res = await apiGet("/api/admin/pengumuman")
+      setAnnouncements(res.data || [])
+    } catch (e: any) { Alert.alert("Error", e.message) }
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const getPriorityColor = (priority: string) => {
+    if (priority === "URGENT") return { bg: Colors.dangerLight, color: Colors.danger }
+    if (priority === "PENTING") return { bg: Colors.warningLight, color: Colors.warning }
+    return { bg: "#f1f5f9", color: Colors.textMuted }
+  }
+
+  return (
+    <SafeAreaView style={styles.screen}>
+      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Pengumuman</Text>
+        <View style={{ width: 24 }} />
+      </View>
+
+      {loading ? (
+        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+      ) : (
+        <FlatList
+          data={announcements}
+          keyExtractor={item => item.id}
+          renderItem={({ item }) => {
+            const pc = getPriorityColor(item.priority)
+            return (
+              <View style={styles.jadwalCard}>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <View style={[styles.statusBadge, { backgroundColor: pc.bg }]}>
+                      <Text style={[styles.statusText, { color: pc.color, fontSize: 10 }]}>{item.priority}</Text>
+                    </View>
+                    <View style={[styles.statusBadge, { backgroundColor: "#dbeafe" }]}>
+                      <Text style={[styles.statusText, { color: "#3b82f6", fontSize: 10 }]}>{item.audience}</Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.jadwalMapel, { marginTop: 8 }]}>{item.title}</Text>
+                  <Text style={[styles.jadwalKelas, { marginTop: 4 }]} numberOfLines={3}>{item.content}</Text>
+                  <Text style={[styles.jadwalKelas, { fontSize: 11, marginTop: 4, color: Colors.textMuted }]}>{formatDate(item.publishedAt, true)}</Text>
+                </View>
+              </View>
+            )
+          }}
+          ListEmptyComponent={() => (
+            <View style={styles.emptyCard}><Text style={styles.emptyText}>Belum ada pengumuman</Text></View>
+          )}
+          contentContainerStyle={{ padding: 16 }}
+        />
+      )}
+    </SafeAreaView>
+  )
+}
+
+// ============================================================================
 // APP ROOT
 // ============================================================================
 type RootStackParamList = {
@@ -634,6 +793,8 @@ type RootStackParamList = {
   AbsensiInput: { kelasId?: string; kelasName?: string }
   NilaiInput: undefined
   JadwalList: undefined
+  SantriList: undefined
+  PengumumanList: undefined
 }
 
 const Stack = createNativeStackNavigator<RootStackParamList>()
@@ -688,6 +849,8 @@ export default function App() {
             <Stack.Screen name="AbsensiInput" component={AbsensiInputScreen} />
             <Stack.Screen name="NilaiInput" component={NilaiInputScreen} />
             <Stack.Screen name="JadwalList" component={JadwalListScreen} />
+            <Stack.Screen name="SantriList" component={SantriListScreen} />
+            <Stack.Screen name="PengumumanList" component={PengumumanListScreen} />
           </>
         ) : (
           <Stack.Screen name="Login">

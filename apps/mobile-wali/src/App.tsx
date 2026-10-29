@@ -22,7 +22,7 @@ import { Ionicons } from "@expo/vector-icons"
 import {
   MobileApiClient, normalizeWhatsApp, formatPhoneDisplay,
   saveWaliSession, loadWaliSession, clearWaliSession,
-  formatRupiah, formatDate, STATUS_STYLES,
+  formatRupiah, formatDate, STATUS_STYLES, DAYS,
 } from "../../../packages/mobile-shared/src"
 
 // ============================================================================
@@ -393,9 +393,11 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
 
   const tabs = [
     { id: "profile", label: "Profil", icon: "person" },
+    { id: "jadwal", label: "Jadwal", icon: "calendar" },
     { id: "absensi", label: "Absensi", icon: "checkmark-done" },
     { id: "nilai", label: "Nilai", icon: "school" },
     { id: "tagihan", label: "Tagihan", icon: "wallet" },
+    { id: "rapor", label: "Rapor", icon: "document-text" },
   ]
 
   return (
@@ -446,7 +448,7 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
       )}
 
       {/* Tabs */}
-      <View style={styles.tabBar}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabBar}>
         {tabs.map((tab) => (
           <TouchableOpacity
             key={tab.id}
@@ -457,7 +459,7 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
             <Text style={[styles.tabText, activeTab === tab.id && styles.tabTextActive]}>{tab.label}</Text>
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
 
       {/* Tab Content */}
       {loading ? (
@@ -581,6 +583,95 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
                     </View>
                   </View>
                 ))
+              )}
+            </View>
+          )}
+
+          {activeTab === "jadwal" && detail && (
+            <View style={styles.contentCard}>
+              <Text style={styles.contentTitle}>Jadwal Pelajaran</Text>
+              {detail.jadwal?.length === 0 ? (
+                <Text style={styles.emptyTextSmall}>Belum ada jadwal</Text>
+              ) : (
+                detail.jadwal?.map((j: any, i: number) => (
+                  <View key={i} style={styles.listRow}>
+                    <View style={{ width: 50 }}>
+                      <Text style={[styles.listRowText, { fontWeight: "bold", color: Colors.primary }]}>
+                        {DAYS.find(d => d.value === j.dayOfWeek)?.short || "?"}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.nilaiMapel, { fontSize: 13 }]}>{j.mapel?.name}</Text>
+                      <Text style={styles.nilaiDate}>{j.startTime} - {j.endTime}</Text>
+                    </View>
+                    <View style={[styles.statusBadge, { backgroundColor: Colors.primaryLight }]}>
+                      <Text style={[styles.statusBadgeText, { color: Colors.primaryDark }]}>{j.guru?.name?.split(" ").slice(0, 2).join(" ") || "-"}</Text>
+                    </View>
+                  </View>
+                ))
+              )}
+            </View>
+          )}
+
+          {activeTab === "rapor" && detail && (
+            <View style={styles.contentCard}>
+              <Text style={styles.contentTitle}>Rapor Semester</Text>
+              {detail.rapor ? (
+                <View>
+                  <View style={styles.tagihanSummary}>
+                    <View style={styles.tagihanSummaryItem}>
+                      <Text style={styles.tagihanSummaryLabel}>Hadir</Text>
+                      <Text style={[styles.tagihanSummaryValue, { color: Colors.success }]}>{detail.rapor.absensiHadir}</Text>
+                    </View>
+                    <View style={styles.tagihanSummaryItem}>
+                      <Text style={styles.tagihanSummaryLabel}>Sakit</Text>
+                      <Text style={[styles.tagihanSummaryValue, { color: Colors.warning }]}>{detail.rapor.absensiSakit}</Text>
+                    </View>
+                    <View style={styles.tagihanSummaryItem}>
+                      <Text style={styles.tagihanSummaryLabel}>Izin</Text>
+                      <Text style={[styles.tagihanSummaryValue, { color: "#3b82f6" }]}>{detail.rapor.absensiIzin}</Text>
+                    </View>
+                    <View style={styles.tagihanSummaryItem}>
+                      <Text style={styles.tagihanSummaryLabel}>Alfa</Text>
+                      <Text style={[styles.tagihanSummaryValue, { color: Colors.danger }]}>{detail.rapor.absensiAlfa}</Text>
+                    </View>
+                  </View>
+
+                  {/* Nilai rekap per mapel */}
+                  <Text style={[styles.contentTitle, { marginTop: 16 }]}>Rekap Nilai per Mapel</Text>
+                  {detail.nilai?.length === 0 ? (
+                    <Text style={styles.emptyTextSmall}>Belum ada nilai</Text>
+                  ) : (
+                    (() => {
+                      const byMapel: Record<string, number[]> = {}
+                      detail.nilai?.forEach((n: any) => {
+                        const key = n.mapel?.name || "Unknown"
+                        if (!byMapel[key]) byMapel[key] = []
+                        byMapel[key].push(n.score)
+                      })
+                      return Object.entries(byMapel).map(([mapel, scores], i) => {
+                        const avg = scores.reduce((a, b) => a + b, 0) / scores.length
+                        return (
+                          <View key={i} style={styles.listRow}>
+                            <Text style={[styles.listRowText, { flex: 1 }]}>{mapel}</Text>
+                            <Text style={[styles.nilaiScore, { color: avg >= 70 ? Colors.success : Colors.danger, minWidth: 50 }]}>
+                              {avg.toFixed(1)}
+                            </Text>
+                          </View>
+                        )
+                      })
+                    })()
+                  )}
+
+                  {detail.rapor.notes && (
+                    <View style={{ marginTop: 16, padding: 12, backgroundColor: Colors.primaryLight, borderRadius: 8 }}>
+                      <Text style={{ fontSize: 12, fontWeight: "600", color: Colors.primaryDark }}>Catatan Wali Kelas:</Text>
+                      <Text style={{ fontSize: 13, color: Colors.text, marginTop: 4 }}>{detail.rapor.notes}</Text>
+                    </View>
+                  )}
+                </View>
+              ) : (
+                <Text style={styles.emptyTextSmall}>Belum ada rapor untuk semester ini</Text>
               )}
             </View>
           )}

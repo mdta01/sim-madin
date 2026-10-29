@@ -107,7 +107,7 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
 }
 
 // Dashboard
-function DashboardScreen({ onLogout }: { onLogout: () => void }) {
+function DashboardScreen({ onLogout, navigation }: { onLogout: () => void; navigation: any }) {
   const [stats, setStats] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
@@ -196,10 +196,226 @@ function DashboardScreen({ onLogout }: { onLogout: () => void }) {
               ))}
             </>
           )}
+
+          {/* Quick Menu */}
+          <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Monitoring</Text>
+          <View style={styles.statsGrid}>
+            <TouchableOpacity style={styles.statCard} onPress={() => navigation.navigate("MonitorSantri")}>
+              <View style={[styles.statIcon, { backgroundColor: Colors.successLight }]}>
+                <Ionicons name="people" size={24} color={Colors.success} />
+              </View>
+              <Text style={styles.menuTitle}>Data Santri</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.statCard} onPress={() => navigation.navigate("MonitorGuru")}>
+              <View style={[styles.statIcon, { backgroundColor: Colors.primaryLight }]}>
+                <Ionicons name="school" size={24} color={Colors.primary} />
+              </View>
+              <Text style={styles.menuTitle}>Data Guru</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.statCard} onPress={() => navigation.navigate("MonitorAbsensi")}>
+              <View style={[styles.statIcon, { backgroundColor: "#dbeafe" }]}>
+                <Ionicons name="checkmark-done" size={24} color="#3b82f6" />
+              </View>
+              <Text style={styles.menuTitle}>Rekap Absensi</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.statCard} onPress={() => navigation.navigate("MonitorKeuangan")}>
+              <View style={[styles.statIcon, { backgroundColor: Colors.warningLight }]}>
+                <Ionicons name="wallet" size={24} color={Colors.warning} />
+              </View>
+              <Text style={styles.menuTitle}>Monitoring Keuangan</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.statCard} onPress={() => navigation.navigate("MonitorPengumuman")}>
+              <View style={[styles.statIcon, { backgroundColor: "#fef3c7" }]}>
+                <Ionicons name="megaphone" size={24} color={Colors.warning} />
+              </View>
+              <Text style={styles.menuTitle}>Pengumuman</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={{ height: 24 }} />
         </ScrollView>
       )}
     </SafeAreaView>
   )
+}
+
+// ============================================================================
+// MONITORING SCREENS
+// ============================================================================
+
+function MonitorListScreen({ navigation, title, endpoint, renderItem }: { navigation: any; title: string; endpoint: string; renderItem: (item: any) => React.ReactNode }) {
+  const [data, setData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true)
+      const res = await apiGet(endpoint)
+      setData(res.data || [])
+    } catch (e: any) { Alert.alert("Error", e.message) }
+    finally { setLoading(false) }
+  }, [endpoint])
+
+  useEffect(() => { load() }, [load])
+
+  return (
+    <SafeAreaView style={styles.screen}>
+      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4 }}>
+          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{title}</Text>
+        <View style={{ width: 24 }} />
+      </View>
+      {loading ? (
+        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+      ) : (
+        <FlatList
+          data={data}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => renderItem(item)}
+          ListEmptyComponent={() => <View style={styles.emptyCard}><Text style={styles.emptyText}>Tidak ada data</Text></View>}
+          contentContainerStyle={{ padding: 16 }}
+        />
+      )}
+    </SafeAreaView>
+  )
+}
+
+function MonitorSantriScreen({ navigation }: { navigation: any }) {
+  return <MonitorListScreen navigation={navigation} title="Data Santri" endpoint="/api/admin/santri" renderItem={(item: any) => (
+    <View style={styles.kelasCard}>
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primaryLight, justifyContent: "center", alignItems: "center", marginRight: 12 }}>
+          <Text style={{ fontSize: 18, fontWeight: "bold", color: Colors.primary }}>{item.name[0]}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.kelasName}>{item.name}</Text>
+          <Text style={styles.kelasWali}>NIS: {item.nis} • {item.kelas?.name || "-"}</Text>
+          <Text style={styles.kelasWali}>Wali: {item.wali?.name || "-"}</Text>
+        </View>
+        <View style={{ backgroundColor: item.status === "AKTIF" ? Colors.successLight : Colors.dangerLight, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
+          <Text style={{ fontSize: 10, color: item.status === "AKTIF" ? Colors.success : Colors.danger }}>{item.status}</Text>
+        </View>
+      </View>
+    </View>
+  )} />
+}
+
+function MonitorGuruScreen({ navigation }: { navigation: any }) {
+  return <MonitorListScreen navigation={navigation} title="Data Guru" endpoint="/api/admin/guru" renderItem={(item: any) => (
+    <View style={styles.kelasCard}>
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primaryLight, justifyContent: "center", alignItems: "center", marginRight: 12 }}>
+          <Text style={{ fontSize: 18, fontWeight: "bold", color: Colors.primary }}>{item.name[0]}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.kelasName}>{item.name}</Text>
+          <Text style={styles.kelasWali}>{item.specialization || "Guru"}</Text>
+          <Text style={styles.kelasWali}>{item.phone || "-"}</Text>
+        </View>
+        <View style={{ backgroundColor: item.status === "AKTIF" ? Colors.successLight : Colors.dangerLight, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
+          <Text style={{ fontSize: 10, color: item.status === "AKTIF" ? Colors.success : Colors.danger }}>{item.status}</Text>
+        </View>
+      </View>
+    </View>
+  )} />
+}
+
+function MonitorAbsensiScreen({ navigation }: { navigation: any }) {
+  return <MonitorListScreen navigation={navigation} title="Rekap Absensi" endpoint="/api/admin/absensi?limit=50" renderItem={(item: any) => (
+    <View style={styles.kelasCard}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.kelasName}>{item.santri?.name}</Text>
+          <Text style={styles.kelasWali}>{item.kelas?.name} • {formatDate(item.date)}</Text>
+        </View>
+        <View style={{ backgroundColor: item.status === "HADIR" ? Colors.successLight : item.status === "SAKIT" ? Colors.warningLight : item.status === "IZIN" ? "#dbeafe" : Colors.dangerLight, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 }}>
+          <Text style={{ fontSize: 12, fontWeight: "600", color: item.status === "HADIR" ? Colors.success : item.status === "SAKIT" ? Colors.warning : item.status === "IZIN" ? "#3b82f6" : Colors.danger }}>{item.status}</Text>
+        </View>
+      </View>
+    </View>
+  )} />
+}
+
+function MonitorKeuanganScreen({ navigation }: { navigation: any }) {
+  const [payments, setPayments] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await apiGet("/api/admin/pembayaran?limit=20")
+        setPayments(res.data || [])
+      } catch (e: any) { Alert.alert("Error", e.message) }
+      finally { setLoading(false) }
+    }
+    load()
+  }, [])
+
+  const totalIncome = payments.filter(p => p.status === "VERIFIED").reduce((s, p) => s + p.amount, 0)
+
+  return (
+    <SafeAreaView style={styles.screen}>
+      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4 }}>
+          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Monitoring Keuangan</Text>
+        <View style={{ width: 24 }} />
+      </View>
+      <View style={{ margin: 16, borderRadius: 12, padding: 20, backgroundColor: Colors.success, elevation: 2 }}>
+        <Text style={{ fontSize: 12, color: Colors.white, opacity: 0.9 }}>Total Pemasukan (20 trxs)</Text>
+        <Text style={{ fontSize: 24, fontWeight: "bold", color: Colors.white, marginTop: 4 }}>{formatRupiah(totalIncome)}</Text>
+      </View>
+      {loading ? (
+        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+      ) : (
+        <FlatList
+          data={payments}
+          keyExtractor={item => item.id}
+          renderItem={({ item }) => (
+            <View style={styles.kelasCard}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.kelasName}>{item.santri?.name || "-"}</Text>
+                  <Text style={styles.kelasWali}>{item.invoiceNo}</Text>
+                  <Text style={styles.kelasWali}>{formatDate(item.paymentDate, true)}</Text>
+                </View>
+                <View style={{ alignItems: "flex-end" }}>
+                  <Text style={{ fontSize: 16, fontWeight: "600", color: Colors.success }}>{formatRupiah(item.amount)}</Text>
+                  <View style={{ backgroundColor: item.status === "VERIFIED" ? Colors.successLight : Colors.warningLight, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, marginTop: 4 }}>
+                    <Text style={{ fontSize: 10, color: item.status === "VERIFIED" ? Colors.success : Colors.warning }}>{item.status}</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          )}
+          contentContainerStyle={{ padding: 16 }}
+        />
+      )}
+    </SafeAreaView>
+  )
+}
+
+function MonitorPengumumanScreen({ navigation }: { navigation: any }) {
+  return <MonitorListScreen navigation={navigation} title="Pengumuman" endpoint="/api/admin/pengumuman" renderItem={(item: any) => (
+    <View style={styles.kelasCard}>
+      <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
+        <View style={{ backgroundColor: item.priority === "URGENT" ? Colors.dangerLight : item.priority === "PENTING" ? Colors.warningLight : "#f1f5f9", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
+          <Text style={{ fontSize: 10, fontWeight: "600", color: item.priority === "URGENT" ? Colors.danger : item.priority === "PENTING" ? Colors.warning : Colors.textMuted }}>{item.priority}</Text>
+        </View>
+        <View style={{ backgroundColor: "#dbeafe", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
+          <Text style={{ fontSize: 10, color: "#3b82f6" }}>{item.audience}</Text>
+        </View>
+      </View>
+      <Text style={styles.kelasName}>{item.title}</Text>
+      <Text style={styles.kelasWali} numberOfLines={3}>{item.content}</Text>
+      <Text style={[styles.kelasWali, { fontSize: 11, marginTop: 4 }]}>{formatDate(item.publishedAt, true)}</Text>
+    </View>
+  )} />
 }
 
 const Stack = createNativeStackNavigator()
@@ -229,9 +445,16 @@ export default function App() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {isLoggedIn ? (
-          <Stack.Screen name="Dashboard">
-            {() => <DashboardScreen onLogout={async () => { await getSupabase().auth.signOut(); await SecureStore.deleteItemAsync("authToken"); authToken = null; setIsLoggedIn(false) }} />}
-          </Stack.Screen>
+          <>
+            <Stack.Screen name="Dashboard">
+              {({ navigation }) => <DashboardScreen navigation={navigation} onLogout={async () => { await getSupabase().auth.signOut(); await SecureStore.deleteItemAsync("authToken"); authToken = null; setIsLoggedIn(false) }} />}
+            </Stack.Screen>
+            <Stack.Screen name="MonitorSantri" component={MonitorSantriScreen} />
+            <Stack.Screen name="MonitorGuru" component={MonitorGuruScreen} />
+            <Stack.Screen name="MonitorAbsensi" component={MonitorAbsensiScreen} />
+            <Stack.Screen name="MonitorKeuangan" component={MonitorKeuanganScreen} />
+            <Stack.Screen name="MonitorPengumuman" component={MonitorPengumumanScreen} />
+          </>
         ) : (
           <Stack.Screen name="Login">{() => <LoginScreen onLogin={() => setIsLoggedIn(true)} />}</Stack.Screen>
         )}
@@ -272,4 +495,7 @@ const styles = StyleSheet.create({
   kelasCount: { fontSize: 14, color: Colors.primary, marginTop: 4 },
   kelasWali: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  menuTitle: { fontSize: 13, fontWeight: "500", color: Colors.text, textAlign: "center", marginTop: 4 },
+  emptyCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 24, alignItems: "center" },
+  emptyText: { fontSize: 14, color: Colors.textMuted },
 })
