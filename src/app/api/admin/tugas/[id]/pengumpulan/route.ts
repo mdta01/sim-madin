@@ -15,6 +15,13 @@ export async function GET(req: NextRequest, { params }: Params) {
   if (guard.error) return guard.error
   try {
     const { id } = await params
+
+    // V2 #11: support status filter & pagination
+    const { searchParams } = new URL(req.url)
+    const statusFilter = searchParams.get("status") // SUBMITTED | GRADED | LATE | NOT_SUBMITTED | RETURNED
+    const limit = Math.min(Number(searchParams.get("limit")) || 500, 500)
+    const offset = Math.max(Number(searchParams.get("offset")) || 0, 0)
+
     const tugas = await db.tugas.findUnique({
       where: { id, deletedAt: null },
       include: {
@@ -63,14 +70,30 @@ export async function GET(req: NextRequest, { params }: Params) {
       ...notSubmitted,
     ]
 
+    // V2 #11: apply status filter
+    let filtered = allSubmissions
+    if (statusFilter && statusFilter !== "all") {
+      filtered = filtered.filter((s) => s.status === statusFilter)
+    }
+
+    // V2 #11: pagination
+    const paginated = filtered.slice(offset, offset + limit)
+
     return NextResponse.json({
-      data: allSubmissions,
-      total: allSubmissions.length,
+      data: paginated,
+      total: filtered.length,
+      totalCount: allSubmissions.length,
       stats: {
         total: allSubmissions.length,
-        submitted: tugas.submissions.filter((s) => s.status !== "NOT_SUBMITTED").length,
-        graded: tugas.submissions.filter((s) => s.status === "GRADED").length,
+        submitted: allSubmissions.filter((s) => s.status === "SUBMITTED").length,
+        late: allSubmissions.filter((s) => s.status === "LATE").length,
+        graded: allSubmissions.filter((s) => s.status === "GRADED").length,
         notSubmitted: notSubmitted.length,
+      },
+      pagination: {
+        limit,
+        offset,
+        hasMore: offset + limit < filtered.length,
       },
     })
   } catch (error) {

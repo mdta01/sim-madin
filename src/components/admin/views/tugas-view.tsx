@@ -408,6 +408,8 @@ function PengumpulanDialog({ open, onOpenChange, tugas, onSuccess }: {
   const [bulkEntries, setBulkEntries] = useState<Record<string, { score: string; feedback: string }>>({})
   const [bulkSaving, setBulkSaving] = useState(false)
   const [bulkDefaultFeedback, setBulkDefaultFeedback] = useState("")
+  // V2 #11: status filter
+  const [statusFilter, setStatusFilter] = useState<string>("all")
   const { toast } = useToast()
 
   useEffect(() => {
@@ -417,13 +419,24 @@ function PengumpulanDialog({ open, onOpenChange, tugas, onSuccess }: {
       setBulkMode(false)
       setBulkEntries({})
       setBulkDefaultFeedback("")
+      setStatusFilter("all")
     }
   }, [open, tugas])
+
+  // V2 #11: reload when status filter changes
+  useEffect(() => {
+    if (open && tugas && statusFilter) {
+      loadSubmissions(tugas.id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter])
 
   const loadSubmissions = async (tugasId: string) => {
     setLoading(true)
     try {
-      const res = await apiGet(`/api/admin/tugas/${tugasId}/pengumpulan`)
+      const params: any = {}
+      if (statusFilter !== "all") params.status = statusFilter
+      const res = await apiGet(`/api/admin/tugas/${tugasId}/pengumpulan`, params)
       setSubmissions(res.data)
       setStats(res.stats)
       // Init bulk entries with existing scores
@@ -533,6 +546,28 @@ function PengumpulanDialog({ open, onOpenChange, tugas, onSuccess }: {
             <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Sudah Kumpul</p><p className="text-xl font-bold text-blue-600">{stats.submitted}</p></CardContent></Card>
             <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Sudah Dinilai</p><p className="text-xl font-bold text-green-600">{stats.graded}</p></CardContent></Card>
             <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Belum Kumpul</p><p className="text-xl font-bold text-orange-600">{stats.notSubmitted}</p></CardContent></Card>
+          </div>
+        )}
+
+        {/* V2 #11: status filter */}
+        {!loading && (
+          <div className="flex items-center gap-2 mb-3 text-xs">
+            <span className="text-muted-foreground">Filter:</span>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="h-7 w-[180px] text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua ({stats?.total || 0})</SelectItem>
+                <SelectItem value="SUBMITTED">Dikumpulkan ({stats?.submitted || 0})</SelectItem>
+                {stats?.late > 0 && <SelectItem value="LATE">Terlambat ({stats.late})</SelectItem>}
+                {stats?.graded > 0 && <SelectItem value="GRADED">Sudah Dinilai ({stats.graded})</SelectItem>}
+                {stats?.notSubmitted > 0 && <SelectItem value="NOT_SUBMITTED">Belum Kumpul ({stats.notSubmitted})</SelectItem>}
+              </SelectContent>
+            </Select>
+            {statusFilter !== "all" && (
+              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setStatusFilter("all")}>
+                Reset
+              </Button>
+            )}
           </div>
         )}
 

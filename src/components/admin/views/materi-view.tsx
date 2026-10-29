@@ -133,13 +133,30 @@ export function MateriView() {
                 <TableBody>
                   {data.map((m) => {
                     const Icon = TYPE_ICON[m.type] || FileText
+                    // V2 #13: show thumbnail preview for FOTO type
+                    const showThumbnail = m.type === "FOTO" && m.fileUrl
                     return (
                       <TableRow key={m.id}>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary shrink-0">
-                              <Icon className="h-4 w-4" />
-                            </div>
+                            {showThumbnail ? (
+                              <a href={m.fileUrl} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                                <img
+                                  src={m.fileUrl}
+                                  alt={m.title}
+                                  className="h-12 w-12 rounded-md object-cover border border-border hover:opacity-80 transition-opacity"
+                                  loading="lazy"
+                                  onError={(e) => {
+                                    // Fallback to icon if image fails to load
+                                    ;(e.target as HTMLImageElement).style.display = "none"
+                                  }}
+                                />
+                              </a>
+                            ) : (
+                              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary shrink-0">
+                                <Icon className="h-4 w-4" />
+                              </div>
+                            )}
                             <div className="min-w-0">
                               <p className="font-medium text-sm truncate">{m.title}</p>
                               {m.description && <p className="text-xs text-muted-foreground truncate max-w-[280px]">{m.description}</p>}
@@ -348,9 +365,27 @@ function MateriForm({ open, onOpenChange, editing, onSuccess, mapelList, kelasLi
                 )}
               </div>
               {form.fileUrl && (
-                <a href={form.fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1">
-                  <ExternalLink className="h-3 w-3" /> Lihat file
-                </a>
+                <div className="mt-2 flex items-start gap-3 p-2 border rounded-md bg-muted/30">
+                  {/* V2 #13: image preview for FOTO type */}
+                  {form.type === "FOTO" ? (
+                    <img
+                      src={form.fileUrl}
+                      alt="Preview"
+                      className="h-16 w-16 rounded-md object-cover border"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }}
+                    />
+                  ) : (
+                    <div className="flex h-16 w-16 items-center justify-center rounded-md bg-primary/10 text-primary">
+                      <FileText className="h-6 w-6" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <a href={form.fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                      <ExternalLink className="h-3 w-3" /> Lihat file
+                    </a>
+                    <p className="text-[10px] text-muted-foreground mt-1 truncate">{form.fileUrl}</p>
+                  </div>
+                </div>
               )}
             </div>
           )}

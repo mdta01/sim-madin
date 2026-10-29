@@ -124,12 +124,21 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
 function DashboardScreen({ onLogout, navigation }: { onLogout: () => void; navigation: any }) {
   const [jadwal, setJadwal] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  // V2: guru-specific stats
+  const [v2Stats, setV2Stats] = useState<{
+    pertemuanToday: number
+    pendingGrading: number
+    materiCount: number
+    tugasActive: number
+  } | null>(null)
 
   const loadJadwal = useCallback(async () => {
     try {
       setLoading(true)
       const res = await apiGet("/api/admin/jadwal")
       setJadwal(res.data || [])
+      // V2: fetch guru dashboard stats in parallel (best-effort, don't fail whole load)
+      apiGet("/api/admin/guru/stats").then((statsRes) => setV2Stats(statsRes.data)).catch(() => setV2Stats(null))
     } catch (e: any) { Alert.alert("Error", e.message) }
     finally { setLoading(false) }
   }, [])
@@ -160,6 +169,32 @@ function DashboardScreen({ onLogout, navigation }: { onLogout: () => void; navig
       </View>
 
       <ScrollView style={styles.content}>
+        {/* V2 — Guru Quick Stats */}
+        {v2Stats && (
+          <View style={styles.v2StatsRow}>
+            <View style={styles.v2StatCard}>
+              <Ionicons name="calendar" size={20} color={Colors.info} />
+              <Text style={styles.v2StatValue}>{v2Stats.pertemuanToday}</Text>
+              <Text style={styles.v2StatLabel}>Pertemuan Hari Ini</Text>
+            </View>
+            <View style={[styles.v2StatCard, v2Stats.pendingGrading > 0 && { borderColor: Colors.warning }]}>
+              <Ionicons name="alert-circle" size={20} color={Colors.warning} />
+              <Text style={styles.v2StatValue}>{v2Stats.pendingGrading}</Text>
+              <Text style={styles.v2StatLabel}>Perlu Dinilai</Text>
+            </View>
+            <View style={styles.v2StatCard}>
+              <Ionicons name="folder-open" size={20} color="#7c3aed" />
+              <Text style={styles.v2StatValue}>{v2Stats.materiCount}</Text>
+              <Text style={styles.v2StatLabel}>Materi Saya</Text>
+            </View>
+            <View style={styles.v2StatCard}>
+              <Ionicons name="create" size={20} color={Colors.success} />
+              <Text style={styles.v2StatValue}>{v2Stats.tugasActive}</Text>
+              <Text style={styles.v2StatLabel}>Tugas Aktif</Text>
+            </View>
+          </View>
+        )}
+
         {/* Menu Grid */}
         <View style={styles.menuGrid}>
           {menuItems.map((item) => (
@@ -888,6 +923,15 @@ const styles = StyleSheet.create({
   menuCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 20, width: "47%", alignItems: "center", elevation: 1 },
   menuIcon: { width: 48, height: 48, borderRadius: 12, justifyContent: "center", alignItems: "center", marginBottom: 8 },
   menuTitle: { fontSize: 14, fontWeight: "500", color: Colors.text, textAlign: "center" },
+  // V2 — Guru Quick Stats
+  v2StatsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 },
+  v2StatCard: {
+    backgroundColor: Colors.white, borderRadius: 12, padding: 12,
+    width: "48%", alignItems: "center", elevation: 1,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  v2StatValue: { fontSize: 24, fontWeight: "bold", color: Colors.text, marginTop: 4 },
+  v2StatLabel: { fontSize: 10, color: Colors.textMuted, marginTop: 2, textAlign: "center" },
   emptyCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 24, alignItems: "center" },
   emptyText: { fontSize: 14, color: Colors.textMuted },
   jadwalCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 16, marginBottom: 8, flexDirection: "row", alignItems: "center", elevation: 1 },

@@ -51,6 +51,23 @@ interface SantriDetail {
   tagihan: any[]; tagihanSummary: any; payments: any[];
   jadwal: any[]; announcements: any[]; activePeriod: any
 }
+// V2: Rekap perkembangan dari /api/wali/perkembangan/[santriId]
+interface PerkembanganV2 {
+  santri: any
+  activePeriod: any
+  absensiSummary: { total: number; hadir: number; sakit: number; izin: number; alfa: number; persentaseHadir: number }
+  absensiTerbaru: any[]
+  nilaiPerMapel: Array<{
+    mapel: any
+    nilaiByType: Record<string, any[]>
+    rataRata: number | null
+    trend: "NAIK" | "TURUN" | "STABIL" | "BARU"
+  }>
+  tugasSummary: { total: number; submitted: number; graded: number; notSubmitted: number; overdueNotSubmitted: number }
+  tugasTerbaru: any[]
+  materiTerbaru: any[]
+  pertemuanTerbaru: any[]
+}
 
 // ============================================================================
 // COLORS
@@ -372,6 +389,7 @@ function DashboardScreen({
 // --- Santri Detail Screen ---
 function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: () => void }) {
   const [detail, setDetail] = useState<SantriDetail | null>(null)
+  const [perkembangan, setPerkembangan] = useState<PerkembanganV2 | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("profile")
@@ -380,8 +398,13 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
     try {
       setLoading(true)
       setError(null)
-      const res = await api.get(`/api/wali/santri/${santri.id}`)
-      setDetail(res.data)
+      // V2: fetch both detail (V1) and perkembangan (V2) in parallel
+      const [detailRes, perkRes] = await Promise.all([
+        api.get(`/api/wali/santri/${santri.id}`),
+        api.get(`/api/wali/perkembangan/${santri.id}`).catch(() => null), // best-effort
+      ])
+      setDetail(detailRes.data)
+      setPerkembangan(perkRes?.data || null)
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -396,6 +419,7 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
     { id: "jadwal", label: "Jadwal", icon: "calendar" },
     { id: "absensi", label: "Absensi", icon: "checkmark-done" },
     { id: "nilai", label: "Nilai", icon: "school" },
+    { id: "perkembangan", label: "Rekap", icon: "stats-chart" },
     { id: "tugas", label: "Tugas", icon: "create" },
     { id: "tagihan", label: "Tagihan", icon: "wallet" },
     { id: "rapor", label: "Rapor", icon: "document-text" },
@@ -538,6 +562,11 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
                 ))
               )}
             </View>
+          )}
+
+          {/* V2: Rekap Perkembangan — trend nilai, materi terbaru, pertemuan terbaru */}
+          {activeTab === "perkembangan" && (
+            <PerkembanganV2Section perkembangan={perkembangan} loading={loading} />
           )}
 
           {activeTab === "tugas" && (
@@ -937,6 +966,178 @@ function TugasSubmitModal({
         </View>
       </View>
     </Modal>
+  )
+}
+
+// ============================================================================
+// V2: Rekap Perkembangan Section — trend nilai, materi terbaru, pertemuan terbaru
+// ============================================================================
+function PerkembanganV2Section({ perkembangan, loading }: { perkembangan: PerkembanganV2 | null, loading: boolean }) {
+  if (loading) {
+    return (
+      <View style={styles.contentCard}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    )
+  }
+
+  if (!perkembangan) {
+    return (
+      <View style={styles.contentCard}>
+        <Text style={styles.emptyTextSmall}>Rekap perkembangan belum tersedia</Text>
+      </View>
+    )
+  }
+
+  const trendIcons: Record<string, { icon: string; color: string; label: string }> = {
+    NAIK: { icon: "trending-up", color: Colors.success, label: "Naik" },
+    TURUN: { icon: "trending-down", color: Colors.danger, label: "Turun" },
+    STABIL: { icon: "remove", color: Colors.textMuted, label: "Stabil" },
+    BARU: { icon: "sparkles", color: Colors.primary, label: "Baru" },
+  }
+
+  return (
+    <ScrollView>
+      {/* Persentase Kehadiran 90 hari */}
+      <View style={styles.contentCard}>
+        <Text style={styles.contentTitle}>Kehadiran 90 Hari Terakhir</Text>
+        <View style={[styles.tagihanSummary, { marginBottom: 12 }]}>
+          <View style={styles.tagihanSummaryItem}>
+            <Text style={styles.tagihanSummaryLabel}>Hadir</Text>
+            <Text style={[styles.tagihanSummaryValue, { color: Colors.success, fontSize: 18 }]}>
+              {perkembangan.absensiSummary.persentaseHadir}%
+            </Text>
+          </View>
+          <View style={styles.tagihanSummaryItem}>
+            <Text style={styles.tagihanSummaryLabel}>Hadir</Text>
+            <Text style={[styles.tagihanSummaryValue, { color: Colors.success }]}>{perkembangan.absensiSummary.hadir}</Text>
+          </View>
+          <View style={styles.tagihanSummaryItem}>
+            <Text style={styles.tagihanSummaryLabel}>Sakit/Izin</Text>
+            <Text style={[styles.tagihanSummaryValue, { color: Colors.warning }]}>
+              {perkembangan.absensiSummary.sakit + perkembangan.absensiSummary.izin}
+            </Text>
+          </View>
+          <View style={styles.tagihanSummaryItem}>
+            <Text style={styles.tagihanSummaryLabel}>Alfa</Text>
+            <Text style={[styles.tagihanSummaryValue, { color: Colors.danger }]}>{perkembangan.absensiSummary.alfa}</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Trend Nilai per Mapel */}
+      <View style={styles.contentCard}>
+        <Text style={styles.contentTitle}>Rekap Nilai per Mapel</Text>
+        {perkembangan.nilaiPerMapel.length === 0 ? (
+          <Text style={styles.emptyTextSmall}>Belum ada nilai</Text>
+        ) : (
+          perkembangan.nilaiPerMapel.map((npm, i) => {
+            const trend = trendIcons[npm.trend] || trendIcons.BARU
+            const kkm = npm.mapel?.kkm || 70
+            const isAboveKKM = npm.rataRata !== null && npm.rataRata >= kkm
+            return (
+              <View key={i} style={styles.listRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.tagihanName}>{npm.mapel?.name}</Text>
+                  <Text style={styles.tagihanDesc}>
+                    {Object.entries(npm.nilaiByType).map(([type, arr]) => `${type}: ${arr.length}`).join(" • ")}
+                  </Text>
+                </View>
+                <View style={{ alignItems: "flex-end" }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                    <Ionicons name={trend.icon as any} size={14} color={trend.color} />
+                    <Text style={{ fontSize: 11, color: trend.color }}>{trend.label}</Text>
+                  </View>
+                  <Text style={[styles.nilaiScore, { color: isAboveKKM ? Colors.success : Colors.danger, fontSize: 18 }]}>
+                    {npm.rataRata ?? "-"}
+                  </Text>
+                  <Text style={styles.tagihanDesc}>KKM: {kkm}</Text>
+                </View>
+              </View>
+            )
+          })
+        )}
+      </View>
+
+      {/* Materi Terbaru */}
+      {perkembangan.materiTerbaru.length > 0 && (
+        <View style={styles.contentCard}>
+          <Text style={styles.contentTitle}>Materi Pembelajaran Terbaru</Text>
+          {perkembangan.materiTerbaru.map((m, i) => (
+            <View key={i} style={styles.listRow}>
+              <View style={[styles.statusBadge, { backgroundColor: Colors.primaryLight }]}>
+                <Text style={[styles.statusBadgeText, { color: Colors.primaryDark, fontSize: 9 }]}>
+                  {m.type}
+                </Text>
+              </View>
+              <View style={{ flex: 1, marginLeft: 8 }}>
+                <Text style={styles.tagihanName}>{m.title}</Text>
+                <Text style={styles.tagihanDesc}>{m.mapel} • {formatDate(m.publishedAt)}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Pertemuan Terbaru */}
+      {perkembangan.pertemuanTerbaru.length > 0 && (
+        <View style={styles.contentCard}>
+          <Text style={styles.contentTitle}>Pertemuan Terbaru</Text>
+          {perkembangan.pertemuanTerbaru.map((p, i) => {
+            const statusColors: Record<string, string> = {
+              HADIR: Colors.success,
+              SAKIT: Colors.warning,
+              IZIN: "#3b82f6",
+              ALFA: Colors.danger,
+              BELUM: Colors.textMuted,
+            }
+            const statusColor = statusColors[p.santriAbsensi] || Colors.textMuted
+            return (
+              <View key={i} style={styles.listRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.tagihanName}>
+                    #{p.pertemuanKe} {p.mapel}
+                  </Text>
+                  <Text style={styles.tagihanDesc}>
+                    {formatDate(p.date)}{p.topic ? ` • ${p.topic}` : ""}
+                  </Text>
+                </View>
+                <View style={[styles.statusBadge, { backgroundColor: statusColor + "20" }]}>
+                  <Text style={[styles.statusBadgeText, { color: statusColor, fontSize: 10 }]}>
+                    {STATUS_STYLES[p.santriAbsensi]?.label || (p.santriAbsensi === "BELUM" ? "Belum Absen" : p.santriAbsensi)}
+                  </Text>
+                </View>
+              </View>
+            )
+          })}
+        </View>
+      )}
+
+      {/* Status Tugas */}
+      {perkembangan.tugasSummary && (
+        <View style={styles.contentCard}>
+          <Text style={styles.contentTitle}>Status Tugas</Text>
+          <View style={styles.tagihanSummary}>
+            <View style={styles.tagihanSummaryItem}>
+              <Text style={styles.tagihanSummaryLabel}>Dikumpul</Text>
+              <Text style={[styles.tagihanSummaryValue, { color: Colors.primary }]}>{perkembangan.tugasSummary.submitted}</Text>
+            </View>
+            <View style={styles.tagihanSummaryItem}>
+              <Text style={styles.tagihanSummaryLabel}>Dinilai</Text>
+              <Text style={[styles.tagihanSummaryValue, { color: Colors.success }]}>{perkembangan.tugasSummary.graded}</Text>
+            </View>
+            <View style={styles.tagihanSummaryItem}>
+              <Text style={styles.tagihanSummaryLabel}>Belum</Text>
+              <Text style={[styles.tagihanSummaryValue, { color: Colors.warning }]}>{perkembangan.tugasSummary.notSubmitted}</Text>
+            </View>
+            <View style={styles.tagihanSummaryItem}>
+              <Text style={styles.tagihanSummaryLabel}>Lewat</Text>
+              <Text style={[styles.tagihanSummaryValue, { color: Colors.danger }]}>{perkembangan.tugasSummary.overdueNotSubmitted}</Text>
+            </View>
+          </View>
+        </View>
+      )}
+    </ScrollView>
   )
 }
 

@@ -190,15 +190,38 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ sant
       ).length,
     }
 
-    // Annotate pertemuan with this santri's absensi on that date
-    const pertemuanWithAbsensi = await Promise.all(
-      pertemuanList.map(async (p) => {
-        const dStart = new Date(p.date.getFullYear(), p.date.getMonth(), p.date.getDate())
-        const dEnd = new Date(p.date.getFullYear(), p.date.getMonth(), p.date.getDate(), 23, 59, 59)
-        const absensi = await db.absensi.findFirst({
-          where: { santriId, date: { gte: dStart, lte: dEnd }, tahunAjaranId: ta.id },
-          select: { status: true, note: true },
-        })
+    // V2 #15: OPTIMIZED — fetch all pertemuan absensi in 1 batch query instead of N+1
+    // Build date range covering all pertemuan dates (max 5 pertemuan terbaru, so date range is small)
+    let pertemuanWithAbsensi: any[] = []
+    if (pertemuanList.length > 0) {
+      // Get min/max date from pertemuan list
+      const pertemuanDates = pertemuanList.map((p) => new Date(p.date))
+      const minDate = new Date(Math.min(...pertemuanDates.map((d) => d.getTime())))
+      const maxDate = new Date(Math.max(...pertemuanDates.map((d) => d.getTime())))
+      minDate.setHours(0, 0, 0, 0)
+      maxDate.setHours(23, 59, 59, 999)
+
+      // Single query: get all absensi records for this santri in the date range
+      const absensiRecords = await db.absensi.findMany({
+        where: {
+          santriId,
+          tahunAjaranId: ta.id,
+          date: { gte: minDate, lte: maxDate },
+        },
+        select: { date: true, status: true, note: true },
+      })
+
+      // Build a lookup map: date (YYYY-MM-DD) → absensi
+      const absensiByDate = new Map<string, any>()
+      for (const a of absensiRecords) {
+        const dateKey = new Date(a.date).toISOString().slice(0, 10)
+        absensiByDate.set(dateKey, a)
+      }
+
+      // Map pertemuan to absensi using the lookup (no DB calls in loop)
+      pertemuanWithAbsensi = pertemuanList.map((p) => {
+        const dateKey = new Date(p.date).toISOString().slice(0, 10)
+        const absensi = absensiByDate.get(dateKey)
         return {
           id: p.id,
           pertemuanKe: p.pertemuanKe,
@@ -208,8 +231,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ sant
           isCompleted: p.isCompleted,
           santriAbsensi: absensi?.status || "BELUM",
         }
-      }),
-    )
+      })
+    }
 
     return NextResponse.json({
       data: {
