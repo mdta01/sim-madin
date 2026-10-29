@@ -33,6 +33,9 @@ export async function GET(req: NextRequest) {
     if (mapelId) where.mapelId = mapelId
     if (type) where.type = type
 
+    const kompetensiId = searchParams.get("kompetensiId")
+    if (kompetensiId) where.kompetensiId = kompetensiId
+
     const nilai = await db.nilai.findMany({
       where,
       include: {
@@ -40,6 +43,7 @@ export async function GET(req: NextRequest) {
         kelas: { select: { id: true, name: true, code: true } },
         mapel: { select: { id: true, name: true, code: true, kkm: true } },
         guru: { select: { name: true } },
+        kompetensi: { select: { id: true, code: true, name: true, category: true } },
       },
       orderBy: [{ assessmentDate: "desc" }, { santri: { name: "asc" } }],
       take: 500,
@@ -75,6 +79,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Tahun ajaran/semester aktif tidak ditemukan" }, { status: 400 })
     }
 
+    // V2 #6: Validate kompetensiId if provided (must belong to same mapel)
+    let kompetensiId: string | null = null
+    if (body.kompetensiId) {
+      const komp = await db.kompetensi.findFirst({
+        where: { id: body.kompetensiId, mapelId: body.mapelId, isActive: true },
+      })
+      if (!komp) {
+        return NextResponse.json({
+          error: "Kompetensi tidak ditemukan atau bukan dari mapel ini",
+        }, { status: 400 })
+      }
+      kompetensiId = komp.id
+    }
+
     const existing = await db.nilai.findFirst({
       where: { santriId: body.santriId, mapelId: body.mapelId, type: body.type, semesterId, tahunAjaranId },
     })
@@ -86,9 +104,10 @@ export async function POST(req: NextRequest) {
           score: Number(body.score),
           notes: body.notes || null,
           guruId: body.guruId || existing.guruId,
+          kompetensiId, // V2 #6: update kompetensi link
           assessmentDate: body.assessmentDate ? new Date(body.assessmentDate) : new Date(),
         },
-        include: { santri: true, mapel: true },
+        include: { santri: true, mapel: true, kompetensi: { select: { code: true, name: true } } },
       })
       await logAudit(session, "UPDATE", "NILAI", nilai.id, {
         santri: nilai.santri.name, mapel: nilai.mapel.name, type: body.type, score: body.score,
@@ -102,12 +121,13 @@ export async function POST(req: NextRequest) {
           kelasId: body.kelasId,
           mapelId: body.mapelId,
           guruId: body.guruId || null,
+          kompetensiId, // V2 #6: link to kompetensi
           type: body.type,
           score: Number(body.score),
           notes: body.notes || null,
           assessmentDate: body.assessmentDate ? new Date(body.assessmentDate) : new Date(),
         },
-        include: { santri: true, mapel: true },
+        include: { santri: true, mapel: true, kompetensi: { select: { code: true, name: true } } },
       })
       await logAudit(session, "CREATE", "NILAI", nilai.id, {
         santri: nilai.santri.name, mapel: nilai.mapel.name, type: body.type, score: body.score,

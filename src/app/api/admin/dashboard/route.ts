@@ -37,7 +37,18 @@ export async function GET(req: NextRequest) {
     const c = counts[0] as any
 
     // Batch 2: Recent items (fast, small result sets)
-    const [recentPayments, recentAnnouncements, todayAbsensi, kelasCounts] = await Promise.all([
+    // V2: also fetch V2 stats — materi, tugas, pertemuan, pending grading
+    const now = new Date()
+    const weekStart = new Date(now.getTime() - (((now.getDay() + 6) % 7) * 86400000)) // Monday this week
+    const weekStartMidnight = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate())
+    const weekEnd = new Date(weekStartMidnight.getTime() + 7 * 86400000 - 1)
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+
+    const [
+      recentPayments, recentAnnouncements, todayAbsensi, kelasCounts,
+      v2MateriMonth, v2TugasActive, v2TugasOverdue, v2PertemuanWeek, v2PertemuanLastWeek,
+      v2PendingGrading, v2SubmissionsWeek,
+    ] = await Promise.all([
       db.payment.findMany({
         take: 5,
         orderBy: { paymentDate: "desc" },
@@ -56,6 +67,34 @@ export async function GET(req: NextRequest) {
         where: { deletedAt: null, isActive: true },
         select: { code: true, _count: { select: { santri: { where: { status: "AKTIF" } } } }, waliKelas: { select: { name: true } } },
         orderBy: { sortOrder: "asc" },
+      }),
+      // V2: materi published this month
+      db.materi.count({
+        where: { deletedAt: null, isPublished: true, publishedAt: { gte: monthStart } },
+      }),
+      // V2: tugas active (due date >= now, published)
+      db.tugas.count({
+        where: { deletedAt: null, isPublished: true, dueDate: { gte: now } },
+      }),
+      // V2: tugas overdue (due date < now, published)
+      db.tugas.count({
+        where: { deletedAt: null, isPublished: true, dueDate: { lt: now } },
+      }),
+      // V2: pertemuan this week
+      db.pertemuan.count({
+        where: { date: { gte: weekStartMidnight, lte: weekEnd } },
+      }),
+      // V2: pertemuan last week (for comparison)
+      db.pertemuan.count({
+        where: { date: { gte: new Date(weekStartMidnight.getTime() - 7 * 86400000), lt: weekStartMidnight } },
+      }),
+      // V2: pending grading submissions (status SUBMITTED or LATE, not GRADED)
+      db.pengumpulanTugas.count({
+        where: { status: { in: ["SUBMITTED", "LATE"] } },
+      }),
+      // V2: total submissions this week
+      db.pengumpulanTugas.count({
+        where: { submittedAt: { gte: weekStartMidnight } },
       }),
     ])
 
@@ -106,6 +145,17 @@ export async function GET(req: NextRequest) {
       recentAnnouncements: recentAnnouncements.map(a => ({
         id: a.id, title: a.title, priority: a.priority, publishedAt: a.publishedAt, audience: a.audience,
       })),
+      // V2 — Akademik & Pembelajaran stats
+      v2Stats: {
+        materiPublishedThisMonth: v2MateriMonth,
+        tugasActive: v2TugasActive,
+        tugasOverdue: v2TugasOverdue,
+        pertemuanThisWeek: v2PertemuanWeek,
+        pertemuanLastWeek: v2PertemuanLastWeek,
+        pertemuanTrend: v2PertemuanWeek - v2PertemuanLastWeek, // positive = more than last week
+        pendingGrading: v2PendingGrading,
+        submissionsThisWeek: v2SubmissionsWeek,
+      },
     }
 
     cachedData = { data: responseData, timestamp: Date.now() }

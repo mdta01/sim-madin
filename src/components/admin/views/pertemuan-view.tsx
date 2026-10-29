@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { formatDate, STATUS_STYLES } from "@/lib/constants"
-import { CalendarCheck, Plus, Pencil, Trash2, Eye, Save, ClipboardCheck, Award, CheckCircle2, Sparkles, Loader2 } from "lucide-react"
+import { CalendarCheck, Plus, Pencil, Trash2, Eye, Save, ClipboardCheck, Award, CheckCircle2, Sparkles, Loader2, FolderOpen, ExternalLink } from "lucide-react"
 
 const ABSENSI_OPTIONS = [
   { value: "HADIR", label: "Hadir", color: "bg-green-100 text-green-800 border-green-300" },
@@ -461,9 +461,10 @@ function PertemuanDetailDialog({ open, onOpenChange, pertemuan, onSuccess }: {
 
         {loading ? <LoadingState /> : (
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid grid-cols-2 w-full">
+            <TabsList className="grid grid-cols-3 w-full">
               <TabsTrigger value="absensi"><ClipboardCheck className="h-4 w-4 mr-1" /> Absensi</TabsTrigger>
               <TabsTrigger value="nilai"><Award className="h-4 w-4 mr-1" /> Nilai Harian</TabsTrigger>
+              <TabsTrigger value="materi"><FolderOpen className="h-4 w-4 mr-1" /> Materi</TabsTrigger>
             </TabsList>
 
             <TabsContent value="absensi" className="space-y-2 mt-3">
@@ -560,6 +561,68 @@ function PertemuanDetailDialog({ open, onOpenChange, pertemuan, onSuccess }: {
                   </Button>
                 </div>
               </div>
+            </TabsContent>
+
+            {/* V2 #8: Tab Materi — list materi yang relevan untuk pertemuan ini */}
+            <TabsContent value="materi" className="space-y-2 mt-3">
+              <div className="flex justify-between items-center mb-2">
+                <p className="text-sm text-muted-foreground">
+                  Materi yang dipublikasikan untuk {pertemuan.kelas?.name} • {pertemuan.mapel?.name} • Pertemuan #{pertemuan.pertemuanKe}
+                </p>
+              </div>
+              {detail?.relatedMateri && detail.relatedMateri.length > 0 ? (
+                detail.relatedMateri.map((m: any) => {
+                  const typeLabel = { DOKUMEN: "Dokumen", FOTO: "Foto", VIDEO: "Video", LINK: "Link", AUDIO: "Audio" }[m.type] || m.type
+                  return (
+                    <Card key={m.id}>
+                      <CardContent className="p-3 flex items-start gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary shrink-0">
+                          <FolderOpen className="h-5 w-5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <p className="font-medium text-sm">{m.title}</p>
+                            <Badge variant="outline" className="text-[10px]">{typeLabel}</Badge>
+                            {m.pertemuan === pertemuan.pertemuanKe && (
+                              <Badge variant="secondary" className="text-[10px]">Pertemuan ini</Badge>
+                            )}
+                            {m.pertemuan === null && (
+                              <Badge variant="outline" className="text-[10px]">Umum</Badge>
+                            )}
+                          </div>
+                          {m.description && (
+                            <p className="text-xs text-muted-foreground line-clamp-2 mb-1">{m.description}</p>
+                          )}
+                          <p className="text-[10px] text-muted-foreground">
+                            {m.guru?.name ? `Oleh: ${m.guru.name} • ` : ""}
+                            Diterbitkan: {formatDate(m.publishedAt)}
+                          </p>
+                        </div>
+                        {(m.fileUrl || m.externalUrl) && (
+                          <a
+                            href={m.externalUrl || m.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs text-primary hover:underline shrink-0 mt-1"
+                          >
+                            <ExternalLink className="h-3 w-3" /> Buka
+                          </a>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )
+                })
+              ) : (
+                <Card>
+                  <CardContent className="p-6">
+                    <EmptyState
+                      icon={<FolderOpen className="h-5 w-5" />}
+                      title="Belum ada materi untuk pertemuan ini"
+                      description={`Publikasikan materi di menu "Materi Pembelajaran" dengan men-set pertemuan ke-${pertemuan.pertemuanKe} untuk mapel ini.`}
+                    />
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
           </Tabs>
         )}

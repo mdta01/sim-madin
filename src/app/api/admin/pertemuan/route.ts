@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 import { validateGuruAccess } from "@/lib/auth/guru-access"
+import { markOverduePertemuanCompletedSafe } from "@/lib/pertemuan/auto-complete"
 
 /**
  * GET /api/admin/pertemuan
@@ -11,6 +12,10 @@ export async function GET(req: NextRequest) {
   const guard = await requireApiPermission("pertemuan:read", req)
   if (guard.error) return guard.error
   try {
+    // V2 #5: Auto-mark overdue pertemuan as completed (compute-on-read).
+    // Runs silently in background — failures don't break the list request.
+    await markOverduePertemuanCompletedSafe()
+
     const { searchParams } = new URL(req.url)
     const kelasId = searchParams.get("kelasId")
     const mapelId = searchParams.get("mapelId")

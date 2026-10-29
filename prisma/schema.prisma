@@ -444,6 +444,7 @@ model Nilai {
   kelasId       String
   mapelId       String
   guruId        String?
+  kompetensiId  String? // V2 #6: link to specific Kompetensi (capaian pembelajaran)
   type          String   // "HARIAN" | "TUGAS" | "UTS" | "UAS" | "PRAKTIK"
   score         Float
   notes         String?
@@ -457,10 +458,12 @@ model Nilai {
   kelas         Kelas       @relation(fields: [kelasId], references: [id])
   mapel         MataPelajaran @relation(fields: [mapelId], references: [id])
   guru          Guru?       @relation(fields: [guruId], references: [id])
+  kompetensi    Kompetensi? @relation(fields: [kompetensiId], references: [id], onDelete: SetNull)
 
   @@unique([santriId, mapelId, type, semesterId, tahunAjaranId])
   @@index([kelasId, mapelId, type])
   @@index([santriId, semesterId])
+  @@index([kompetensiId])
 }
 
 // ============================================================================
@@ -755,6 +758,7 @@ model Kompetensi {
 
   mapel         MataPelajaran @relation(fields: [mapelId], references: [id])
   tahunAjaran   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
+  nilai         Nilai[]   // V2 #6: relasi balik ke Nilai
 
   @@index([mapelId])
   @@index([category])

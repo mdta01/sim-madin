@@ -403,11 +403,20 @@ function PengumpulanDialog({ open, onOpenChange, tugas, onSuccess }: {
   const [gradingId, setGradingId] = useState<string | null>(null)
   const [gradeForm, setGradeForm] = useState<any>({})
   const [savingGrade, setSavingGrade] = useState(false)
+  // V2 #7: bulk grading mode
+  const [bulkMode, setBulkMode] = useState(false)
+  const [bulkEntries, setBulkEntries] = useState<Record<string, { score: string; feedback: string }>>({})
+  const [bulkSaving, setBulkSaving] = useState(false)
+  const [bulkDefaultFeedback, setBulkDefaultFeedback] = useState("")
   const { toast } = useToast()
 
   useEffect(() => {
     if (open && tugas) {
       loadSubmissions(tugas.id)
+      // Reset bulk mode on dialog open
+      setBulkMode(false)
+      setBulkEntries({})
+      setBulkDefaultFeedback("")
     }
   }, [open, tugas])
 
@@ -417,6 +426,17 @@ function PengumpulanDialog({ open, onOpenChange, tugas, onSuccess }: {
       const res = await apiGet(`/api/admin/tugas/${tugasId}/pengumpulan`)
       setSubmissions(res.data)
       setStats(res.stats)
+      // Init bulk entries with existing scores
+      const init: Record<string, { score: string; feedback: string }> = {}
+      res.data.forEach((s: any) => {
+        if (s.status !== "NOT_SUBMITTED") {
+          init[s.id] = {
+            score: s.score !== null && s.score !== undefined ? String(s.score) : "",
+            feedback: s.feedback || "",
+          }
+        }
+      })
+      setBulkEntries(init)
     } catch (e: any) {
       toast({ title: "Gagal memuat", description: e.message, variant: "destructive" })
     } finally {
@@ -430,6 +450,54 @@ function PengumpulanDialog({ open, onOpenChange, tugas, onSuccess }: {
       score: s.score ?? "",
       feedback: s.feedback ?? "",
     })
+  }
+
+  // V2 #7: Apply default score to all (quick action for bulk mode)
+  const applyScoreToAll = (score: string) => {
+    const updated: Record<string, { score: string; feedback: string }> = {}
+    submissions.forEach((s) => {
+      if (s.status !== "NOT_SUBMITTED") {
+        updated[s.id] = {
+          score,
+          feedback: bulkEntries[s.id]?.feedback || "",
+        }
+      }
+    })
+    setBulkEntries(updated)
+  }
+
+  // V2 #7: Save bulk grades
+  const saveBulkGrades = async () => {
+    const entries = Object.entries(bulkEntries)
+      .filter(([, v]) => v.score !== "" && v.score !== null)
+      .map(([submissionId, v]) => ({
+        submissionId,
+        score: Number(v.score),
+        feedback: v.feedback || (bulkDefaultFeedback || undefined),
+      }))
+
+    if (entries.length === 0) {
+      toast({ title: "Info", description: "Tidak ada nilai untuk disimpan" })
+      return
+    }
+    setBulkSaving(true)
+    try {
+      const res = await apiPut("/api/admin/pengumpulan/bulk-grade", {
+        entries,
+        defaultFeedback: bulkDefaultFeedback || undefined,
+      })
+      toast({
+        title: "Berhasil",
+        description: `${res.count} nilai tersimpan${res.failed?.length ? `, ${res.failed.length} gagal` : ""}`,
+      })
+      setBulkMode(false)
+      if (tugas) loadSubmissions(tugas.id)
+      onSuccess()
+    } catch (e: any) {
+      toast({ title: "Gagal", description: e.message, variant: "destructive" })
+    } finally {
+      setBulkSaving(false)
+    }
   }
 
   const saveGrade = async (submissionId: string) => {
@@ -468,7 +536,89 @@ function PengumpulanDialog({ open, onOpenChange, tugas, onSuccess }: {
           </div>
         )}
 
+        {/* V2 #7: Bulk grading mode toggle */}
+        {!loading && submissions.filter((s) => s.status !== "NOT_SUBMITTED").length > 0 && (
+          <div className="flex items-center justify-between gap-2 mb-3 p-2 rounded-md bg-muted/30">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={bulkMode}
+                onChange={(e) => setBulkMode(e.target.checked)}
+                className="rounded"
+              />
+              <span className="font-medium">Mode Penilaian Massal</span>
+              <span className="text-xs text-muted-foreground">(input semua nilai sekaligus)</span>
+            </label>
+            {bulkMode && (
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-muted-foreground">Set semua:</span>
+                {[85, 75, 100].map((s) => (
+                  <Button key={s} size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => applyScoreToAll(String(s))}>
+                    {s}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* V2 #7: Bulk grading mode render */}
+        {bulkMode && !loading && (
+          <div className="border rounded-md p-3 mb-3 bg-amber-50 dark:bg-amber-950/20">
+            <div className="space-y-2 max-h-[400px] overflow-y-auto">
+              {submissions.filter((s) => s.status !== "NOT_SUBMITTED").map((s) => (
+                <div key={s.id} className="flex items-center gap-2 p-2 border-b last:border-b-0">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary shrink-0 text-xs font-semibold">
+                    {s.santri?.name?.[0] || "?"}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{s.santri?.name}</p>
+                    <p className="text-[10px] text-muted-foreground font-mono">{s.santri?.nis}</p>
+                  </div>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={tugas.maxScore}
+                    value={bulkEntries[s.id]?.score || ""}
+                    onChange={(e) => setBulkEntries({
+                      ...bulkEntries,
+                      [s.id]: { ...bulkEntries[s.id], score: e.target.value, feedback: bulkEntries[s.id]?.feedback || "" },
+                    })}
+                    placeholder="-"
+                    className="w-20 h-8"
+                  />
+                  <span className="text-xs text-muted-foreground shrink-0">/ {tugas.maxScore}</span>
+                  <Input
+                    value={bulkEntries[s.id]?.feedback || ""}
+                    onChange={(e) => setBulkEntries({
+                      ...bulkEntries,
+                      [s.id]: { ...bulkEntries[s.id], feedback: e.target.value, score: bulkEntries[s.id]?.score || "" },
+                    })}
+                    placeholder="Feedback (opsional)"
+                    className="flex-1 h-8 text-xs"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 pt-3 border-t space-y-2">
+              <Input
+                value={bulkDefaultFeedback}
+                onChange={(e) => setBulkDefaultFeedback(e.target.value)}
+                placeholder="Default feedback untuk semua (opsional) — diterapkan jika feedback per santri kosong"
+                className="h-8 text-xs"
+              />
+              <div className="flex justify-end gap-2">
+                <Button size="sm" variant="outline" onClick={() => setBulkMode(false)}>Batal</Button>
+                <Button size="sm" onClick={saveBulkGrades} disabled={bulkSaving}>
+                  {bulkSaving ? "Menyimpan..." : `Simpan ${Object.values(bulkEntries).filter(v => v.score).length} Nilai`}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {loading ? <LoadingState /> : (
+          !bulkMode && (
           <div className="space-y-2">
             {submissions.map((s) => {
               const statusInfo = PENGUMPULAN_STATUS[s.status] || { label: s.status, variant: "outline" as const }
@@ -543,6 +693,7 @@ function PengumpulanDialog({ open, onOpenChange, tugas, onSuccess }: {
               <EmptyState icon={<AlertCircle className="h-5 w-5" />} title="Belum ada pengumpulan" />
             )}
           </div>
+          )
         )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Tutup</Button>

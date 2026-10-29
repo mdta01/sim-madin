@@ -13,6 +13,7 @@ import { formatRupiah, formatDate } from "@/lib/constants"
 import {
   GraduationCap, UserCog, School, Users, BookOpen,
   TrendingUp, AlertTriangle, Wallet, ClipboardCheck, ArrowRight, Megaphone,
+  FolderOpen, ClipboardList, CalendarCheck, Award, Clock, ChevronUp, ChevronDown, Minus,
 } from "lucide-react"
 import { useAdminStore } from "@/stores/admin-store"
 
@@ -34,6 +35,16 @@ interface DashboardData {
   santriPerKelas: { name: string; count: number; waliKelas: string }[]
   recentPayments: any[]
   recentAnnouncements: any[]
+  v2Stats?: {
+    materiPublishedThisMonth: number
+    tugasActive: number
+    tugasOverdue: number
+    pertemuanThisWeek: number
+    pertemuanLastWeek: number
+    pertemuanTrend: number
+    pendingGrading: number
+    submissionsThisWeek: number
+  }
 }
 
 export function DashboardView() {
@@ -106,6 +117,109 @@ export function DashboardView() {
           </button>
         ))}
       </div>
+
+      {/* V2 — Akademik & Pembelajaran Widget */}
+      {data.v2Stats && (
+        <div className="mt-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+              Akademik & Pembelajaran (V2)
+            </h2>
+            <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => setView("materi")}>
+              Kelola <ArrowRight className="h-3 w-3 ml-1" />
+            </Button>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <button onClick={() => setView("materi")} className="text-left">
+              <Card className="hover:shadow-md transition-shadow h-full">
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <FolderOpen className="h-4 w-4 text-rose-600" />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Materi Bulan Ini</p>
+                  <p className="text-xl font-bold text-rose-600">{data.v2Stats.materiPublishedThisMonth}</p>
+                  <p className="text-[9px] text-muted-foreground">materi dipublikasi</p>
+                </CardContent>
+              </Card>
+            </button>
+            <button onClick={() => setView("tugas")} className="text-left">
+              <Card className="hover:shadow-md transition-shadow h-full border-blue-200 dark:border-blue-900">
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <ClipboardList className="h-4 w-4 text-blue-600" />
+                    {data.v2Stats.tugasOverdue > 0 && (
+                      <Badge variant="destructive" className="text-[9px] px-1 py-0">{data.v2Stats.tugasOverdue} lewat</Badge>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Tugas Aktif</p>
+                  <p className="text-xl font-bold text-blue-600">{data.v2Stats.tugasActive}</p>
+                  <p className="text-[9px] text-muted-foreground">belum lewat tenggat</p>
+                </CardContent>
+              </Card>
+            </button>
+            <button onClick={() => setView("tugas")} className="text-left">
+              <Card className={`hover:shadow-md transition-shadow h-full ${data.v2Stats.pendingGrading > 0 ? "border-amber-300 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/20" : ""}`}>
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <Award className="h-4 w-4 text-amber-600" />
+                    {data.v2Stats.pendingGrading > 0 && (
+                      <Badge variant="warning" className="text-[9px] px-1 py-0">perlu review</Badge>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Menunggu Nilai</p>
+                  <p className="text-xl font-bold text-amber-600">{data.v2Stats.pendingGrading}</p>
+                  <p className="text-[9px] text-muted-foreground">pengumpulan belum dinilai</p>
+                </CardContent>
+              </Card>
+            </button>
+            <button onClick={() => setView("pertemuan")} className="text-left">
+              <Card className="hover:shadow-md transition-shadow h-full">
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <CalendarCheck className="h-4 w-4 text-purple-600" />
+                    {data.v2Stats.pertemuanTrend !== 0 && (
+                      <span className={`flex items-center text-[10px] ${data.v2Stats.pertemuanTrend > 0 ? "text-emerald-600" : "text-red-600"}`}>
+                        {data.v2Stats.pertemuanTrend > 0 ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                        {Math.abs(data.v2Stats.pertemuanTrend)}
+                      </span>
+                    )}
+                    {data.v2Stats.pertemuanTrend === 0 && (
+                      <Minus className="h-3 w-3 text-muted-foreground" />
+                    )}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Pertemuan Minggu Ini</p>
+                  <p className="text-xl font-bold text-purple-600">{data.v2Stats.pertemuanThisWeek}</p>
+                  <p className="text-[9px] text-muted-foreground">vs {data.v2Stats.pertemuanLastWeek} minggu lalu</p>
+                </CardContent>
+              </Card>
+            </button>
+            <button onClick={() => setView("tugas")} className="text-left">
+              <Card className="hover:shadow-md transition-shadow h-full">
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <ClipboardCheck className="h-4 w-4 text-emerald-600" />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Pengumpulan Minggu Ini</p>
+                  <p className="text-xl font-bold text-emerald-600">{data.v2Stats.submissionsThisWeek}</p>
+                  <p className="text-[9px] text-muted-foreground">tugas dikumpulkan</p>
+                </CardContent>
+              </Card>
+            </button>
+            <button onClick={() => setView("kompetensi")} className="text-left">
+              <Card className="hover:shadow-md transition-shadow h-full">
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <Clock className="h-4 w-4 text-indigo-600" />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Quick Action</p>
+                  <p className="text-sm font-medium text-indigo-600 mt-1">Kelola Kompetensi</p>
+                  <p className="text-[9px] text-muted-foreground">capaian pembelajaran</p>
+                </CardContent>
+              </Card>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

@@ -111,6 +111,20 @@ export async function PUT(req: NextRequest, { params }: Params) {
         const score = Number(entry.score)
         if (Number.isNaN(score)) continue
 
+        // V2 #6: validate kompetensiId if provided
+        let kompetensiId: string | null = null
+        if (entry.kompetensiId) {
+          const komp = await tx.kompetensi.findFirst({
+            where: { id: entry.kompetensiId, mapelId: pertemuan.mapelId, isActive: true },
+          })
+          if (!komp) {
+            // Skip invalid kompetensi reference, log warning
+            console.warn(`[nilai pertemuan] invalid kompetensiId ${entry.kompetensiId} for mapel ${pertemuan.mapelId}, skipping kompetensi link`)
+          } else {
+            kompetensiId = komp.id
+          }
+        }
+
         // Upsert: uniqueness is santriId+mapelId+type+semesterId+tahunAjaranId, but we filter by date too
         const existing = await tx.nilai.findFirst({
           where: {
@@ -132,6 +146,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
               score,
               notes: entry.notes ?? existing.notes,
               guruId,
+              kompetensiId, // V2 #6
               assessmentDate,
             },
           })
@@ -145,6 +160,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
               kelasId: pertemuan.kelasId,
               mapelId: pertemuan.mapelId,
               guruId,
+              kompetensiId, // V2 #6
               type: "HARIAN",
               score,
               notes: entry.notes || null,

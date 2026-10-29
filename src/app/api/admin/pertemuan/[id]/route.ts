@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateGuruAccess } from "@/lib/auth/guru-access"
+import { markOverduePertemuanCompletedSafe } from "@/lib/pertemuan/auto-complete"
 
 interface Params {
   params: Promise<{ id: string }>
@@ -10,6 +12,9 @@ export async function GET(req: NextRequest, { params }: Params) {
   const guard = await requireApiPermission("pertemuan:read", req)
   if (guard.error) return guard.error
   try {
+    // V2 #5: Auto-mark overdue pertemuan (compute-on-read, silent)
+    await markOverduePertemuanCompletedSafe()
+
     const { id } = await params
     const pertemuan = await db.pertemuan.findUnique({
       where: { id },
@@ -20,6 +25,38 @@ export async function GET(req: NextRequest, { params }: Params) {
       },
     })
     if (!pertemuan) return NextResponse.json({ error: "Pertemuan tidak ditemukan" }, { status: 404 })
+
+    // V2 #8: fetch related materi for this kelas+mapel+pertemuan number
+    // (materi where kelasId = this kelas OR kelasId = null (all kelas),
+    //  mapelId = this mapel, pertemuan = this pertemuanKe OR pertemuan = null)
+    const relatedMateri = await db.materi.findMany({
+      where: {
+        AND: [
+          { mapelId: pertemuan.mapelId },
+          { tahunAjaranId: pertemuan.tahunAjaranId },
+          { semesterId: pertemuan.semesterId },
+          { deletedAt: null },
+          { isPublished: true },
+          {
+            OR: [
+              { kelasId: pertemuan.kelasId },
+              { kelasId: null },
+            ],
+          },
+          {
+            OR: [
+              { pertemuan: pertemuan.pertemuanKe },
+              { pertemuan: null },
+            ],
+          },
+        ],
+      },
+      include: {
+        guru: { select: { id: true, name: true } },
+      },
+      orderBy: [{ pertemuan: "asc" }, { sortOrder: "asc" }, { publishedAt: "desc" }],
+      take: 30,
+    })
 
     // Get santri in kelas + their absensi on this date for this kelas
     const dStart = new Date(
@@ -61,6 +98,7 @@ export async function GET(req: NextRequest, { params }: Params) {
           alfa: absensiRecords.filter((a) => a.status === "ALFA").length,
           belum: santriList.length - absensiRecords.length,
         },
+        relatedMateri, // V2 #8: materi yang relevan untuk pertemuan ini
       },
     })
   } catch (error) {
