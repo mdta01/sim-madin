@@ -26,7 +26,7 @@ async function main() {
   ])
 
   // 2. PERMISSIONS (matrix per modul)
-  const modules = ["santri","wali","guru","kelas","mapel","jadwal","absensi","nilai","rapor","tagihan","pembayaran","pengumuman","user","tahun_ajaran","pengaturan","materi","tugas","pengumpulan","pertemuan","kompetensi","ujian","bank_soal","ujian_peserta","ujian_nilai","rapor_mapel","rapor_catatan"]
+  const modules = ["santri","wali","guru","kelas","mapel","jadwal","absensi","nilai","rapor","tagihan","pembayaran","pengumuman","user","tahun_ajaran","pengaturan","materi","tugas","pengumpulan","pertemuan","kompetensi","ujian","bank_soal","ujian_peserta","ujian_nilai","rapor_mapel","rapor_catatan","perkembangan"]
   const actions = ["create","read","update","delete"]
   const permissions: { id: string; code: string; module: string }[] = []
   for (const mod of modules) {
@@ -58,6 +58,8 @@ async function main() {
     if (p.module === "materi" || p.module === "tugas" || p.module === "pengumpulan" || p.module === "pertemuan") return true
     // V3 — Ujian & Rapor: guru CRUD ujian/bank_soal/ujian_peserta/ujian_nilai, read rapor
     if (p.module === "ujian" || p.module === "bank_soal" || p.module === "ujian_peserta" || p.module === "ujian_nilai") return true
+    // V4 — Perkembangan Santri: guru CRUD semua perkembangan
+    if (p.module === "perkembangan") return true
     if (p.code.endsWith(":read") && ["santri","kelas","mapel","jadwal","pengumuman","rapor","tahun_ajaran","kompetensi","rapor_mapel","rapor_catatan"].includes(p.module)) return true
     return false
   })
@@ -65,7 +67,7 @@ async function main() {
     await db.rolePermission.upsert({ where: { roleId_permissionId: { roleId: guruRole.id, permissionId: p.id } }, update: {}, create: { roleId: guruRole.id, permissionId: p.id } })
   }
   const waliRole = roles[4]
-  const waliPerms = permissions.filter(p => p.code.endsWith(":read") && ["santri","tagihan","pembayaran","rapor","absensi","nilai","pengumuman","kelas","tahun_ajaran","materi","tugas","pertemuan","kompetensi","ujian","bank_soal","ujian_peserta","ujian_nilai","rapor_mapel","rapor_catatan"].includes(p.module))
+  const waliPerms = permissions.filter(p => p.code.endsWith(":read") && ["santri","tagihan","pembayaran","rapor","absensi","nilai","pengumuman","kelas","tahun_ajaran","materi","tugas","pertemuan","kompetensi","ujian","bank_soal","ujian_peserta","ujian_nilai","rapor_mapel","rapor_catatan","perkembangan"].includes(p.module))
   for (const p of waliPerms) {
     await db.rolePermission.upsert({ where: { roleId_permissionId: { roleId: waliRole.id, permissionId: p.id } }, update: {}, create: { roleId: waliRole.id, permissionId: p.id } })
   }

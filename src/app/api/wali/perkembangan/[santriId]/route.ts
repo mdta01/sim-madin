@@ -266,10 +266,118 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ sant
           publishedAt: m.publishedAt,
         })),
         pertemuanTerbaru: pertemuanWithAbsensi,
-      },
-    })
-  } catch (error) {
+      // V4 — Perkembangan Santri & Pembinaan
+      v4Perkembangan: await loadV4Perkembangan(santriId, ta.id, sem.id),
+    },
+  })
+} catch (error) {
     console.error("[wali perkembangan] error:", error)
     return NextResponse.json({ error: "Gagal memuat perkembangan santri" }, { status: 500 })
+  }
+}
+
+// V4: Load perkembangan santri (Quran, Kitab, Akhlak, Pembinaan, Catatan Wali)
+async function loadV4Perkembangan(santriId: string, tahunAjaranId: string, semesterId: string) {
+  try {
+    const [quranData, kitabData, akhlakData, pembinaanData, catatanWaliData] = await Promise.all([
+      db.perkembanganQuran.findMany({
+        where: { santriId, tahunAjaranId, semesterId },
+        orderBy: { pertemuanDate: "desc" },
+        take: 20,
+        select: {
+          id: true, type: true, surah: true, juz: true, ayatFrom: true, ayatTo: true,
+          score: true, status: true, target: true, catatan: true, pertemuanDate: true,
+        },
+      }),
+      db.hafalanKitab.findMany({
+        where: { santriId, tahunAjaranId, semesterId },
+        orderBy: { pertemuanDate: "desc" },
+        take: 20,
+        select: {
+          id: true, type: true, kitabName: true, halaman: true,
+          score: true, status: true, target: true, catatan: true, pertemuanDate: true,
+        },
+      }),
+      db.akhlakPenilaian.findMany({
+        where: { santriId, tahunAjaranId, semesterId },
+        orderBy: { periodeDate: "desc" },
+        take: 10,
+        select: {
+          id: true,
+          adabGuru: true, adabOrangTua: true, adabTeman: true,
+          kedisiplinan: true, kebersihan: true, tanggungJawab: true,
+          rataRata: true, predikat: true, catatan: true, periode: true, periodeDate: true,
+        },
+      }),
+      db.pembinaan.findMany({
+        where: { santriId, tahunAjaranId, semesterId },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        select: {
+          id: true, type: true, category: true, title: true, description: true,
+          severity: true, tindakan: true, status: true, createdAt: true,
+        },
+      }),
+      db.catatanWaliKelas.findMany({
+        where: { santriId, tahunAjaranId, semesterId },
+        orderBy: { periodeDate: "desc" },
+        take: 10,
+        select: {
+          id: true, periode: true, periodeDate: true,
+          catatan: true, rekomendasi: true,
+        },
+      }),
+    ])
+
+    // Compute V4 stats
+    const quranStats = {
+      total: quranData.length,
+      tahsin: quranData.filter((q) => q.type === "TAHSIN").length,
+      tilawah: quranData.filter((q) => q.type === "TILAWAH").length,
+      hafalan: quranData.filter((q) => q.type === "HAFALAN").length,
+      selesai: quranData.filter((q) => q.status === "SELESAI").length,
+      progress: quranData.filter((q) => q.status === "PROGRESS").length,
+    }
+
+    const kitabStats = {
+      total: kitabData.length,
+      hafalan: kitabData.filter((k) => k.type === "HAFALAN").length,
+      kelancaran: kitabData.filter((k) => k.type === "KELANCARAN").length,
+      pemahaman: kitabData.filter((k) => k.type === "PEMAHAMAN").length,
+      selesai: kitabData.filter((k) => k.status === "SELESAI").length,
+    }
+
+    const akhlakStats = akhlakData.length > 0 ? {
+      total: akhlakData.length,
+      latestRataRata: akhlakData[0]?.rataRata || 0,
+      latestPredikat: akhlakData[0]?.predikat || null,
+      avgAdabGuru: Math.round((akhlakData.reduce((s, a) => s + a.adabGuru, 0) / akhlakData.length) * 10) / 10,
+      avgKedisiplinan: Math.round((akhlakData.reduce((s, a) => s + a.kedisiplinan, 0) / akhlakData.length) * 10) / 10,
+      avgKebersihan: Math.round((akhlakData.reduce((s, a) => s + a.kebersihan, 0) / akhlakData.length) * 10) / 10,
+    } : { total: 0 }
+
+    const pembinaanStats = {
+      total: pembinaanData.length,
+      open: pembinaanData.filter((p) => p.status === "OPEN" || p.status === "IN_PROGRESS").length,
+      resolved: pembinaanData.filter((p) => p.status === "RESOLVED" || p.status === "CLOSED").length,
+      pelanggaran: pembinaanData.filter((p) => p.type === "PELANGGARAN").length,
+      berat: pembinaanData.filter((p) => p.severity === "BERAT").length,
+    }
+
+    return {
+      quran: quranData,
+      quranStats,
+      kitab: kitabData,
+      kitabStats,
+      akhlak: akhlakData,
+      akhlakStats,
+      pembinaan: pembinaanData,
+      pembinaanStats,
+      catatanWali: catatanWaliData,
+    }
+  } catch (e) {
+    // Best-effort: don't fail whole perkembangan if V4 errors
+    console.warn("[wali perkembangan] V4 load failed:", e)
+    return null
   }
 }

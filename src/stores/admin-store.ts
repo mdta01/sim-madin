@@ -22,7 +22,9 @@ export type AdminView =
   // V3 — Ujian & Rapor
   | "bank-soal"
   | "ujian"
-  // End V3
+  // V4 — Perkembangan Santri
+  | "perkembangan"
+  // End V4
   | "absensi"
   | "nilai"
   | "rapor"

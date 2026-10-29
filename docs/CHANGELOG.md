@@ -6,22 +6,15 @@ Format: `[STATUS]` di awal tiap item — ✅ done / ⚠️ partial / ❌ not sta
 
 ---
 
-## Versi 3.0 — Rapor Terintegrasi (29 Okt 2025)
+## Versi 3.0 — Ujian & Rapor Terintegrasi (PARTIAL: 29 Okt 2025)
 
-> **Filosofi**: V3 fokus pada **RAPOR KOMPREHENSIF** yang mencakup semua kegiatan akademik santri, bukan hanya hasil ujian. Ujian diinput manual (offline) — tidak ada ujian online (online exam = future V3.5).
+> **Status**: ⚠️ PARTIAL DONE — Core items selesai, **Ujian Online + Kartu Ujian PENDING** (akan dikerjakan kemudian setelah V4 stabil).
 >
-> **Rapor komprehensif** = gabungan:
-> - Nilai Harian dari pertemuan (25%)
-> - Tugas yang dikumpulkan (15%)
-> - UTS — ujian tengah semester (25%)
-> - UAS — ujian akhir semester (25%)
-> - Praktik (10%)
->
-> Plus catatan wali kelas, prestasi, akhlak, dan saran pengembangan.
+> **Sesuai roadmap.pdf asli**, V3 mencakup 4 kategori: Ujian, Ujian Online, Rekap, Rapor. Saat ini kategori "Ujian Online" (ujian via HP, timer, random soal/pilihan, koreksi otomatis, nilai otomatis) dan "Kartu ujian cetak" masih pending.
 
-### ✅ Done
+### ✅ Done — Core Items
 
-#### Modul Ujian (Manual Input — Bukan Online)
+#### Ujian (Manual Input)
 - **Bank Soal** (`/api/admin/bank-soal` + UI view)
   - 4 tipe soal: PG (pilihan ganda), ISIAN, ESSAY, PRAKTIK
   - Difficulty: MUDAH/SEDANG/SULIT dengan badge warna
@@ -32,80 +25,59 @@ Format: `[STATUS]` di awal tiap item — ✅ done / ⚠️ partial / ❌ not sta
 - **Ujian** (`/api/admin/ujian` + UI view dengan 4 tabs)
   - 4 tipe: UTS, UAS, QUIZ, MAKEUP (susulan)
   - Field: ruang ujian, pengawas, durasi, passing score (override KKM mapel)
-  - **Ujian SELALU offline** — guru input nilai manual setelah ujian dilaksanakan
+  - Ujian diinput manual (guru input nilai setelah ujian dilaksanakan secara nyata)
   - Tab **Soal**: assign soal dari Bank Soal, urutan & bobot per ujian
   - Tab **Peserta**: auto-assign semua santri kelas, toggle hadir/absen
   - Tab **Nilai**: bulk input nilai dengan stats (avg, max, min, % lulus)
   - Tab **Leger**: ranking dengan predikat (A/B/C/D/E), status lulus/remedial
   - **Auto-feed ke Nilai**: saat input nilai ujian, otomatis upsert `Nilai` dengan type matching (UTS→type=UTS, UAS→type=UAS, dll) untuk rapor aggregation
-- **Schema**: hapus field `isOnline` dari Ujian (tidak ada ujian online di V3)
 
-#### Modul Rapor Komprehensif
+#### Rekap
+- **Nilai ujian** (UjianNilai table dengan score + scoreUts/scoreUas/scorePraktik)
+- **Nilai akhir** (RaporMapel.nilaiAkhir — computed dengan bobot)
+- **Ranking** (Leger dengan rank, handle ties)
+- **Leger** (`/api/admin/ujian/[id]/leger` dengan stats lengkap)
+
+#### Rapor
 - **Rapor Generate** (`/api/admin/rapor/[id]/generate`)
-  - Auto-compute `nilaiAkhir` per mapel menggunakan **bobot dari NILAI_BOBAT**
-  - Bobot: HARIAN 25% + TUGAS 15% + UTS 25% + UAS 25% + PRAKTIK 10%
-  - Auto-compute `predikat` (A/B/C/D/E) berdasarkan score
-  - Auto-compute `isTuntas` (nilaiAkhir >= KKM)
-  - Update Rapor.absensiHadir/Sakit/Izin/Alfa dari absensi records
-  - Support `overwrite` mode (regenerate existing entries)
-  - Return `breakdown` per type untuk transparansi (avg per type, count per type)
-- **RaporMapel** (`/api/admin/rapor/[id]/mapel`)
-  - Detail nilai per mapel: nilaiAkhir, predikat, deskripsi, kkm, isTuntas
-  - Manual deskripsi capaian per mapel: "Ananda Ahmad menunjukkan penguasaan..."
-  - Upsert (create or update) per mapel
-- **RaporCatatan** (`/api/admin/rapor/[id]/catatan`)
-  - Catatan wali kelas (umum)
-  - Prestasi santri: "Juara 1 Tahfidz"
-  - Akhlak & sikap: "Sangat Baik"
-  - Rekap kehadiran (auto-fill dari absensi)
-  - Saran pengembangan
-- **Rapor PDF** (`/api/admin/rapor/[id]/pdf`)
-  - HTML printable (Ctrl+P → save as PDF) — no puppeteer needed
-  - Layout professional: header madrasah, info santri, tabel nilai, catatan, tanda tangan
-  - Stats: rata-rata, tuntas/tidak, kehadiran
-  - Includes: catatan wali kelas, prestasi, akhlak, kehadiran, saran
-- **UI Enhancements** (rapor-view.tsx):
-  - Breakdown per jenis nilai dengan bobot % (HARIAN 25%, TUGAS 15%, dll)
-  - Badge predikat (A/B/C/D/E) dengan warna
-  - "Generate" button untuk auto-compute rapor
-  - Catatan & pengembangan panel (prestasi, akhlak, saran)
-  - Info banner "Rapor Komprehensif — Bukan Hanya Hasil Ujian"
-  - Cetak PDF button (opens new tab)
+  - Auto-compute `nilaiAkhir` per mapel menggunakan bobot: HARIAN 25% + TUGAS 15% + UTS 25% + UAS 25% + PRAKTIK 10%
+  - Auto-compute `predikat` (A/B/C/D/E) dan `isTuntas`
+- **RaporMapel** (`/api/admin/rapor/[id]/mapel`) — deskripsi capaian per mapel
+- **RaporCatatan** (`/api/admin/rapor/[id]/catatan`) — catatan wali kelas + prestasi + akhlak + kehadiran + saran
+- **Rapor PDF** (`/api/admin/rapor/[id]/pdf`) — HTML printable (Ctrl+P → save as PDF)
+- **Rapor semester** dengan deskripsi, absensi, prestasi, akhlak
 
 #### Permissions & Role Mapping
 - 6 modul permission baru: `ujian`, `bank_soal`, `ujian_peserta`, `ujian_nilai`, `rapor_mapel`, `rapor_catatan`
 - Guru: CRUD ujian + bank_soal + ujian_peserta + ujian_nilai, read rapor extensions
 - Wali: read-only semua V3 (lihat rapor anak)
 
-### 📊 Statistik V3
-- **Endpoint API**: 14 endpoint V3 baru
-- **File baru**: 15 file (7 API route dirs, 2 UI views, 1 schema script, 1 constants update)
+### ❌ Pending — Akan Dikerjakan Kemudian
+
+#### Ujian Online (sub-kategori V3 di roadmap.pdf asli)
+- **Ujian melalui HP** — santri take exam via mobile app
+- **Timer** — countdown waktu ujian
+- **Random soal** — urutan soal diacak per santri
+- **Random pilihan** — urutan opsi jawaban diacak per santri
+- **Koreksi otomatis untuk soal objektif** (PG/ISIAN) — auto-scoring
+- **Nilai otomatis** — auto-compute final score
+
+#### Kartu Ujian
+- **Kartu ujian (cetak)** — PDF per santri dengan info jadwal, ruang, pengawas
+
+### 📊 Statistik V3 (Partial)
+- **Endpoint API**: 14 endpoint V3 baru (done)
+- **File baru**: 15 file (done)
 - **Schema**: 7 tabel baru (Ujian, BankSoal, UjianSoal, UjianPeserta, UjianNilai, RaporMapel, RaporCatatan)
-- **Build**: ✅ 22.4s, 41 static pages, 14 endpoint V3 terdaftar
-- **TypeScript**: 93 errors (turun dari 103 — fixed pre-existing V1 rapor issues), 0 V3-specific errors
+- **Build**: ✅ 24.2s, 41 static pages, 0 V3 errors
 
-### 🐛 Known Issues & Limitations
-- **Ujian online belum ada** — santri tidak bisa take exam via mobile. Online exam = future V3.5 (butuh real-time sync, timer, auto-correction)
-- **Auto-correction soal objektif** belum ada — butuh UjianJawaban table + scoring logic (V3.5)
-- **Random soal & random pilihan** belum ada — butuh shuffle algorithm per santri (V3.5)
-- **Kartu ujian cetak** belum ada — bisa tambah endpoint `/api/admin/ujian/[id]/kartu-pdf`
-- **Mobile integration** belum ada — mobile-wali tab Ujian + mobile-guru input nilai (pending)
+### 💡 Catatan Penting
 
-### 💡 Filosofi V3: Rapor Komprehensif
+V3 belum 100% selesai sesuai roadmap.pdf asli. Item **Ujian Online** dan **Kartu Ujian** masih pending karena:
+1. **Ujian Online** butuh mobile apps siap + real-time sync + scoring engine kompleks
+2. **Kartu Ujian** butuh PDF generator per santri (mirip rapor PDF tapi format kartu)
 
-V3 bukan tentang ujian online. V3 adalah tentang **rapor yang menggambarkan keseluruhan kegiatan akademik santri**, bukan hanya hasil ujian.
-
-**Alur lengkap V3:**
-1. Guru input nilai harian per pertemuan (V2)
-2. Guru beri tugas, santri kumpulkan, guru nilai (V2)
-3. Guru buat jadwal ujian, assign soal & peserta (V3)
-4. Ujian dilaksanakan **secara nyata** di kelas/madrasah
-5. Guru input nilai ujian manual (V3) → auto-feed ke Nilai type=UTS/UAS
-6. Admin/wali kelas klik "Generate Rapor" → sistem hitung nilaiAkhir per mapel dengan bobot
-7. Admin/wali kelas input catatan, prestasi, akhlak, saran
-8. Cetak PDF rapor → distribusi ke wali santri
-
-**Hasilnya**: Rapor yang komprehensif, adil, dan menggambarkan perkembangan santri secara menyeluruh — bukan hanya angka ujian.
+**Keputusan**: Pending V3 untuk fokus ke V4 dulu. V3 akan dilanjutkan setelah V4 stabil atau setelah mobile apps siap untuk ujian online.
 
 ---
 

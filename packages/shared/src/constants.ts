@@ -230,6 +230,97 @@ export function getPredikat(score: number): string {
 }
 
 // ============================================================================
+// V4 — PERKEMBANGAN SANTRI & PEMBINAAN
+// ============================================================================
+
+// Tipe Perkembangan Al-Qur'an (sesuai roadmap.pdf V4)
+export const QURAN_TYPES = [
+  { value: "TAHSIN", label: "Tahsin" },
+  { value: "TILAWAH", label: "Tilawah" },
+  { value: "HAFALAN", label: "Hafalan" },
+]
+
+// Tipe Perkembangan Kitab (sesuai roadmap.pdf V4)
+export const KITAB_TYPES = [
+  { value: "HAFALAN", label: "Hafalan Kitab" },
+  { value: "KELANCARAN", label: "Kelancaran Membaca" },
+  { value: "PEMAHAMAN", label: "Pemahaman" },
+]
+
+// Status Perkembangan (Quran + Kitab)
+export const PERKEMBANGAN_STATUS: Record<string, { label: string; variant: BadgeVariant }> = {
+  PROGRESS: { label: "Sedang Berjalan", variant: "warning" },
+  SELESAI: { label: "Selesai", variant: "success" },
+  BELUM: { label: "Belum Mulai", variant: "outline" },
+  REMEDIAL: { label: "Remedial", variant: "destructive" },
+}
+
+// 6 Aspek Akhlak (sesuai roadmap.pdf V4)
+export const AKHLAK_ASPEK = [
+  { value: "adabGuru", label: "Adab kepada Guru", min: 0, max: 100 },
+  { value: "adabOrangTua", label: "Adab kepada Orang Tua", min: 0, max: 100 },
+  { value: "adabTeman", label: "Adab kepada Teman", min: 0, max: 100 },
+  { value: "kedisiplinan", label: "Kedisiplinan", min: 0, max: 100 },
+  { value: "kebersihan", label: "Kebersihan", min: 0, max: 100 },
+  { value: "tanggungJawab", label: "Tanggung Jawab", min: 0, max: 100 },
+]
+
+// Predikat Akhlak
+export const AKHLAK_PREDIKAT: Record<string, { label: string; variant: BadgeVariant; min: number }> = {
+  SANGAT_BAIK: { label: "Sangat Baik", variant: "success", min: 90 },
+  BAIK: { label: "Baik", variant: "default", min: 75 },
+  CUKUP: { label: "Cukup", variant: "warning", min: 60 },
+  KURANG: { label: "Kurang", variant: "destructive", min: 0 },
+}
+
+// Helper: get akhlak predikat from rata-rata
+export function getAkhlakPredikat(score: number): string {
+  for (const [key, p] of Object.entries(AKHLAK_PREDIKAT)) {
+    if (score >= p.min) return key
+  }
+  return "KURANG"
+}
+
+// Tipe Pembinaan (sesuai roadmap.pdf V4)
+export const PEMBINAAN_TYPES = [
+  { value: "PELANGGARAN", label: "Pelanggaran" },
+  { value: "TINDAKAN", label: "Tindakan Pembinaan" },
+  { value: "CATATAN_GURU", label: "Catatan Guru" },
+  { value: "CATATAN_UMUM", label: "Catatan Umum" },
+]
+
+// Kategori Pembinaan
+export const PEMBINAAN_CATEGORIES = [
+  { value: "AKADEMIK", label: "Akademik" },
+  { value: "AKHLAK", label: "Akhlak" },
+  { value: "DISIPLIN", label: "Disiplin" },
+  { value: "KEBERSIHAN", label: "Kebersihan" },
+  { value: "UMUM", label: "Umum" },
+]
+
+// Severity Pembinaan
+export const PEMBINAAN_SEVERITY: Record<string, { label: string; variant: BadgeVariant }> = {
+  RINGAN: { label: "Ringan", variant: "secondary" },
+  SEDANG: { label: "Sedang", variant: "warning" },
+  BERAT: { label: "Berat", variant: "destructive" },
+}
+
+// Status Pembinaan
+export const PEMBINAAN_STATUS: Record<string, { label: string; variant: BadgeVariant }> = {
+  OPEN: { label: "Terbuka", variant: "warning" },
+  IN_PROGRESS: { label: "Dalam Proses", variant: "default" },
+  RESOLVED: { label: "Selesai", variant: "success" },
+  CLOSED: { label: "Ditutup", variant: "secondary" },
+}
+
+// Periode Penilaian (Akhlak + Catatan Wali Kelas)
+export const PERIODE_OPTIONS = [
+  { value: "MINGGUAN", label: "Mingguan" },
+  { value: "BULANAN", label: "Bulanan" },
+  { value: "SEMESTER", label: "Semester" },
+]
+
+// ============================================================================
 // JENIS TAGIHAN
 // ============================================================================
 export const JENIS_TAGIHAN_CATEGORY = [
@@ -286,6 +377,9 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: "bank-soal", label: "Bank Soal", icon: "Library", group: "pembelajaran", description: "Bank soal PG/isian/essay/praktik" },
   { id: "ujian", label: "Ujian", icon: "FileQuestion", group: "pembelajaran", description: "Jadwal ujian + peserta + nilai" },
   // End V3
+  // V4 — Perkembangan Santri & Pembinaan
+  { id: "perkembangan", label: "Perkembangan Santri", icon: "Heart", group: "pembelajaran", description: "Tahsin, hafalan, akhlak, pembinaan" },
+  // End V4
   { id: "absensi", label: "Data Absensi", icon: "ClipboardCheck", group: "akademik" },
   { id: "nilai", label: "Data Nilai", icon: "Award", group: "akademik" },
   { id: "rapor", label: "Rapor", icon: "FileText", group: "akademik" },

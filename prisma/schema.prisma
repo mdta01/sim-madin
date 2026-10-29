@@ -140,6 +140,12 @@ model TahunAjaran {
   kompetensi Kompetensi[]
   ujian     Ujian[]      // V3
   bankSoal  BankSoal[]   // V3
+  // V4 — Perkembangan Santri
+  perkembanganQuran  PerkembanganQuran[]
+  hafalanKitab       HafalanKitab[]
+  akhlakPenilaian    AkhlakPenilaian[]
+  pembinaan          Pembinaan[]
+  catatanWaliKelas   CatatanWaliKelas[]
 }
 
 model Semester {
@@ -162,6 +168,12 @@ model Semester {
   tugas      Tugas[]
   pertemuan Pertemuan[]
   ujian     Ujian[]      // V3
+  // V4 — Perkembangan Santri
+  perkembanganQuran  PerkembanganQuran[]
+  hafalanKitab       HafalanKitab[]
+  akhlakPenilaian    AkhlakPenilaian[]
+  pembinaan          Pembinaan[]
+  catatanWaliKelas   CatatanWaliKelas[]
 
   @@index([tahunAjaranId])
 }
@@ -350,6 +362,12 @@ model Santri {
   pengumpulanTugas PengumpulanTugas[]
   ujianPeserta    UjianPeserta[]  // V3
   ujianNilai      UjianNilai[]    // V3
+  // V4 — Perkembangan Santri
+  perkembanganQuran  PerkembanganQuran[]
+  hafalanKitab       HafalanKitab[]
+  akhlakPenilaian    AkhlakPenilaian[]
+  pembinaan          Pembinaan[]
+  catatanWaliKelas   CatatanWaliKelas[]
 
   @@index([kelasId])
   @@index([waliId])
@@ -387,6 +405,12 @@ model Guru {
   nilai       Nilai[]
   ujian       Ujian[]      // V3
   bankSoal    BankSoal[]   // V3
+  // V4 — Perkembangan Santri (guru sebagai pengampu/penilai)
+  perkembanganQuran  PerkembanganQuran[]
+  hafalanKitab       HafalanKitab[]
+  akhlakPenilaian    AkhlakPenilaian[]
+  pembinaan          Pembinaan[]
+  catatanWaliKelas   CatatanWaliKelas[]
 
   @@index([status])
   @@index([deletedAt])
@@ -946,4 +970,156 @@ model RaporCatatan {
   updatedAt    DateTime @updatedAt
 
   rapor        Rapor    @relation(fields: [raporId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================================
+// 13. V4 — PERKEMBANGAN SANTRI & PEMBINAAN
+// ============================================================================
+// Sesuai roadmap.pdf V4:
+// - Al-Qur'an: tahsin, tilawah, hafalan (juz 30, target, progress)
+// - Kitab: hafalan, kelancaran membaca, pemahaman, target
+// - Akhlak: adab guru/orang tua/teman, kedisiplinan, kebersihan, tanggung jawab
+// - Pembinaan: catatan guru, pelanggaran, tindakan, riwayat
+// - Catatan wali kelas (periodik, terpisah dari RaporCatatan)
+// ============================================================================
+
+// Tahsin, Tilawah, Hafalan Al-Qur'an per santri
+model PerkembanganQuran {
+  id            String   @id @default(cuid())
+  tahunAjaranId String
+  semesterId    String
+  santriId      String
+  guruId        String?
+  type          String   // "TAHSIN" | "TILAWAH" | "HAFALAN"
+  surah         String?  // "Al-Falaq" untuk hafalan
+  juz           Int?     // 30 untuk juz 30
+  ayatFrom      Int?     // ayat mulai
+  ayatTo        Int?     // ayat selesai
+  score         Float?   // 0-100 untuk penilaian tahsin/tilawah
+  status        String   @default("PROGRESS") // "PROGRESS" | "SELESAI" | "BELUM" | "REMEDIAL"
+  target        String?  // "Hafal 5 surat juz 30 per semester"
+  catatan       String?  // catatan guru
+  pertemuanDate DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tahunAjaran   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
+  semester      Semester    @relation(fields: [semesterId], references: [id])
+  santri        Santri      @relation(fields: [santriId], references: [id], onDelete: Cascade)
+  guru          Guru?       @relation(fields: [guruId], references: [id])
+
+  @@index([santriId, type])
+  @@index([tahunAjaranId, semesterId])
+  @@index([status])
+}
+
+// Hafalan Kitab, Kelancaran, Pemahaman
+model HafalanKitab {
+  id            String   @id @default(cuid())
+  tahunAjaranId String
+  semesterId    String
+  santriId      String
+  guruId        String?
+  type          String   // "HAFALAN" | "KELANCARAN" | "PEMAHAMAN"
+  kitabName     String   // "Matan Jurumiyyah", "Imrithi", "Safinatun Najah"
+  halaman       String?  // "Hal. 5-10" / "Bab 1"
+  score         Float?   // 0-100
+  status        String   @default("PROGRESS") // "PROGRESS" | "SELESAI" | "BELUM" | "REMEDIAL"
+  target        String?  // "Hafal Matan Jurumiyyah bab 1-5"
+  catatan       String?
+  pertemuanDate DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tahunAjaran   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
+  semester      Semester    @relation(fields: [semesterId], references: [id])
+  santri        Santri      @relation(fields: [santriId], references: [id], onDelete: Cascade)
+  guru          Guru?       @relation(fields: [guruId], references: [id])
+
+  @@index([santriId, type])
+  @@index([tahunAjaranId, semesterId])
+}
+
+// Penilaian Akhlak (6 aspek per roadmap.pdf)
+model AkhlakPenilaian {
+  id            String   @id @default(cuid())
+  tahunAjaranId String
+  semesterId    String
+  santriId      String
+  guruId        String?
+  // 6 aspek akhlak (sesuai roadmap.pdf V4)
+  adabGuru      Float    @default(0) // adab kepada guru (0-100)
+  adabOrangTua  Float    @default(0) // adab kepada orang tua
+  adabTeman     Float    @default(0) // adab kepada teman
+  kedisiplinan  Float    @default(0)
+  kebersihan    Float    @default(0)
+  tanggungJawab Float    @default(0)
+  rataRata      Float    @default(0) // auto-compute rata-rata 6 aspek
+  predikat      String?  // "SANGAT_BAIK" | "BAIK" | "CUKUP" | "KURANG"
+  catatan       String?
+  periode       String?  // "BULANAN" | "SEMESTER" — penilaian periodik
+  periodeDate   DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tahunAjaran   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
+  semester      Semester    @relation(fields: [semesterId], references: [id])
+  santri        Santri      @relation(fields: [santriId], references: [id], onDelete: Cascade)
+  guru          Guru?       @relation(fields: [guruId], references: [id])
+
+  @@index([santriId, periodeDate])
+  @@index([tahunAjaranId, semesterId])
+}
+
+// Pembinaan: catatan guru, pelanggaran, tindakan, riwayat
+model Pembinaan {
+  id            String   @id @default(cuid())
+  tahunAjaranId String
+  semesterId    String
+  santriId      String
+  guruId        String?
+  type          String   // "PELANGGARAN" | "TINDAKAN" | "CATATAN_GURU" | "CATATAN_UMUM"
+  category      String?  // "AKADEMIK" | "AKHLAK" | "DISIPLIN" | "KEBERSIHAN" | dll
+  title         String   // judul singkat
+  description   String   // detail kejadian / tindakan
+  severity      String   @default("RINGAN") // "RINGAN" | "SEDANG" | "BERAT"
+  tindakan      String?  // tindakan yang diambil
+  status        String   @default("OPEN") // "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED"
+  resolvedAt    DateTime?
+  resolvedById  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tahunAjaran   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
+  semester      Semester    @relation(fields: [semesterId], references: [id])
+  santri        Santri      @relation(fields: [santriId], references: [id], onDelete: Cascade)
+  guru          Guru?       @relation(fields: [guruId], references: [id])
+
+  @@index([santriId, type])
+  @@index([tahunAjaranId, semesterId])
+  @@index([status])
+  @@index([severity])
+}
+
+// Catatan Wali Kelas periodik (terpisah dari RaporCatatan agar bisa multi-entry)
+model CatatanWaliKelas {
+  id            String   @id @default(cuid())
+  tahunAjaranId String
+  semesterId    String
+  santriId      String
+  waliKelasId   String?  // guru yang jadi wali kelas
+  periode       String   // "BULANAN" | "MINGGUAN" | "SEMESTER"
+  periodeDate   DateTime @default(now())
+  catatan       String   // isi catatan
+  rekomendasi   String?  // rekomendasi untuk wali santri
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tahunAjaran   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
+  semester      Semester    @relation(fields: [semesterId], references: [id])
+  santri        Santri      @relation(fields: [santriId], references: [id], onDelete: Cascade)
+  guru          Guru?       @relation(fields: [waliKelasId], references: [id])
+
+  @@index([santriId, periodeDate])
+  @@index([tahunAjaranId, semesterId])
 }
