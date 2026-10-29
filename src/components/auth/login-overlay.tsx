@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import { getSupabaseBrowserClient, isSupabaseClientAvailable } from "@/lib/supabase/client"
-import { GraduationCap, Loader2, Lock, Mail, Eye, EyeOff, ShieldCheck, AlertCircle, Smartphone } from "lucide-react"
+import { GraduationCap, Loader2, Lock, Mail, Eye, EyeOff, ShieldCheck, AlertCircle } from "lucide-react"
 
 export function LoginOverlay() {
   const [email, setEmail] = useState("admin@madrasah.test")
@@ -168,24 +168,6 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...`}
               <button onClick={() => { setEmail("admin@madrasah.test"); setPassword("admin123") }} className="w-full text-left p-2 rounded border bg-muted/30 hover:bg-muted text-xs transition-colors">
                 <span className="font-medium text-emerald-600">Super Admin</span> — admin@madrasah.test (password: admin123)
               </button>
-            </div>
-
-            {/* Info for other roles */}
-            <div className="mt-4 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900">
-              <div className="flex items-start gap-2">
-                <Smartphone className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-xs font-medium text-blue-700 dark:text-blue-400">
-                    Bukan Admin? Gunakan aplikasi mobile:
-                  </p>
-                  <ul className="text-[11px] text-muted-foreground mt-1 space-y-0.5">
-                    <li>• <strong>Kepala Madrasah</strong> → App "SIM MADIN - Kepala"</li>
-                    <li>• <strong>Bendahara</strong> → App "SIM MADIN - Bendahara"</li>
-                    <li>• <strong>Guru</strong> → App "SIM MADIN - Guru"</li>
-                    <li>• <strong>Wali Santri</strong> → App "SIM MADIN - Wali"</li>
-                  </ul>
-                </div>
-              </div>
             </div>
           </CardContent>
         </Card>

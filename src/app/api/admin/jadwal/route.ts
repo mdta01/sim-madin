@@ -65,6 +65,18 @@ export async function POST(req: NextRequest) {
     }
     if (!ta || !sem) return NextResponse.json({ error: "Tahun ajaran/semester aktif tidak ditemukan" }, { status: 400 })
 
+    // Check for duplicate jadwal (same kelas, mapel, day, time, TA, semester)
+    const existing = await db.jadwal.findFirst({
+      where: {
+        kelasId: body.kelasId, mapelId: body.mapelId,
+        dayOfWeek: Number(body.dayOfWeek), startTime: body.startTime,
+        tahunAjaranId: ta, semesterId: sem,
+      },
+    })
+    if (existing) {
+      return NextResponse.json({ error: "Jadwal dengan kombinasi yang sama sudah ada" }, { status: 400 })
+    }
+
     const jadwal = await db.jadwal.create({
       data: {
         tahunAjaranId: ta,

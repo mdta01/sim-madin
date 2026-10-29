@@ -142,6 +142,13 @@ export async function POST(req: NextRequest) {
       waliActivation = { wali: newWali, isNew: true }
     }
 
+    // === AUTO-SET tahunAjaranId dari active TA jika tidak diisi ===
+    let finalTahunAjaranId = tahunAjaranId
+    if (!finalTahunAjaranId) {
+      const activeTA = await db.tahunAjaran.findFirst({ where: { isActive: true } })
+      finalTahunAjaranId = activeTA?.id || null
+    }
+
     // === CREATE SANTRI ===
     const santri = await db.santri.create({
       data: {
@@ -155,7 +162,7 @@ export async function POST(req: NextRequest) {
         photoUrl: photoUrl || null,
         waliId: finalWaliId || null,
         kelasId: kelasId || null,
-        tahunAjaranId: tahunAjaranId || null,
+        tahunAjaranId: finalTahunAjaranId,
         entryDate: entryDate ? new Date(entryDate) : new Date(),
         status: status || "AKTIF",
       },
