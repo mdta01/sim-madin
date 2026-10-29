@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import { getSupabaseBrowserClient, isSupabaseClientAvailable } from "@/lib/supabase/client"
-import { GraduationCap, Loader2, Lock, Mail, Eye, EyeOff, ShieldCheck, AlertCircle } from "lucide-react"
+import { GraduationCap, Loader2, Lock, Mail, Eye, EyeOff, ShieldCheck, AlertCircle, Smartphone } from "lucide-react"
 
 export function LoginOverlay({ onSwitchToWali }: { onSwitchToWali?: () => void }) {
   const [email, setEmail] = useState("admin@madrasah.test")
@@ -35,9 +35,25 @@ export function LoginOverlay({ onSwitchToWali }: { onSwitchToWali?: () => void }
       if (error) {
         toast({ title: "Login gagal", description: error.message, variant: "destructive" })
       } else if (data.user) {
+        // Verify user has SUPER_ADMIN role in our DB
+        const response = await fetch("/api/admin/me", {
+          headers: { Authorization: `Bearer ${data.session?.access_token}` },
+        })
+        if (response.ok) {
+          const meData = await response.json()
+          const roles = meData.data?.roles || meData.data?.userRoles?.map((ur: any) => ur.role?.code) || []
+          if (!roles.includes("SUPER_ADMIN")) {
+            // Not super admin — sign out and reject
+            await supabase.auth.signOut()
+            toast({
+              title: "Akses Ditolak",
+              description: "Halaman ini khusus Super Admin. Silakan gunakan aplikasi mobile sesuai peran Anda.",
+              variant: "destructive",
+            })
+            return
+          }
+        }
         toast({ title: "Login berhasil", description: `Selamat datang, ${data.user.user_metadata?.name || email}!` })
-        // Supabase Auth SDK auto-stores session, AuthGate will detect via onAuthStateChange
-        // Force reload to ensure all components pick up the new session
         window.location.reload()
       }
     } catch (e: any) {
@@ -45,11 +61,6 @@ export function LoginOverlay({ onSwitchToWali }: { onSwitchToWali?: () => void }
     } finally {
       setLoading(false)
     }
-  }
-
-  const fillDemo = (demoEmail: string) => {
-    setEmail(demoEmail)
-    setPassword("admin123")
   }
 
   // Show warning if Supabase not configured
@@ -73,11 +84,6 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...`}
             <p className="text-xs text-muted-foreground mt-2">
               Lihat <code>docs/SETUP-SUPABASE.md</code> untuk panduan.
             </p>
-            {onSwitchToWali && (
-              <Button variant="outline" className="w-full mt-4" onClick={onSwitchToWali}>
-                Login sebagai Wali Santri →
-              </Button>
-            )}
           </CardContent>
         </Card>
       </div>
@@ -98,14 +104,16 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...`}
         <Card className="shadow-xl">
           <CardHeader className="space-y-1">
             <CardTitle className="text-xl flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-primary" /> Masuk ke Akun
+              <ShieldCheck className="h-5 w-5 text-primary" /> Super Admin Panel
             </CardTitle>
-            <CardDescription>Login Super Admin dengan email & password (Supabase Auth)</CardDescription>
+            <CardDescription>
+              Halaman ini khusus untuk Super Admin. Login dengan akun admin yang terdaftar.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Email Admin</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -149,44 +157,53 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...`}
                 {loading ? (
                   <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Memproses...</>
                 ) : (
-                  <><Lock className="h-4 w-4 mr-2" /> Masuk</>
+                  <><Lock className="h-4 w-4 mr-2" /> Masuk sebagai Admin</>
                 )}
               </Button>
             </form>
 
+            {/* Demo account — ONLY Super Admin */}
             <div className="mt-6 pt-4 border-t">
-              <p className="text-xs text-muted-foreground mb-2 font-medium">Akun Demo (password: <code className="font-mono font-semibold">admin123</code>):</p>
-              <div className="grid grid-cols-1 gap-1.5">
-                <button onClick={() => fillDemo("admin@madrasah.test")} className="text-left p-2 rounded border bg-muted/30 hover:bg-muted text-xs transition-colors">
-                  <span className="font-medium text-emerald-600">Super Admin</span> — admin@madrasah.test
-                </button>
-                <button onClick={() => fillDemo("kepala@madrasah.test")} className="text-left p-2 rounded border bg-muted/30 hover:bg-muted text-xs transition-colors">
-                  <span className="font-medium text-blue-600">Kepala Madrasah</span> — kepala@madrasah.test
-                </button>
-                <button onClick={() => fillDemo("bendahara@madrasah.test")} className="text-left p-2 rounded border bg-muted/30 hover:bg-muted text-xs transition-colors">
-                  <span className="font-medium text-purple-600">Bendahara</span> — bendahara@madrasah.test
-                </button>
-                <button onClick={() => fillDemo("guru@madrasah.test")} className="text-left p-2 rounded border bg-muted/30 hover:bg-muted text-xs transition-colors">
-                  <span className="font-medium text-orange-600">Guru</span> — guru@madrasah.test
-                </button>
+              <p className="text-xs text-muted-foreground mb-2 font-medium">Akun Demo Admin:</p>
+              <button onClick={() => { setEmail("admin@madrasah.test"); setPassword("admin123") }} className="w-full text-left p-2 rounded border bg-muted/30 hover:bg-muted text-xs transition-colors">
+                <span className="font-medium text-emerald-600">Super Admin</span> — admin@madrasah.test (password: admin123)
+              </button>
+            </div>
+
+            {/* Info for other roles */}
+            <div className="mt-4 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900">
+              <div className="flex items-start gap-2">
+                <Smartphone className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-xs font-medium text-blue-700 dark:text-blue-400">
+                    Bukan Admin? Gunakan aplikasi mobile:
+                  </p>
+                  <ul className="text-[11px] text-muted-foreground mt-1 space-y-0.5">
+                    <li>• <strong>Kepala Madrasah</strong> → App "SIM MADIN - Kepala"</li>
+                    <li>• <strong>Bendahara</strong> → App "SIM MADIN - Bendahara"</li>
+                    <li>• <strong>Guru</strong> → App "SIM MADIN - Guru"</li>
+                    <li>• <strong>Wali Santri</strong> → App "SIM MADIN - Wali" atau login wali di bawah</li>
+                  </ul>
+                </div>
               </div>
             </div>
+
+            {/* Wali login link */}
+            {onSwitchToWali && (
+              <div className="text-center mt-4">
+                <button
+                  onClick={onSwitchToWali}
+                  className="text-sm text-emerald-600 hover:text-emerald-700 hover:underline"
+                >
+                  Login sebagai Wali Santri →
+                </button>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {onSwitchToWali && (
-          <div className="text-center mt-4">
-            <button
-              onClick={onSwitchToWali}
-              className="text-sm text-emerald-600 hover:text-emerald-700 hover:underline"
-            >
-              Login sebagai Wali Santri →
-            </button>
-          </div>
-        )}
-
         <p className="text-center text-xs text-muted-foreground mt-6">
-          © 2025 SIM MADIN • MVP V1.4 • Powered by Next.js + Supabase
+          © 2025 SIM MADIN • MVP V1 • Powered by Next.js + Supabase
         </p>
       </div>
     </div>
