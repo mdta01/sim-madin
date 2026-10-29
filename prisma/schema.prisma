@@ -146,6 +146,9 @@ model TahunAjaran {
   akhlakPenilaian    AkhlakPenilaian[]
   pembinaan          Pembinaan[]
   catatanWaliKelas   CatatanWaliKelas[]
+  // V5 — Keuangan Lanjutan
+  transaksiKas       TransaksiKas[]
+  honorGuru          HonorGuru[]
 }
 
 model Semester {
@@ -174,6 +177,8 @@ model Semester {
   akhlakPenilaian    AkhlakPenilaian[]
   pembinaan          Pembinaan[]
   catatanWaliKelas   CatatanWaliKelas[]
+  // V5 — Keuangan Lanjutan (honorGuru only, TransaksiKas doesn't need semester)
+  honorGuru          HonorGuru[]
 
   @@index([tahunAjaranId])
 }
@@ -411,6 +416,8 @@ model Guru {
   akhlakPenilaian    AkhlakPenilaian[]
   pembinaan          Pembinaan[]
   catatanWaliKelas   CatatanWaliKelas[]
+  // V5 — Keuangan Lanjutan
+  honorGuru          HonorGuru[]
 
   @@index([status])
   @@index([deletedAt])
@@ -589,6 +596,7 @@ model Payment {
   note          String?
   proofUrl      String?  // bukti transfer untuk verifikasi
   recordedById  String?
+  kasId         String?  // V5: kas yang menerima pembayaran
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -596,6 +604,8 @@ model Payment {
   tagihan        Tagihan?     @relation(fields: [tagihanId], references: [id])
   santri        Santri?      @relation(fields: [santriId], references: [id])
   recordedBy    User?        @relation("RecordedBy", fields: [recordedById], references: [id])
+  kas           Kas?         @relation(fields: [kasId], references: [id])
+  transaksiKas  TransaksiKas[] // V5: transaksi kas yang terkait
 
   @@index([santriId, paymentDate])
   @@index([status, paymentDate])
@@ -1122,4 +1132,96 @@ model CatatanWaliKelas {
 
   @@index([santriId, periodeDate])
   @@index([tahunAjaranId, semesterId])
+}
+
+// ============================================================================
+// 14. V5 — KEUANGAN TERINTEGRASI LANJUTAN
+// ============================================================================
+// Sesuai roadmap.pdf V5:
+// - Kas & Rekening (multiple accounts)
+// - Pemasukan & Pengeluaran (TransaksiKas)
+// - Saldo & Mutasi
+// - Honor Guru (mengajar, insentif, tunjangan, potongan, slip)
+// - Kwitansi otomatis (PDF dari Payment)
+// - Laporan bulanan/semester/tahunan
+// ============================================================================
+
+// Kas & Rekening madrasah (multiple accounts)
+model Kas {
+  id            String   @id @default(cuid())
+  code          String   @unique // "KAS_TUNAI", "BANK_BRI", "BANK_BNI"
+  name          String   // "Kas Tunai", "Bank BRI"
+  accountNumber String?  // nomor rekening (untuk bank)
+  bankName      String?  // "BRI", "BNI", "Mandiri"
+  type          String   // "TUNAI" | "BANK" | "E_WALLET"
+  balance       Float    @default(0) // saldo saat ini
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  transaksi     TransaksiKas[]
+  payments      Payment[]   // V5: link Payment ke Kas
+  honorGuru     HonorGuru[] // V5: honor yang dibayar dari kas ini
+
+  @@index([isActive])
+}
+
+// Transaksi Kas (pemasukan & pengeluaran)
+model TransaksiKas {
+  id            String   @id @default(cuid())
+  kasId         String
+  tahunAjaranId String?
+  type          String   // "PEMASUKAN" | "PENGELUARAN"
+  category      String   // "PEMBAYARAN_SANTRI" | "HONOR_GURU" | "OPERASIONAL" | "KEGIATAN" | "LAIN_LAIN"
+  amount        Float
+  description   String
+  reference     String?  // invoiceNo / referensi eksternal
+  paymentId     String?  // link ke Payment jika ini pemasukan dari pembayaran santri
+  honorGuruId   String?  // link ke HonorGuru jika ini pengeluaran honor
+  transaksiDate DateTime @default(now())
+  recordedById  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  kas           Kas      @relation(fields: [kasId], references: [id])
+  tahunAjaran   TahunAjaran? @relation(fields: [tahunAjaranId], references: [id])
+  payment       Payment?  @relation(fields: [paymentId], references: [id])
+  honorGuru     HonorGuru? @relation(fields: [honorGuruId], references: [id])
+
+  @@index([kasId, transaksiDate])
+  @@index([type, category])
+  @@index([transaksiDate])
+}
+
+// Honor Guru (mengajar, insentif, tunjangan, potongan, slip)
+model HonorGuru {
+  id            String   @id @default(cuid())
+  tahunAjaranId String
+  semesterId    String
+  guruId        String
+  periode       String   // "2025-10" untuk bulanan, "GANJIL_2025" untuk semester
+  periodeLabel  String   // "Oktober 2025" / "Semester Ganjil 2025/2026"
+  // Komponen honor
+  honorMengajar Float    @default(0) // honor mengajar
+  insentif      Float    @default(0) // insentif
+  tunjangan     Float    @default(0) // tunjangan
+  potongan      Float    @default(0) // potongan
+  totalHonor    Float    @default(0) // auto-compute: mengajar + insentif + tunjangan - potongan
+  // Status
+  status        String   @default("DRAFT") // "DRAFT" | "DISETUJUI" | "DIBAYARKAN"
+  paidAt        DateTime?
+  kasId         String?  // kas yang digunakan untuk bayar
+  catatan       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tahunAjaran   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
+  semester      Semester    @relation(fields: [semesterId], references: [id])
+  guru          Guru       @relation(fields: [guruId], references: [id])
+  kas           Kas?       @relation(fields: [kasId], references: [id])
+  transaksi     TransaksiKas[]
+
+  @@unique([guruId, periode])
+  @@index([tahunAjaranId, semesterId])
+  @@index([status])
 }

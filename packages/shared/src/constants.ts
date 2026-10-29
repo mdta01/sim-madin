@@ -321,6 +321,58 @@ export const PERIODE_OPTIONS = [
 ]
 
 // ============================================================================
+// V5 — KEUANGAN TERINTEGRASI LANJUTAN
+// ============================================================================
+
+// Tipe Kas (sesuai roadmap.pdf V5: Kas, Rekening)
+export const KAS_TYPES = [
+  { value: "TUNAI", label: "Kas Tunai" },
+  { value: "BANK", label: "Rekening Bank" },
+  { value: "E_WALLET", label: "E-Wallet" },
+]
+
+// Tipe Transaksi Kas (Pemasukan & Pengeluaran)
+export const TRANSAKSI_KAS_TYPES = [
+  { value: "PEMASUKAN", label: "Pemasukan" },
+  { value: "PENGELUARAN", label: "Pengeluaran" },
+]
+
+// Kategori Transaksi Kas
+export const TRANSAKSI_KAS_CATEGORIES = [
+  { value: "PEMBAYARAN_SANTRI", label: "Pembayaran Santri" },
+  { value: "HONOR_GURU", label: "Honor Guru" },
+  { value: "OPERASIONAL", label: "Operasional" },
+  { value: "KEGIATAN", label: "Kegiatan" },
+  { value: "LAIN_LAIN", label: "Lain-lain" },
+]
+
+// Status Honor Guru
+export const HONOR_STATUS: Record<string, { label: string; variant: BadgeVariant }> = {
+  DRAFT: { label: "Draft", variant: "secondary" },
+  DISETUJUI: { label: "Disetujui", variant: "default" },
+  DIBAYARKAN: { label: "Dibayar", variant: "success" },
+}
+
+// Periode Honor Guru
+export const HONOR_PERIODE_TYPES = [
+  { value: "BULANAN", label: "Bulanan" },
+  { value: "SEMESTER", label: "Semester" },
+]
+
+// Jenis Tagihan tambahan V5 (sesuai roadmap.pdf)
+export const JENIS_TAGIHAN_V5 = [
+  { value: "SYAHRIYAH", label: "Syahriyah", category: "RUTIN" },
+  { value: "UJIAN", label: "Uang Ujian", category: "INSIDENTAL" },
+  { value: "LKS", label: "LKS", category: "INSIDENTAL" },
+  { value: "SERAGAM", label: "Seragam", category: "INSIDENTAL" },
+  { value: "KEGIATAN", label: "Kegiatan", category: "INSIDENTAL" },
+  { value: "HAFLAH", label: "Haflah", category: "INSIDENTAL" },
+  { value: "KELULUSAN", label: "Kelulusan", category: "INSIDENTAL" },
+  { value: "ADMINISTRASI", label: "Administrasi", category: "RUTIN" },
+  { value: "KHUSUS", label: "Tagihan Khusus", category: "INSIDENTAL" },
+]
+
+// ============================================================================
 // JENIS TAGIHAN
 // ============================================================================
 export const JENIS_TAGIHAN_CATEGORY = [
@@ -385,6 +437,10 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: "rapor", label: "Rapor", icon: "FileText", group: "akademik" },
   { id: "tagihan", label: "Data Tagihan", icon: "Receipt", group: "keuangan" },
   { id: "pembayaran", label: "Data Pembayaran", icon: "Wallet", group: "keuangan" },
+  // V5 — Keuangan Lanjutan
+  { id: "kas", label: "Kas & Transaksi", icon: "Landmark", group: "keuangan", description: "Kas, rekening, pemasukan & pengeluaran" },
+  { id: "honor-guru", label: "Honor Guru", icon: "Banknote", group: "keuangan", description: "Honor mengajar, insentif, slip honor" },
+  // End V5
   { id: "pengumuman", label: "Pengumuman", icon: "Megaphone", group: "sistem" },
   { id: "users", label: "User & Hak Akses", icon: "ShieldCheck", group: "sistem" },
   { id: "pengaturan", label: "Pengaturan Sistem", icon: "Settings", group: "sistem" },

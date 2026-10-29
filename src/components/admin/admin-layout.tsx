@@ -31,6 +31,9 @@ import { BankSoalView } from "./views/bank-soal-view"
 import { UjianView } from "./views/ujian-view"
 // V4 — Perkembangan Santri
 import { PerkembanganView } from "./views/perkembangan-view"
+// V5 — Keuangan Lanjutan
+import { KasView } from "./views/kas-view"
+import { HonorGuruView } from "./views/honor-guru-view"
 
 export function AdminLayout() {
   const currentView = useAdminStore((s) => s.currentView)
@@ -64,6 +67,10 @@ export function AdminLayout() {
       case "rapor": return <RaporView />
       case "tagihan": return <TagihanView />
       case "pembayaran": return <PembayaranView />
+      // V5 — Keuangan Lanjutan
+      case "kas": return <KasView />
+      case "honor-guru": return <HonorGuruView />
+      // End V5
       case "pengumuman": return <PengumumanView />
       case "users": return <UsersView />
       case "pengaturan": return <PengaturanView />

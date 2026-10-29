@@ -30,6 +30,10 @@ export type AdminView =
   | "rapor"
   | "tagihan"
   | "pembayaran"
+  // V5 — Keuangan Lanjutan
+  | "kas"
+  | "honor-guru"
+  // End V5
   | "pengumuman"
   | "users"
   | "pengaturan"
