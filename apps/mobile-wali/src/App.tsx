@@ -28,7 +28,7 @@ import {
 // ============================================================================
 // CONFIG
 // ============================================================================
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "https://sim-madin.netlify.app"
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "https://sim-madin.vercel.app"
 
 // API client untuk wali (pakai JWT token dari login WA+PIN)
 let waliToken: string | null = null
