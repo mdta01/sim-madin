@@ -373,6 +373,9 @@ model Santri {
   akhlakPenilaian    AkhlakPenilaian[]
   pembinaan          Pembinaan[]
   catatanWaliKelas   CatatanWaliKelas[]
+  // V3 Complete — Ujian Online
+  ujianSesi          UjianSesi[]
+  ujianJawaban       UjianJawaban[]
 
   @@index([kelasId])
   @@index([waliId])
@@ -857,6 +860,7 @@ model Ujian {
   soalLinks     UjianSoal[]
   peserta       UjianPeserta[]
   nilai         UjianNilai[]
+  sesi          UjianSesi[]   // V3 Complete: ujian online sessions
 
   @@index([tahunAjaranId, semesterId])
   @@index([kelasId, mapelId])
@@ -1224,4 +1228,60 @@ model HonorGuru {
   @@unique([guruId, periode])
   @@index([tahunAjaranId, semesterId])
   @@index([status])
+}
+
+// ============================================================================
+// 15. V3 COMPLETE — Ujian Online (sesuai roadmap.pdf V3)
+// ============================================================================
+// Ujian melalui HP, Timer, Random soal, Random pilihan,
+// Koreksi otomatis untuk soal objektif, Nilai otomatis
+// ============================================================================
+
+// Sesi ujian per santri (tracking waktu mulai/selesai, status)
+model UjianSesi {
+  id            String   @id @default(cuid())
+  ujianId       String
+  santriId      String
+  startTime     DateTime @default(now())
+  endTime       DateTime? // null = belum selesai, set saat submit
+  durationUsed  Int?     // detik yang dipakai
+  score         Float?   // nilai otomatis (0-100)
+  status        String   @default("NOT_STARTED") // "NOT_STARTED" | "IN_PROGRESS" | "SUBMITTED" | "GRADED"
+  // Random order info (disimpan untuk reproducibility)
+  soalOrder     String?  // JSON array of soal IDs in shuffled order
+  isAutoCorrected Boolean @default(false) // true jika sudah dikoreksi otomatis
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  ujian         Ujian    @relation(fields: [ujianId], references: [id], onDelete: Cascade)
+  santri        Santri   @relation(fields: [santriId], references: [id], onDelete: Cascade)
+  jawaban       UjianJawaban[]
+
+  @@unique([ujianId, santriId])
+  @@index([santriId])
+  @@index([status])
+}
+
+// Jawaban santri per soal (dengan shuffled option order untuk PG)
+model UjianJawaban {
+  id            String   @id @default(cuid())
+  sesiId        String
+  ujianSoalId   String   // link ke UjianSoal
+  santriId      String
+  // Jawaban santri
+  answer       String?  // "A" / "B" / "C" / "D" untuk PG, teks untuk ISIAN/ESSAY
+  // Shuffled option order untuk PG (disimpan saat sesi dimulai)
+  optionOrder  String?  // JSON array: [2, 0, 3, 1] artinya opsi asli index 2 jadi urutan 0
+  // Scoring
+  isCorrect    Boolean? // null = belum dikoreksi, true/false untuk PG/ISIAN
+  score        Float?   // skor soal ini (bobot × benar/salah)
+  isAutoCorrected Boolean @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sesi         UjianSesi @relation(fields: [sesiId], references: [id], onDelete: Cascade)
+  santri       Santri   @relation(fields: [santriId], references: [id], onDelete: Cascade)
+
+  @@unique([sesiId, ujianSoalId])
+  @@index([santriId])
 }

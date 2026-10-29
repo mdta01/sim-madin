@@ -11,11 +11,17 @@
 
 ---
 
-## 📅 Status Saat Ini: V3 PARTIAL → V4 IN PROGRESS (29 Okt 2025)
+## 📅 Status Saat Ini: V5 DONE → V6 NEXT (29 Okt 2025)
 
-**V3 — Ujian & Rapor Terintegrasi: PARTIAL DONE.** Core modul sudah jadi (Bank Soal, Ujian CRUD, Leger, Rapor komprehensif dengan generate + catatan extensions + PDF cetak). **Item yang masih PENDING**: Kartu ujian cetak PDF, Ujian Online lengkap (ujian via HP, timer, random soal, random pilihan, koreksi otomatis, nilai otomatis). Pending ini akan dikerjakan kemudian setelah V4 stabil, atau menunggu mobile apps siap untuk ujian online.
+**V1-V5 semua selesai sesuai roadmap.pdf asli.** V3 kini LENGKAP dengan ujian online (ujian via HP, timer, random soal, random pilihan, koreksi otomatis, nilai otomatis) + kartu ujian cetak PDF.
 
-**Sekarang fokus ke V4 — Perkembangan Santri & Pembinaan.** Sesuai roadmap.pdf asli: Al-Qur'an (tahsin, tilawah, hafalan juz 30 + target + progress), Kitab (hafalan, kelancaran, pemahaman, target), Akhlak (adab ke guru/orang tua/teman, kedisiplinan, kebersihan, tanggung jawab), Pembinaan (catatan guru, pelanggaran, tindakan, riwayat, catatan wali kelas). Wali bisa lihat perkembangan anak berkala.
+**Status V3 — Ujian & Rapor Terintegrasi: ✅ DONE (lengkap)**
+- ✅ Ujian manual (Bank Soal, Ujian CRUD, Leger, Rapor komprehensif)
+- ✅ Ujian Online (via HP, timer, random soal, random pilihan, koreksi otomatis, nilai otomatis)
+- ✅ Kartu Ujian (cetak PDF per santri)
+- ✅ Rapor komprehensif (generate + catatan + PDF cetak)
+
+**Selanjutnya: V6 — Komunikasi & Notifikasi.** Sesuai roadmap.pdf: pengumuman per kelas/guru/wali, notifikasi otomatis, chat internal, integrasi WhatsApp/Email/FCM.
 
 ---
 
@@ -117,27 +123,27 @@
 ---
 
 ### V3 — Ujian & Rapor Terintegrasi
-**Estimasi:** 7-10 hari → Realisasi: 1 hari (29 Okt 2025) — **PARTIAL DONE**
+**Estimasi:** 7-10 hari → Realisasi: 1 hari (29 Okt 2025) — ✅ DONE LENGKAP
 **Tujuan:** Menghilangkan pekerjaan manual Excel sebanyak mungkin.
-**Status:** ⚠️ PARTIAL — Core items done, Ujian Online + Kartu Ujian PENDING (akan dikerjakan kemudian)
+**Status:** ✅ Done — Semua item roadmap.pdf V3 selesai termasuk ujian online + kartu ujian
 
 **Sesuai roadmap.pdf asli, V3 mencakup:**
 
 #### Ujian
 - [x] Jadwal ujian
 - [x] Peserta ujian
-- [ ] Kartu ujian (cetak) — **PENDING**
+- [x] Kartu ujian (cetak) — PDF per santri
 - [x] Pengawas
 - [x] Ruang
 - [x] Bank soal (PG, isian, essay, praktik)
 
 #### Ujian Online
-- [ ] Ujian melalui HP — **PENDING**
-- [ ] Timer — **PENDING**
-- [ ] Random soal — **PENDING**
-- [ ] Random pilihan — **PENDING**
-- [ ] Koreksi otomatis untuk soal objektif — **PENDING**
-- [ ] Nilai otomatis — **PENDING**
+- [x] Ujian melalui HP — mobile-wali tab "Ujian" + UjianTakeScreen
+- [x] Timer — countdown, auto-submit saat waktu habis
+- [x] Random soal — Fisher-Yates shuffle per santri (stored untuk reproducibility)
+- [x] Random pilihan — opsi jawaban diacak per santri per soal
+- [x] Koreksi otomatis untuk soal objektif — PG (option order mapping) + ISIAN (case-insensitive)
+- [x] Nilai otomatis — auto-compute score 0-100, auto-feed ke Nilai type=UTS/UAS
 
 #### Rekap
 - [x] Nilai ujian
@@ -154,8 +160,6 @@
 - [x] Akhlak
 - [x] Cetak PDF
 - [x] Print
-
-**Catatan:** V3 dilanjutkan setelah V4 stabil. Ujian online butuh mobile apps siap + real-time sync. Kartu ujian cetak butuh PDF generator per santri.
 
 ---
 
@@ -344,7 +348,7 @@ Sisanya bisa follow-up sesuai kebutuhan madrasah.
 | V1.5 — Wali Management UI | 📋 Planned | 10 Nov 2025 | - |
 | V1.6 — Firebase FCM Push Notif | 📋 Planned | 15 Nov 2025 | - |
 | V2 — Akademik & Pembelajaran | ✅ Done FINAL | 30 Nov 2025 | 29 Okt 2025 |
-| V3 — Ujian & Rapor | ⚠️ Partial Done | 20 Des 2025 | 29 Okt 2025 (core done, ujian online + kartu pending) |
+| V3 — Ujian & Rapor | ✅ Done LENGKAP | 20 Des 2025 | 29 Okt 2025 (ujian online + kartu selesai) |
 | V4 — Perkembangan Santri | 📋 Planned | 15 Jan 2026 | - |
 | V5 — Keuangan Lanjutan | 📋 Planned | 10 Feb 2026 | - |
 | V6-V14 | 📋 Long-term | Q1-Q2 2026 | - |

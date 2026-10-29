@@ -421,6 +421,7 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
     { id: "nilai", label: "Nilai", icon: "school" },
     { id: "perkembangan", label: "Rekap", icon: "stats-chart" },
     { id: "tugas", label: "Tugas", icon: "create" },
+    { id: "ujian", label: "Ujian", icon: "file-tray-full" },
     { id: "tagihan", label: "Tagihan", icon: "wallet" },
     { id: "rapor", label: "Rapor", icon: "document-text" },
   ]
@@ -571,6 +572,11 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
 
           {activeTab === "tugas" && (
             <TugasListSection santriId={santri.id} />
+          )}
+
+          {/* V3 Complete — Ujian Online */}
+          {activeTab === "ujian" && (
+            <UjianListSection santriId={santri.id} />
           )}
 
           {activeTab === "tagihan" && detail && (
@@ -1138,6 +1144,342 @@ function PerkembanganV2Section({ perkembangan, loading }: { perkembangan: Perkem
         </View>
       )}
     </ScrollView>
+  )
+}
+
+// ============================================================================
+// V3 COMPLETE — Ujian Online (mobile-wali)
+// ============================================================================
+function UjianListSection({ santriId }: { santriId: string }) {
+  const [ujianList, setUjianList] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [takeUjian, setTakeUjian] = useState<any | null>(null)
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const res = await api.get(`/api/wali/ujian`, { santriId })
+      setUjianList(res.data)
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [santriId])
+
+  useEffect(() => { load() }, [load])
+
+  if (loading) return <View style={styles.contentCard}><ActivityIndicator size="large" color={Colors.primary} /></View>
+  if (error) return <View style={styles.contentCard}><Text style={styles.errorText}>{error}</Text></View>
+
+  // If taking ujian, show the take screen
+  if (takeUjian) {
+    return <UjianTakeScreen ujian={takeUjian} santriId={santriId} onClose={() => { setTakeUjian(null); load() }} />
+  }
+
+  return (
+    <View style={styles.contentCard}>
+      <Text style={styles.contentTitle}>Ujian Online</Text>
+      {ujianList.length === 0 ? (
+        <Text style={styles.emptyTextSmall}>Belum ada ujian</Text>
+      ) : (
+        ujianList.map((u, i) => {
+          const statusColors: Record<string, string> = {
+            UPCOMING: Colors.warning,
+            ONGOING: Colors.success,
+            COMPLETED: Colors.textMuted,
+          }
+          const statusLabels: Record<string, string> = {
+            UPCOMING: "Akan Datang",
+            ONGOING: "Berlangsung",
+            COMPLETED: "Selesai",
+          }
+          return (
+            <View key={i} style={[styles.listRow, u.status === "ONGOING" && !u.hasSubmitted && { borderColor: Colors.success }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.tagihanName}>{u.title}</Text>
+                <Text style={styles.tagihanDesc}>{u.mapel?.name} • {u.soalCount} soal • {u.durationMnt} mnt</Text>
+                <Text style={[styles.tagihanDesc, { fontSize: 10 }]}>{formatDate(u.startTime, true)}</Text>
+              </View>
+              <View>
+                <View style={[styles.statusBadge, { backgroundColor: (statusColors[u.status] || Colors.textMuted) + "20" }]}>
+                  <Text style={[styles.statusBadgeText, { color: statusColors[u.status] || Colors.textMuted, fontSize: 10 }]}>
+                    {statusLabels[u.status] || u.status}
+                  </Text>
+                </View>
+                {u.hasSubmitted ? (
+                  <View style={[styles.statusBadge, { backgroundColor: Colors.successLight, marginTop: 4 }]}>
+                    <Text style={[styles.statusBadgeText, { color: Colors.success, fontSize: 10 }]}>
+                      Nilai: {u.sesi?.score ?? "-"}
+                    </Text>
+                  </View>
+                ) : u.canStart ? (
+                  <TouchableOpacity
+                    onPress={() => setTakeUjian(u)}
+                    style={[styles.submitButton, { marginTop: 4, backgroundColor: Colors.success }]}
+                  >
+                    <Text style={styles.submitButtonText}>Mulai</Text>
+                  </TouchableOpacity>
+                ) : u.canResume ? (
+                  <TouchableOpacity
+                    onPress={() => setTakeUjian(u)}
+                    style={[styles.submitButton, { marginTop: 4, backgroundColor: Colors.warning }]}
+                  >
+                    <Text style={styles.submitButtonText}>Lanjut</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </View>
+          )
+        })
+      )}
+    </View>
+  )
+}
+
+function UjianTakeScreen({ ujian, santriId, onClose }: { ujian: any, santriId: string, onClose: () => void }) {
+  const [detail, setDetail] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [answers, setAnswers] = useState<Record<string, { answer: string; optionOrder?: number[] }>>({})
+  const [currentSoal, setCurrentSoal] = useState(0)
+  const [remainingSeconds, setRemainingSeconds] = useState(0)
+  const [submitting, setSubmitting] = useState(false)
+  const [result, setResult] = useState<any>(null)
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true)
+        // Start or resume ujian
+        await api.post(`/api/wali/ujian/${ujian.id}/start`, { santriId })
+        // Get detail with shuffled soal
+        const res = await api.get(`/api/wali/ujian/${ujian.id}`, { santriId })
+        setDetail(res.data)
+        setRemainingSeconds(res.data.remainingSeconds || ujian.durationMnt * 60)
+        // Init answers from existing
+        const init: Record<string, { answer: string; optionOrder?: number[] }> = {}
+        res.data.soalList.forEach((s: any) => {
+          init[s.ujianSoalId] = {
+            answer: s.existingAnswer || "",
+            optionOrder: s.optionOrder,
+          }
+        })
+        setAnswers(init)
+      } catch (e: any) {
+        Alert.alert("Error", e.message)
+        onClose()
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [ujian.id, santriId, ujian.durationMnt])
+
+  // Timer countdown
+  useEffect(() => {
+    if (loading || result) return
+    const timer = setInterval(() => {
+      setRemainingSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer)
+          handleAutoSubmit()
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [loading, result])
+
+  const formatTime = (sec: number) => {
+    const m = Math.floor(sec / 60)
+    const s = sec % 60
+    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+  }
+
+  const handleAnswer = (ujianSoalId: string, answer: string) => {
+    setAnswers({ ...answers, [ujianSoalId]: { ...answers[ujianSoalId], answer } })
+  }
+
+  const handleSubmit = () => {
+    Alert.alert(
+      "Konfirmasi Submit",
+      "Yakin ingin mengumpulkan ujian? Anda tidak bisa mengubah jawaban setelah submit.",
+      [
+        { text: "Batal", style: "cancel" },
+        { text: "Kumpulkan", onPress: () => doSubmit(false) },
+      ]
+    )
+  }
+
+  const handleAutoSubmit = () => {
+    Alert.alert("Waktu Habis", "Waktu ujian telah berakhir. Jawaban akan dikumpulkan otomatis.")
+    doSubmit(true)
+  }
+
+  const doSubmit = async (auto: boolean) => {
+    setSubmitting(true)
+    try {
+      const answerArray = Object.entries(answers).map(([ujianSoalId, v]) => ({
+        ujianSoalId,
+        answer: v.answer,
+        optionOrder: v.optionOrder,
+      }))
+      const res = await api.post(`/api/wali/ujian/${ujian.id}/submit`, { santriId, answers: answerArray })
+      setResult(res.data)
+    } catch (e: any) {
+      Alert.alert("Gagal Submit", e.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.contentCard}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={{ textAlign: "center", marginTop: 10, color: Colors.textMuted }}>Memuat soal ujian...</Text>
+      </View>
+    )
+  }
+
+  if (result) {
+    return (
+      <View style={styles.contentCard}>
+        <Text style={[styles.contentTitle, { textAlign: "center" }]}>Ujian Selesai</Text>
+        <View style={{ alignItems: "center", marginTop: 20 }}>
+          <Text style={{ fontSize: 48, fontWeight: "bold", color: result.data.score >= 70 ? Colors.success : Colors.danger }}>
+            {result.data.score}
+          </Text>
+          <Text style={{ fontSize: 14, color: Colors.textMuted }}>/ {ujian.maxScore}</Text>
+          <Text style={{ fontSize: 12, color: Colors.textMuted, marginTop: 8, textAlign: "center" }}>
+            {result.message}
+          </Text>
+        </View>
+        <TouchableOpacity style={[styles.submitButton, { marginTop: 24 }]} onPress={onClose}>
+          <Text style={styles.submitButtonText}>Kembali ke Daftar Ujian</Text>
+        </TouchableOpacity>
+      </View>
+    )
+  }
+
+  if (!detail) return null
+  const soalList = detail.soalList || []
+  const soal = soalList[currentSoal]
+  const answeredCount = Object.values(answers).filter((a) => a.answer).length
+  const isLowTime = remainingSeconds < 60
+
+  return (
+    <View style={styles.contentCard}>
+      {/* Timer + Progress */}
+      <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 12 }}>
+        <View style={[styles.statusBadge, { backgroundColor: isLowTime ? Colors.dangerLight : Colors.primaryLight }]}>
+          <Ionicons name="time" size={14} color={isLowTime ? Colors.danger : Colors.primary} />
+          <Text style={[styles.statusBadgeText, { color: isLowTime ? Colors.danger : Colors.primary, marginLeft: 4 }]}>
+            {formatTime(remainingSeconds)}
+          </Text>
+        </View>
+        <Text style={{ fontSize: 12, color: Colors.textMuted }}>
+          Soal {currentSoal + 1}/{soalList.length} • Terjawab: {answeredCount}
+        </Text>
+      </View>
+
+      {/* Soal */}
+      <View style={{ marginBottom: 16 }}>
+        <Text style={{ fontSize: 14, fontWeight: "600", marginBottom: 8 }}>{soal.question}</Text>
+        {soal.type === "PG" && soal.options && (
+          <View>
+            {soal.options.map((opt: string, idx: number) => {
+              const letter = String.fromCharCode(65 + idx)
+              const isSelected = answers[soal.ujianSoalId]?.answer === letter
+              return (
+                <TouchableOpacity
+                  key={idx}
+                  onPress={() => handleAnswer(soal.ujianSoalId, letter)}
+                  style={{
+                    flexDirection: "row", alignItems: "center", padding: 10, marginBottom: 6,
+                    borderWidth: 1, borderColor: isSelected ? Colors.primary : Colors.border,
+                    backgroundColor: isSelected ? Colors.primaryLight : Colors.background, borderRadius: 6,
+                  }}
+                >
+                  <Text style={{ fontWeight: "bold", marginRight: 8, color: isSelected ? Colors.primary : Colors.text }}>{letter}.</Text>
+                  <Text style={{ flex: 1, fontSize: 13, color: Colors.text }}>{opt}</Text>
+                </TouchableOpacity>
+              )
+            })}
+          </View>
+        )}
+        {(soal.type === "ISIAN" || soal.type === "ESSAY") && (
+          <TextInput
+            style={[styles.textInput, { minHeight: 60, textAlignVertical: "top" }]}
+            value={answers[soal.ujianSoalId]?.answer || ""}
+            onChangeText={(text) => handleAnswer(soal.ujianSoalId, text)}
+            placeholder={soal.type === "ISIAN" ? "Jawaban singkat..." : "Tulis jawaban essay..."}
+            multiline={soal.type === "ESSAY"}
+            numberOfLines={3}
+          />
+        )}
+        {soal.type === "PRAKTIK" && (
+          <Text style={{ fontSize: 12, color: Colors.textMuted, fontStyle: "italic" }}>
+            Soal praktik — jawaban diinput manual oleh guru setelah ujian.
+          </Text>
+        )}
+      </View>
+
+      {/* Navigation */}
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+        <TouchableOpacity
+          onPress={() => setCurrentSoal(Math.max(0, currentSoal - 1))}
+          disabled={currentSoal === 0}
+          style={[styles.modalCancelButton, { opacity: currentSoal === 0 ? 0.4 : 1 }]}
+        >
+          <Text style={styles.modalCancelText}>‹ Prev</Text>
+        </TouchableOpacity>
+
+        {currentSoal < soalList.length - 1 ? (
+          <TouchableOpacity
+            onPress={() => setCurrentSoal(Math.min(soalList.length - 1, currentSoal + 1))}
+            style={styles.modalSubmitButton}
+          >
+            <Text style={styles.modalSubmitText}>Next ›</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            onPress={handleSubmit}
+            disabled={submitting}
+            style={[styles.modalSubmitButton, { backgroundColor: Colors.success }]}
+          >
+            {submitting ? <ActivityIndicator size="small" color={Colors.white} /> : <Text style={styles.modalSubmitText}>Kumpulkan</Text>}
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Soal navigator */}
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 12, justifyContent: "center" }}>
+        {soalList.map((s: any, i: number) => (
+          <TouchableOpacity
+            key={i}
+            onPress={() => setCurrentSoal(i)}
+            style={{
+              width: 28, height: 28, borderRadius: 6, justifyContent: "center", alignItems: "center",
+              backgroundColor: i === currentSoal ? Colors.primary : answers[s.ujianSoalId]?.answer ? Colors.successLight : Colors.border,
+              borderWidth: 1, borderColor: i === currentSoal ? Colors.primary : "transparent",
+            }}
+          >
+            <Text style={{
+              fontSize: 11, fontWeight: "600",
+              color: i === currentSoal ? Colors.white : answers[s.ujianSoalId]?.answer ? Colors.success : Colors.textMuted,
+            }}>{i + 1}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Exit button */}
+      <TouchableOpacity onPress={onClose} style={{ marginTop: 16, alignSelf: "center" }}>
+        <Text style={{ fontSize: 12, color: Colors.danger }}>Keluar tanpa submit</Text>
+      </TouchableOpacity>
+    </View>
   )
 }
 
