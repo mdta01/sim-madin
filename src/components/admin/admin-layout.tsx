@@ -21,6 +21,11 @@ import { UsersView } from "./views/users-view"
 import { PengaturanView } from "./views/pengaturan-view"
 import { ProfileView } from "./views/profile-view"
 import { AuditLogView } from "./views/audit-log-view"
+// V2 — Akademik & Pembelajaran
+import { MateriView } from "./views/materi-view"
+import { TugasView } from "./views/tugas-view"
+import { PertemuanView } from "./views/pertemuan-view"
+import { KompetensiView } from "./views/kompetensi-view"
 
 export function AdminLayout() {
   const currentView = useAdminStore((s) => s.currentView)
@@ -38,6 +43,12 @@ export function AdminLayout() {
       case "kelas": return <KelasView />
       case "mapel": return <MapelView />
       case "jadwal": return <JadwalView />
+      // V2 — Akademik & Pembelajaran
+      case "materi": return <MateriView />
+      case "tugas": return <TugasView />
+      case "pertemuan": return <PertemuanView />
+      case "kompetensi": return <KompetensiView />
+      // End V2
       case "absensi": return <AbsensiView />
       case "nilai": return <NilaiView />
       case "rapor": return <RaporView />

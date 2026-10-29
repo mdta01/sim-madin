@@ -26,7 +26,7 @@ async function main() {
   ])
 
   // 2. PERMISSIONS (matrix per modul)
-  const modules = ["santri","wali","guru","kelas","mapel","jadwal","absensi","nilai","rapor","tagihan","pembayaran","pengumuman","user","tahun_ajaran","pengaturan"]
+  const modules = ["santri","wali","guru","kelas","mapel","jadwal","absensi","nilai","rapor","tagihan","pembayaran","pengumuman","user","tahun_ajaran","pengaturan","materi","tugas","pengumpulan","pertemuan","kompetensi"]
   const actions = ["create","read","update","delete"]
   const permissions: { id: string; code: string; module: string }[] = []
   for (const mod of modules) {
@@ -53,15 +53,17 @@ async function main() {
   }
   const guruRole = roles[3]
   const guruPerms = permissions.filter(p => {
+    // V2 — Akademik & Pembelajaran: guru punya akses penuh CRUD materi/tugas/pengumpulan/pertemuan, read kompetensi
     if (p.module === "absensi" || p.module === "nilai") return true
-    if (p.code.endsWith(":read") && ["santri","kelas","mapel","jadwal","pengumuman","rapor","tahun_ajaran"].includes(p.module)) return true
+    if (p.module === "materi" || p.module === "tugas" || p.module === "pengumpulan" || p.module === "pertemuan") return true
+    if (p.code.endsWith(":read") && ["santri","kelas","mapel","jadwal","pengumuman","rapor","tahun_ajaran","kompetensi"].includes(p.module)) return true
     return false
   })
   for (const p of guruPerms) {
     await db.rolePermission.upsert({ where: { roleId_permissionId: { roleId: guruRole.id, permissionId: p.id } }, update: {}, create: { roleId: guruRole.id, permissionId: p.id } })
   }
   const waliRole = roles[4]
-  const waliPerms = permissions.filter(p => p.code.endsWith(":read") && ["santri","tagihan","pembayaran","rapor","absensi","nilai","pengumuman","kelas","tahun_ajaran"].includes(p.module))
+  const waliPerms = permissions.filter(p => p.code.endsWith(":read") && ["santri","tagihan","pembayaran","rapor","absensi","nilai","pengumuman","kelas","tahun_ajaran","materi","tugas","pertemuan","kompetensi"].includes(p.module))
   for (const p of waliPerms) {
     await db.rolePermission.upsert({ where: { roleId_permissionId: { roleId: waliRole.id, permissionId: p.id } }, update: {}, create: { roleId: waliRole.id, permissionId: p.id } })
   }
@@ -329,6 +331,153 @@ async function main() {
     data: { title: "Tagihan Syahriyah Bulan Ini", content: "Mohon segera melakukan pembayaran Syahriyah bulan ini sebelum tanggal 25. Pembayaran dapat dilakukan melalui Bendahara madrasah.", audience: "WALI", priority: "NORMAL", isPublished: true, publishedAt: new Date(today.getTime() - 2 * 86400000), createdById: superAdminUser.id },
   })
 
+  // ============================================================================
+  // 16. V2 — AKADEMIK & PEMBELAJARAN (sample data)
+  // ============================================================================
+
+  // 16a. KOMPETENSI per mapel (capaian pembelajaran)
+  const kompetensiSamples = [
+    { mapelIdx: 0, code: "QUR-001", name: "Mampu membaca Al-Qur'an dengan tajwid yang benar", category: "PSIKOMOTORIK", description: "Bacaan sesuai kaidah tajwid: idgham, izhar, iqlab, ikhfa" },
+    { mapelIdx: 0, code: "QUR-002", name: "Menghafal Juz 30 (Juz 'Amma)", category: "KOGNITIF", description: "Target hafalan 5 surat per semester" },
+    { mapelIdx: 1, code: "FQH-001", name: "Memahami hukum bersuci (thaharah)", category: "KOGNITIF", description: "Wudhu, tayamum, mandi wajib" },
+    { mapelIdx: 1, code: "FQH-002", name: "Praktik shalat fardhu dengan benar", category: "PSIKOMOTORIK", description: "Gerakan dan bacaan shalat" },
+    { mapelIdx: 2, code: "AQD-001", name: "Mengenal Rukun Iman", category: "SPIRITUAL", description: "6 rukun iman dengan dalil" },
+    { mapelIdx: 2, code: "AQD-002", name: "Meng internalisasi adab terhadap guru & orang tua", category: "AFEKTIF", description: "Penerapan adab dalam kehidupan harian" },
+    { mapelIdx: 3, code: "SKH-001", name: "Membaca kitab kuning dengan harakat", category: "PSIKOMOTORIK", description: "Membaca Matan Jurumiyyah" },
+    { mapelIdx: 4, code: "AKL-001", name: "Akhlak kepada sesama santri", category: "AFEKTIF", description: "Toleransi, empati, kerja sama" },
+  ]
+  for (const k of kompetensiSamples) {
+    await db.kompetensi.create({
+      data: {
+        mapelId: mapelList[k.mapelIdx].id,
+        tahunAjaranId: ta.id,
+        code: k.code,
+        name: k.name,
+        description: k.description,
+        category: k.category,
+        sortOrder: 0,
+        isActive: true,
+      },
+    })
+  }
+  console.log(`   - ${kompetensiSamples.length} kompetensi pembelajaran`)
+
+  // 16b. MATERI PEMBELAJARAN per mapel
+  const materiSamples = [
+    { mapelIdx: 0, title: "Hukum Bacaan Nun Mati & Tanwin", type: "DOKUMEN", description: "Modul lengkap hukum bacaan Idgham, Izhar, Iqlab, Ikhfa", pertemuan: 1, kelasIdx: 0 },
+    { mapelIdx: 0, title: "Video Demo Tajwid Mad Thabi'i", type: "LINK", description: "Video YouTube demonstrasi bacaan mad", externalUrl: "https://www.youtube.com/watch?v=example", pertemuan: 2, kelasIdx: 0 },
+    { mapelIdx: 1, title: "Modul Fiqih Thaharah - Wudhu", type: "DOKUMEN", description: "Rukun wudhu, sunnah wudhu, pembatal wudhu", pertemuan: 1, kelasIdx: 0 },
+    { mapelIdx: 2, title: "Poster Rukun Iman", type: "FOTO", description: "Infografis rukun iman untuk diprint", pertemuan: 1, kelasIdx: 1 },
+    { mapelIdx: 3, title: "Pengantar Ilmu Sharaf", type: "DOKUMEN", description: "Mukadimah kitab Matan Jurumiyyah", pertemuan: 1, kelasIdx: 2 },
+  ]
+  for (const m of materiSamples) {
+    await db.materi.create({
+      data: {
+        tahunAjaranId: ta.id,
+        semesterId: semGanjil.id,
+        mapelId: mapelList[m.mapelIdx].id,
+        kelasId: kelasList[m.kelasIdx].id,
+        guruId: guruList[m.mapelIdx % guruList.length].id,
+        title: m.title,
+        description: m.description,
+        type: m.type,
+        fileUrl: m.type === "DOKUMEN" ? "/uploads/sample-materi.pdf" : m.type === "FOTO" ? "/uploads/sample-materi.png" : null,
+        externalUrl: m.externalUrl || null,
+        pertemuan: m.pertemuan,
+        sortOrder: 0,
+        isPublished: true,
+        publishedAt: new Date(today.getTime() - Math.floor(Math.random() * 5) * 86400000),
+        createdById: superAdminUser.id,
+      },
+    })
+  }
+  console.log(`   - ${materiSamples.length} materi pembelajaran`)
+
+  // 16c. TUGAS dari guru untuk santri (per kelas)
+  const tugasSamples = [
+    { mapelIdx: 0, kelasIdx: 0, title: "Hafalan Surat Al-Falaq", type: "HAFALAN", description: "Hafal dengan tajwid benar, dicek via rekaman voice", maxScore: 100, dueInDays: 7 },
+    { mapelIdx: 1, kelasIdx: 0, title: "Praktik Wudhu - Video", type: "PRAKTIK", description: "Rekam video praktik wudhu lengkap dengan niat", maxScore: 100, dueInDays: 5 },
+    { mapelIdx: 2, kelasIdx: 1, title: "Esai Rukun Iman", type: "INDIVIDU", description: "Tulis makna dan dalil tiap rukun iman", maxScore: 100, dueInDays: 10 },
+    { mapelIdx: 0, kelasIdx: 1, title: "Tugas Tajwid Kelompok", type: "KELOMPOK", description: "Kelompok 3 orang, demonstrasi hukum bacaan nun mati", maxScore: 100, dueInDays: 14 },
+  ]
+  const tugasList: { id: string; kelasIdx: number; dueDate: Date; title: string }[] = []
+  for (const t of tugasSamples) {
+    const dueDate = new Date(today.getTime() + t.dueInDays * 86400000)
+    const tugas = await db.tugas.create({
+      data: {
+        tahunAjaranId: ta.id,
+        semesterId: semGanjil.id,
+        mapelId: mapelList[t.mapelIdx].id,
+        kelasId: kelasList[t.kelasIdx].id,
+        guruId: guruList[t.mapelIdx % guruList.length].id,
+        title: t.title,
+        description: t.description,
+        type: t.type,
+        maxScore: t.maxScore,
+        dueDate,
+        isPublished: true,
+        publishedAt: new Date(today.getTime() - Math.floor(Math.random() * 3) * 86400000),
+        createdById: superAdminUser.id,
+      },
+    })
+    tugasList.push({ id: tugas.id, kelasIdx: t.kelasIdx, dueDate: tugas.dueDate, title: tugas.title })
+  }
+  console.log(`   - ${tugasList.length} tugas pembelajaran`)
+
+  // 16d. PENGUMPULAN TUGAS sample (3 santri pertama kumpul, 1 sudah dinilai)
+  for (const tugas of tugasList) {
+    const santriInKelas = santriList.filter((s) => s.kelasId === kelasList[tugas.kelasIdx].id)
+    for (let i = 0; i < Math.min(4, santriInKelas.length); i++) {
+      const santri = santriInKelas[i]
+      const isGraded = i === 0
+      const isLate = i === 2
+      const submittedAt = isLate
+        ? new Date(tugas.dueDate.getTime() + 2 * 3600000) // 2 jam setelah due date
+        : new Date(tugas.dueDate.getTime() - (i + 1) * 86400000) // i+1 hari sebelum due
+      await db.pengumpulanTugas.create({
+        data: {
+          tugasId: tugas.id,
+          santriId: santri.id,
+          fileUrl: i === 0 ? "/uploads/sample-submission.pdf" : null,
+          textAnswer: i === 0 ? null : i === 1 ? "Saya sudah hafal surat Al-Falaq dengan tajwid yang benar" : i === 2 ? "Mohon maaf terlambat, baru sempat submit hari ini" : "Berikut jawaban saya Pak/Ustadz",
+          submittedAt,
+          status: isGraded ? "GRADED" : isLate ? "LATE" : "SUBMITTED",
+          score: isGraded ? 85 : null,
+          feedback: isGraded ? "MasyaAllah, hafalan lancar. Tajwid sudah benar." : null,
+          gradedAt: isGraded ? new Date(submittedAt.getTime() + 86400000) : null,
+          gradedById: isGraded ? superAdminUser.id : null,
+        },
+      })
+    }
+  }
+  console.log(`   - Pengumpulan tugas sample untuk 4 santri per tugas`)
+
+  // 16e. PERTEMUAN sample (3 pertemuan per kelas+mapel)
+  for (let kIdx = 0; kIdx < kelasList.length; kIdx++) {
+    const kelas = kelasList[kIdx]
+    for (let mIdx = 0; mIdx < Math.min(3, mapelList.length); mIdx++) {
+      const mapel = mapelList[mIdx]
+      for (let p = 1; p <= 3; p++) {
+        const pertemuanDate = new Date(today.getTime() - (3 - p) * 7 * 86400000) // minggu lalu, 2 minggu lalu, 3 minggu lalu
+        await db.pertemuan.create({
+          data: {
+            tahunAjaranId: ta.id,
+            semesterId: semGanjil.id,
+            kelasId: kelas.id,
+            mapelId: mapel.id,
+            guruId: guruList[(kIdx + mIdx) % guruList.length].id,
+            pertemuanKe: p,
+            date: pertemuanDate,
+            topic: p === 1 ? "Pengenalan & kontrak belajar" : p === 2 ? "Materi inti pertama" : "Latihan & evaluasi",
+            description: `Pertemuan ke-${p} untuk ${mapel.name} di ${kelas.name}`,
+            isCompleted: p < 3, // pertemuan 1 & 2 sudah selesai, 3 belum
+          },
+        })
+      }
+    }
+  }
+  console.log(`   - Pertemuan sample: 3 pertemuan × ${kelasList.length} kelas × 3 mapel pertama`)
+
   // 16. SYSTEM SETTINGS
   const settings = [
     { key: "MADRASAH_NAME", value: "Madrasah Diniyah Terpadu Al-Hidayah", type: "STRING" },
@@ -346,12 +495,13 @@ async function main() {
   }
 
   console.log("✅ Seed completed successfully!")
-  console.log(`   - ${roles.length} roles, ${permissions.length} permissions`)
+  console.log(`   - ${roles.length} roles, ${permissions.length} permissions (incl. V2: materi, tugas, pengumpulan, pertemuan, kompetensi)`)
   console.log(`   - 1 super admin user (admin@madrasah.test)`)
   console.log(`   - 1 tahun ajaran + 2 semester`)
   console.log(`   - ${jenisTagihan.length} jenis tagihan, ${mapelList.length} mapel`)
   console.log(`   - ${guruList.length} guru, ${kelasList.length} kelas`)
   console.log(`   - ${waliList.length} wali, ${santriList.length} santri`)
+  console.log(`   - V2: ${kompetensiSamples.length} kompetensi, ${materiSamples.length} materi, ${tugasList.length} tugas`)
 }
 
 main()

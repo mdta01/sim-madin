@@ -6,6 +6,53 @@ Format: `[STATUS]` di awal tiap item — ✅ done / ⚠️ partial / ❌ not sta
 
 ---
 
+## Versi 2.0 — Akademik & Pembelajaran (29 Okt 2025)
+
+### ✅ Done
+- **Materi Pembelajaran** (`/api/admin/materi` + UI view)
+  - Upload PDF, foto, audio (≤5MB) via storage adapter (R2/Firebase/local)
+  - Tipe LINK untuk video eksternal (YouTube/Drive) — tidak dibatasi ukuran
+  - Filter per mapel, kelas, tipe, dengan auto-bind tahun ajaran/semester aktif
+  - Soft delete (`deletedAt`) + audit log penuh
+- **Tugas & Pengumpulan** (`/api/admin/tugas` + `/[id]/pengumpulan` + `/api/admin/pengumpulan/[id]`)
+  - CRUD tugas per kelas+mapel+guru, 4 tipe: INDIVIDU / KELOMPOK / PRAKTIK / HAFALAN
+  - Bulk list pengumpulan + santri yang belum mengumpulkan (status `NOT_SUBMITTED`)
+  - Auto-detect LATE status jika `submittedAt > dueDate`
+  - Grading: score + feedback → side-effect upsert `Nilai` (type=TUGAS) untuk agregasi rapor
+  - Skor dinormalisasi ke 0-100 (skala maxScore) supaya konsisten dengan KKM
+- **Pertemuan & Absensi** (`/api/admin/pertemuan` + `/[id]` + `/[id]/absensi` + `/[id]/nilai`)
+  - Sesi kelas per pertemuan dengan topik, deskripsi, status `isCompleted`
+  - Bulk absensi per pertemuan: upsert Absensi (V1 model) tied by kelasId+date+TA
+  - Bulk nilai harian per pertemuan: upsert Nilai (type=HARIAN) untuk semua santri kelas
+  - Tombol "Tandai Semua Hadir" untuk aksi cepat di UI
+- **Kompetensi** (`/api/admin/kompetensi` + UI view)
+  - Capaian pembelajaran per mapel, 5 kategori: UMUM, KOGNITIF, PSIKOMOTORIK, AFEKTIF, SPIRITUAL
+  - Auto-generate kode kompetensi berdasarkan kode mapel
+  - Soft delete via `isActive=false`
+- **Rekap Perkembangan untuk Wali** (`/api/wali/perkembangan/[santriId]`)
+  - Persentase kehadiran 90 hari terakhir
+  - Nilai per mapel: rata-rata + trend (NAIK/TURUN/STABIL/BARU) berdasarkan split half harian
+  - Status tugas: submitted/graded/not submitted + overdue not submitted
+  - Pertemuan terbaru dengan absensi santri pada tanggal itu
+  - Materi terbaru yang dipublikasikan untuk kelas santri
+- **Permissions V2** ditambahkan ke seed script
+  - Modul baru: `materi`, `tugas`, `pengumpulan`, `pertemuan`, `kompetensi`
+  - Mapping: Guru = CRUD penuh V2 + read kompetensi; Wali = read-only semua V2
+- **Sample data V2** di seed.ts: 8 kompetensi, 5 materi, 4 tugas (dengan 4 pengumpulan sample per tugas), 9 pertemuan (3 per kelas × 3 mapel)
+- **UI/UX improvements global**
+  - Badge component diperluas: tambah variant `success` (green) & `warning` (amber) — sebelumnya hanya default/secondary/destructive/outline
+  - Sidebar grup baru "Pembelajaran" antara Akademik & Keuangan
+- **Build status**: Next.js production build sukses, semua 13 endpoint V2 terdaftar, 0 error/warning baru
+
+### Catatan Teknis
+- Schema V2 (Materi, Tugas, PengumpulanTugas, Pertemuan, Kompetensi) sudah ada di `prisma/schema.prisma` sejak V1.2 (forward-compatible design)
+- Verifikasi database: 5 tabel V2 sudah sinkron di production Supabase (verified via `scripts/verify-v2-schema.ts`)
+- Tidak ada migration breaking — semua V2 ditambah tanpa modifikasi tabel V1
+- 4 view baru: `materi-view.tsx`, `tugas-view.tsx`, `pertemuan-view.tsx`, `kompetensi-view.tsx`
+- File baru total: 13 API routes + 4 UI views = 17 file baru
+
+---
+
 ## Versi 1.4 — Production-Ready Adapters (28 Okt 2025)
 
 ### ✅ Done

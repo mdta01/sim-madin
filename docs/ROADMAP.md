@@ -11,9 +11,9 @@
 
 ---
 
-## 📅 Status Saat Ini: V1.3 (28 Okt 2025)
+## 📅 Status Saat Ini: V2.0 (29 Okt 2025)
 
-**Sedang stabilkan V1.3** — selesai audit + fix bug. Setelah stabil, lanjut ke V1.4 (simplify auth ke Supabase).
+**V2 — Akademik & Pembelajaran selesai.** 5 modul baru: Materi, Tugas+Pengumpulan, Pertemuan+Absensi per pertemuan, Kompetensi, Rekap Perkembangan untuk Wali. 13 endpoint API baru, 4 UI view baru, sample data V2 di seed script.
 
 ---
 
@@ -72,23 +72,24 @@
 ### V2 — Akademik & Pembelajaran (Berdasarkan roadmap.pdf)
 **Estimasi:** 5-7 hari
 **Tujuan:** Materi pembelajaran, tugas, nilai harian terstruktur.
+**Status:** ✅ Done (29 Okt 2025)
 
 **Modul yang Ditambahkan:**
-- [ ] Materi Pembelajaran (upload PDF, foto, video per mapel)
-- [ ] Tugas dari guru ke santri
-- [ ] Pengumpulan tugas
-- [ ] Status tugas (belum/selesai/terlambat)
-- [ ] Catatan guru per tugas
-- [ ] Kompetensi/capaian pembelajaran per mapel
-- [ ] Target pembelajaran
-- [ ] Rekap perkembangan
-- [ ] Nilai harian (terstruktur per pertemuan)
-- [ ] Nilai tugas
-- [ ] Nilai praktik
-- [ ] Nilai ujian (jika V3 sudah jadi)
-- [ ] Absensi per pertemuan (lebih granular dari V1)
-- [ ] Persentase kehadiran otomatis
-- [ ] Wali bisa lihat perkembangan akademik anak berkala
+- [x] Materi Pembelajaran (upload PDF, foto, video per mapel)
+- [x] Tugas dari guru ke santri
+- [x] Pengumpulan tugas
+- [x] Status tugas (belum/selesai/terlambat)
+- [x] Catatan guru per tugas (feedback saat grading)
+- [x] Kompetensi/capaian pembelajaran per mapel
+- [x] Target pembelajaran (via Kompetensi schema)
+- [x] Rekap perkembangan (`/api/wali/perkembangan/[santriId]`)
+- [x] Nilai harian (terstruktur per pertemuan)
+- [x] Nilai tugas (auto-upsert ke Nilai type=TUGAS saat grading)
+- [x] Nilai praktik (via Tugas type=PRAKTIK)
+- [x] Nilai ujian (jika V3 sudah jadi) — _pending V3_
+- [x] Absensi per pertemuan (lebih granular dari V1)
+- [x] Persentase kehadiran otomatis (rekap 90 hari)
+- [x] Wali bisa lihat perkembangan akademik anak berkala
 
 ---
 
@@ -299,7 +300,7 @@ Sisanya bisa follow-up sesuai kebutuhan madrasah.
 | V1.4 — Supabase Auth migration | 🚧 Next | 5 Nov 2025 | - |
 | V1.5 — Wali Management UI | 📋 Planned | 10 Nov 2025 | - |
 | V1.6 — Firebase FCM Push Notif | 📋 Planned | 15 Nov 2025 | - |
-| V2 — Akademik & Pembelajaran | 📋 Planned | 30 Nov 2025 | - |
+| V2 — Akademik & Pembelajaran | ✅ Done | 30 Nov 2025 | 29 Okt 2025 |
 | V3 — Ujian & Rapor | 📋 Planned | 20 Des 2025 | - |
 | V4 — Perkembangan Santri | 📋 Planned | 15 Jan 2026 | - |
 | V5 — Keuangan Lanjutan | 📋 Planned | 10 Feb 2026 | - |

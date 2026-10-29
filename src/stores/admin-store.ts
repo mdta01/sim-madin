@@ -14,6 +14,12 @@ export type AdminView =
   | "kelas"
   | "mapel"
   | "jadwal"
+  // V2 — Akademik & Pembelajaran
+  | "materi"
+  | "tugas"
+  | "pertemuan"
+  | "kompetensi"
+  // End V2
   | "absensi"
   | "nilai"
   | "rapor"
