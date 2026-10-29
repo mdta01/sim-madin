@@ -16,11 +16,10 @@ package = "@netlify/plugin-nextjs"
 publish = "/home/z/my-project/.next"
 publishOrigin = "config"
 commandOrigin = "config"
-command = "bun run db:generate && next build"
+command = "npx prisma generate && next build"
 
 [build.environment]
 NODE_VERSION = "20"
-NEXT_USE_RUNTALK = "true"
 
 [build.processing]
 

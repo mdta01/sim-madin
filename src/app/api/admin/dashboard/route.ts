@@ -4,136 +4,112 @@ import { requireApiAuth } from "@/lib/auth/guards"
 
 /**
  * GET /api/admin/dashboard
- * Mengembalikan statistik agregat untuk dashboard Super Admin.
- * Semua role authenticated bisa akses (dashboard adaptif per role).
+ * Optimized: 1 raw SQL for all counts + 5 min cache
  */
+
+let cachedData: { data: any; timestamp: number } | null = null
+const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
 export async function GET(req: NextRequest) {
   const guard = await requireApiAuth(req)
   if (guard.error) return guard.error
-  const session = guard.session
+
+  if (cachedData && Date.now() - cachedData.timestamp < CACHE_TTL) {
+    return NextResponse.json(cachedData.data)
+  }
 
   try {
-    const [
-      totalSantri,
-      totalGuru,
-      totalKelas,
-      totalWali,
-      totalMapel,
-      lunasTagihan,
-      cicilTagihan,
-      belumBayarTagihan,
-      recentPayments,
-      recentAnnouncements,
-    ] = await Promise.all([
-      db.santri.count({ where: { deletedAt: null, status: "AKTIF" } }),
-      db.guru.count({ where: { deletedAt: null, status: "AKTIF" } }),
-      db.kelas.count({ where: { deletedAt: null, isActive: true } }),
-      db.wali.count({ where: { deletedAt: null } }),
-      db.mataPelajaran.count({ where: { deletedAt: null, isActive: true } }),
-      db.tagihan.count({ where: { status: "LUNAS" } }),
-      db.tagihan.count({ where: { status: "CICIL" } }),
-      db.tagihan.count({ where: { status: "BELUM_BAYAR" } }),
+    // Single raw SQL for ALL counts (1 round-trip instead of 10+)
+    const counts = await db.$queryRaw`
+      SELECT
+        (SELECT COUNT(*) FROM "Santri" WHERE "deletedAt" IS NULL AND status = 'AKTIF') as "totalSantri",
+        (SELECT COUNT(*) FROM "Guru" WHERE "deletedAt" IS NULL AND status = 'AKTIF') as "totalGuru",
+        (SELECT COUNT(*) FROM "Kelas" WHERE "deletedAt" IS NULL AND "isActive" = true) as "totalKelas",
+        (SELECT COUNT(*) FROM "Wali" WHERE "deletedAt" IS NULL) as "totalWali",
+        (SELECT COUNT(*) FROM "MataPelajaran" WHERE "deletedAt" IS NULL AND "isActive" = true) as "totalMapel",
+        (SELECT COUNT(*) FROM "Tagihan" WHERE status = 'LUNAS') as "lunasTagihan",
+        (SELECT COUNT(*) FROM "Tagihan" WHERE status = 'CICIL') as "cicilTagihan",
+        (SELECT COUNT(*) FROM "Tagihan" WHERE status = 'BELUM_BAYAR') as "belumBayarTagihan",
+        (SELECT COALESCE(SUM(amount), 0) FROM "Payment" WHERE status = 'VERIFIED' AND "paymentDate" >= date_trunc('month', CURRENT_DATE)) as "monthIncome",
+        (SELECT COALESCE(SUM(amount - "paidAmount"), 0) FROM "Tagihan" WHERE status IN ('BELUM_BAYAR', 'CICIL')) as "outstanding"
+    `
+
+    const c = counts[0] as any
+
+    // Batch 2: Recent items (fast, small result sets)
+    const [recentPayments, recentAnnouncements, todayAbsensi, kelasCounts] = await Promise.all([
       db.payment.findMany({
         take: 5,
         orderBy: { paymentDate: "desc" },
-        include: { santri: { select: { name: true } } },
+        select: { id: true, invoiceNo: true, amount: true, paymentMethod: true, paymentDate: true, status: true, santri: { select: { name: true } } },
       }),
       db.announcement.findMany({
         take: 5,
         orderBy: { publishedAt: "desc" },
+        select: { id: true, title: true, priority: true, publishedAt: true, audience: true },
+      }),
+      db.absensi.findMany({
+        where: { date: { gte: new Date(new Date().setHours(0,0,0,0)), lte: new Date(new Date().setHours(23,59,59,999)) } },
+        select: { status: true },
+      }),
+      db.kelas.findMany({
+        where: { deletedAt: null, isActive: true },
+        select: { code: true, _count: { select: { santri: { where: { status: "AKTIF" } } } }, waliKelas: { select: { name: true } } },
+        orderBy: { sortOrder: "asc" },
       }),
     ])
 
-    const now = new Date()
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
+    // 6-month chart (1 query)
+    const sixMonthsAgo = new Date()
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5)
+    sixMonthsAgo.setDate(1)
+    const monthPayments = await db.$queryRaw`
+      SELECT EXTRACT(MONTH FROM "paymentDate") as month, EXTRACT(YEAR FROM "paymentDate") as year, SUM(amount) as total
+      FROM "Payment" WHERE status = 'VERIFIED' AND "paymentDate" >= ${sixMonthsAgo}
+      GROUP BY EXTRACT(MONTH FROM "paymentDate"), EXTRACT(YEAR FROM "paymentDate")
+    ` as any[]
 
-    const monthPayments = await db.payment.findMany({
-      where: { paymentDate: { gte: startOfMonth, lte: endOfMonth }, status: "VERIFIED" },
-      select: { amount: true, paymentDate: true, paymentMethod: true },
-    })
-    const totalIncomeThisMonth = monthPayments.reduce((sum, p) => sum + p.amount, 0)
-
-    const unpaidTagihan = await db.tagihan.findMany({
-      where: { status: { in: ["BELUM_BAYAR", "CICIL"] } },
-      select: { amount: true, paidAmount: true },
-    })
-    const totalOutstanding = unpaidTagihan.reduce((sum, t) => sum + (t.amount - t.paidAmount), 0)
-
-    // Chart pemasukan 6 bulan terakhir
-    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1)
-    const sixMonthPayments = await db.payment.findMany({
-      where: { paymentDate: { gte: sixMonthsAgo }, status: "VERIFIED" },
-      select: { amount: true, paymentDate: true },
-    })
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
     const incomeChart: { month: string; amount: number }[] = []
     for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const total = sixMonthPayments
-        .filter((p) => p.paymentDate.getMonth() === d.getMonth() && p.paymentDate.getFullYear() === d.getFullYear())
-        .reduce((sum, p) => sum + p.amount, 0)
-      incomeChart.push({ month: monthNames[d.getMonth()], amount: total })
+      const d = new Date()
+      d.setMonth(d.getMonth() - i)
+      const match = monthPayments.find(p => Number(p.month) === d.getMonth() + 1 && Number(p.year) === d.getFullYear())
+      incomeChart.push({ month: monthNames[d.getMonth()], amount: Number(match?.total || 0) })
     }
 
-    // Absensi hari ini
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
-    const todayAbsensi = await db.absensi.findMany({
-      where: { date: { gte: todayStart, lte: todayEnd } },
-      select: { status: true },
-    })
-    const absensiToday = {
-      hadir: todayAbsensi.filter((a) => a.status === "HADIR").length,
-      sakit: todayAbsensi.filter((a) => a.status === "SAKIT").length,
-      izin: todayAbsensi.filter((a) => a.status === "IZIN").length,
-      alfa: todayAbsensi.filter((a) => a.status === "ALFA").length,
-    }
-
-    const kelasWithCount = await db.kelas.findMany({
-      where: { deletedAt: null, isActive: true },
-      include: { _count: { select: { santri: { where: { status: "AKTIF" } } } }, waliKelas: { select: { name: true } } },
-      orderBy: { sortOrder: "asc" },
-    })
-    const santriPerKelas = kelasWithCount.map((k) => ({
-      name: k.code,
-      count: k._count.santri,
-      waliKelas: k.waliKelas?.name || "-",
-    }))
-
-    return NextResponse.json({
+    const responseData = {
       stats: {
-        totalSantri,
-        totalGuru,
-        totalKelas,
-        totalWali,
-        totalMapel,
-        tagihanLunas: lunasTagihan,
-        tagihanCicil: cicilTagihan,
-        tagihanBelumBayar: belumBayarTagihan,
-        totalIncomeThisMonth,
-        totalOutstanding,
+        totalSantri: Number(c.totalSantri),
+        totalGuru: Number(c.totalGuru),
+        totalKelas: Number(c.totalKelas),
+        totalWali: Number(c.totalWali),
+        totalMapel: Number(c.totalMapel),
+        tagihanLunas: Number(c.lunasTagihan),
+        tagihanCicil: Number(c.cicilTagihan),
+        tagihanBelumBayar: Number(c.belumBayarTagihan),
+        totalIncomeThisMonth: Number(c.monthIncome),
+        totalOutstanding: Number(c.outstanding),
       },
       incomeChart,
-      absensiToday,
-      santriPerKelas,
-      recentPayments: recentPayments.map((p) => ({
-        id: p.id,
-        invoiceNo: p.invoiceNo,
-        santriName: p.santri?.name || "-",
-        amount: p.amount,
-        method: p.paymentMethod,
-        date: p.paymentDate,
-        status: p.status,
+      absensiToday: {
+        hadir: todayAbsensi.filter(a => a.status === "HADIR").length,
+        sakit: todayAbsensi.filter(a => a.status === "SAKIT").length,
+        izin: todayAbsensi.filter(a => a.status === "IZIN").length,
+        alfa: todayAbsensi.filter(a => a.status === "ALFA").length,
+      },
+      santriPerKelas: kelasCounts.map(k => ({ name: k.code, count: k._count.santri, waliKelas: k.waliKelas?.name || "-" })),
+      recentPayments: recentPayments.map(p => ({
+        id: p.id, invoiceNo: p.invoiceNo, santriName: p.santri?.name || "-",
+        amount: p.amount, method: p.paymentMethod, date: p.paymentDate, status: p.status,
       })),
-      recentAnnouncements: recentAnnouncements.map((a) => ({
-        id: a.id,
-        title: a.title,
-        priority: a.priority,
-        publishedAt: a.publishedAt,
-        audience: a.audience,
+      recentAnnouncements: recentAnnouncements.map(a => ({
+        id: a.id, title: a.title, priority: a.priority, publishedAt: a.publishedAt, audience: a.audience,
       })),
-    })
+    }
+
+    cachedData = { data: responseData, timestamp: Date.now() }
+    return NextResponse.json(responseData)
   } catch (error) {
     console.error("[dashboard] error:", error)
     return NextResponse.json({ error: "Gagal memuat data dashboard" }, { status: 500 })

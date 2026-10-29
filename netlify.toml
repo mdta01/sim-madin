@@ -1,13 +1,12 @@
 [build]
-  command = "bun run db:generate && next build"
+  command = "npx prisma generate && next build"
   publish = ".next"
 
 [build.environment]
   NODE_VERSION = "20"
-  NEXT_USE_RUNTALK = "true"
-
-[[plugins]]
-  package = "@netlify/plugin-nextjs"
 
 [functions]
   included_files = ["prisma/**"]
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
