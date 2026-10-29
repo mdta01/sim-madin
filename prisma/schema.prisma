@@ -138,6 +138,8 @@ model TahunAjaran {
   tugas      Tugas[]
   pertemuan Pertemuan[]
   kompetensi Kompetensi[]
+  ujian     Ujian[]      // V3
+  bankSoal  BankSoal[]   // V3
 }
 
 model Semester {
@@ -159,6 +161,7 @@ model Semester {
   materi     Materi[]
   tugas      Tugas[]
   pertemuan Pertemuan[]
+  ujian     Ujian[]      // V3
 
   @@index([tahunAjaranId])
 }
@@ -188,6 +191,7 @@ model Kelas {
   materi     Materi[]
   tugas      Tugas[]
   pertemuan Pertemuan[]
+  ujian       Ujian[]      // V3
 
   @@index([level])
   @@index([isActive])
@@ -214,6 +218,9 @@ model MataPelajaran {
   tugas      Tugas[]
   pertemuan Pertemuan[]
   kompetensi Kompetensi[]
+  ujian       Ujian[]      // V3
+  bankSoal    BankSoal[]   // V3
+  raporMapel  RaporMapel[] // V3
 
   @@index([category])
   @@index([isActive])
@@ -341,6 +348,8 @@ model Santri {
   tagihan       Tagihan[]
   payments      Payment[]
   pengumpulanTugas PengumpulanTugas[]
+  ujianPeserta    UjianPeserta[]  // V3
+  ujianNilai      UjianNilai[]    // V3
 
   @@index([kelasId])
   @@index([waliId])
@@ -376,6 +385,8 @@ model Guru {
   tugas       Tugas[]
   pertemuan   Pertemuan[]
   nilai       Nilai[]
+  ujian       Ujian[]      // V3
+  bankSoal    BankSoal[]   // V3
 
   @@index([status])
   @@index([deletedAt])
@@ -491,6 +502,8 @@ model Rapor {
   semester     Semester    @relation(fields: [semesterId], references: [id])
   santri        Santri      @relation(fields: [santriId], references: [id], onDelete: Cascade)
   kelas         Kelas       @relation(fields: [kelasId], references: [id])
+  raporMapel    RaporMapel[]   // V3: detail per mapel
+  raporCatatan  RaporCatatan?  // V3: catatan wali kelas + prestasi + akhlak
 
   @@unique([santriId, semesterId, tahunAjaranId])
   @@index([kelasId, semesterId])
@@ -759,7 +772,177 @@ model Kompetensi {
   mapel         MataPelajaran @relation(fields: [mapelId], references: [id])
   tahunAjaran   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
   nilai         Nilai[]   // V2 #6: relasi balik ke Nilai
+  bankSoal      BankSoal[] // V3: soal yang link ke kompetensi ini
 
   @@index([mapelId])
   @@index([category])
+}
+
+// ============================================================================
+// 12. V3 — UJIAN & RAPOR TERINTEGRASI
+// ============================================================================
+// Modul ujian (UTS/UAS/Quiz) + bank soal + nilai ujian + rapor lengkap
+// dengan deskripsi capaian per mapel + catatan wali kelas + prestasi & akhlak.
+//
+// Filosofi:
+// - Manual flow dulu (guru input nilai ujian manual), online exam = V3.5
+// - Bank soal reusable across ujian (1 soal bisa dipakai banyak ujian)
+// - Nilai ujian otomatis feed ke rapor aggregation
+// - Rapor = generated dari Nilai (HARIAN+TUGAS+UTS+UAS+PRAKTIK) + deskripsi manual
+// ============================================================================
+
+model Ujian {
+  id            String   @id @default(cuid())
+  tahunAjaranId String
+  semesterId    String
+  mapelId       String
+  kelasId       String
+  guruId        String?
+  title         String   // "UTS Ganjil 2025/2026 - Fiqih Kelas 5"
+  type          String   // "UTS" | "UAS" | "QUIZ" | "MAKEUP"
+  description   String?
+  startTime     DateTime
+  endTime       DateTime
+  durationMnt   Int      @default(90) // durasi dalam menit
+  ruang         String?  // "Aula Utama" / "Kelas 5A"
+  pengawas      String?  // "Ust. Ahmad, Ust. Salim"
+  isPublished   Boolean  @default(false) // publish ke wali/santri
+  isOnline      Boolean  @default(false) // true = ujian online (mobile), false = offline (manual)
+  maxScore      Float    @default(100)
+  passingScore  Float?   // KKM untuk ujian ini (override mapel.kkm)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt     DateTime?
+
+  tahunAjaran   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
+  semester      Semester    @relation(fields: [semesterId], references: [id])
+  mapel         MataPelajaran @relation(fields: [mapelId], references: [id])
+  kelas         Kelas       @relation(fields: [kelasId], references: [id])
+  guru          Guru?       @relation(fields: [guruId], references: [id])
+  soalLinks     UjianSoal[]
+  peserta       UjianPeserta[]
+  nilai         UjianNilai[]
+
+  @@index([tahunAjaranId, semesterId])
+  @@index([kelasId, mapelId])
+  @@index([type, startTime])
+  @@index([deletedAt])
+}
+
+model BankSoal {
+  id            String   @id @default(cuid())
+  mapelId       String
+  tahunAjaranId String
+  guruId        String?
+  code          String   @unique // "FIK-001", "QUR-002"
+  type          String   // "PG" | "ISIAN" | "ESSAY" | "PRAKTIK"
+  question      String   // pertanyaan (bisa markdown / rich text)
+  options       String?  // JSON array untuk PG: ["A. ...", "B. ...", "C. ...", "D. ..."]
+  correctAnswer String?  // "A" untuk PG, "jawaban teks" untuk ISIAN, null untuk ESSAY/PRAKTIK (manual)
+  answerKey     String?  // kunci jawaban / rubric untuk ESSAY/PRAKTIK
+  bobot         Float    @default(1) // bobot soal (untuk scoring)
+  difficulty    String   @default("SEDANG") // "MUDAH" | "SEDANG" | "SULIT"
+  kompetensiId  String?  // link ke Kompetensi (V2 #6)
+  tags          String?  // comma-separated tags: "tajwid,nun mati,idgham"
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  mapel         MataPelajaran @relation(fields: [mapelId], references: [id])
+  tahunAjaran   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
+  guru          Guru?       @relation(fields: [guruId], references: [id])
+  kompetensi    Kompetensi? @relation(fields: [kompetensiId], references: [id])
+  ujianLinks    UjianSoal[]
+
+  @@index([mapelId, type])
+  @@index([difficulty])
+  @@index([kompetensiId])
+}
+
+model UjianSoal {
+  id            String   @id @default(cuid())
+  ujianId       String
+  bankSoalId    String
+  urutan        Int      // urutan soal di ujian ini
+  bobot         Float    @default(1) // bobot di ujian ini (override bank soal bobot)
+  createdAt     DateTime @default(now())
+
+  ujian         Ujian    @relation(fields: [ujianId], references: [id], onDelete: Cascade)
+  bankSoal      BankSoal @relation(fields: [bankSoalId], references: [id])
+
+  @@unique([ujianId, bankSoalId])
+  @@index([ujianId, urutan])
+}
+
+model UjianPeserta {
+  id            String   @id @default(cuid())
+  ujianId       String
+  santriId      String
+  ruang         String?  // override ujian.ruang untuk santri ini
+  pengawas      String?  // override ujian.pengawas
+  isHadir       Boolean  @default(true) // absen ujian
+  catatan       String?  // catatan khusus (terlambat, sakit, dll)
+  createdAt     DateTime @default(now())
+
+  ujian         Ujian    @relation(fields: [ujianId], references: [id], onDelete: Cascade)
+  santri        Santri   @relation(fields: [santriId], references: [id], onDelete: Cascade)
+
+  @@unique([ujianId, santriId])
+  @@index([santriId])
+}
+
+model UjianNilai {
+  id            String   @id @default(cuid())
+  ujianId       String
+  santriId      String
+  score         Float    // nilai akhir ujian (0-100 atau skala maxScore)
+  scoreUts      Float?   // optional: nilai terpisah UTS (jika composite)
+  scoreUas      Float?
+  scorePraktik  Float?
+  notes         String?  // catatan guru
+  gradedById    String?  // guru yang menilai
+  gradedAt      DateTime?
+  isAutoCorrect Boolean  @default(false) // true jika auto-correct dari jawaban online
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  ujian         Ujian    @relation(fields: [ujianId], references: [id], onDelete: Cascade)
+  santri        Santri   @relation(fields: [santriId], references: [id], onDelete: Cascade)
+
+  @@unique([ujianId, santriId])
+  @@index([santriId])
+}
+
+// V3: Rapor extensions — deskripsi per mapel + catatan wali kelas + prestasi
+model RaporMapel {
+  id            String   @id @default(cuid())
+  raporId       String
+  mapelId       String
+  nilaiAkhir    Float    // nilai akhir mapel (avg dari HARIAN+TUGAS+UTS+UAS+PRAKTIK with bobot)
+  predikat      String?  // "A" / "B" / "C" / "D" (optional)
+  deskripsi     String?  // deskripsi capaian: "Ananda Ahmad menunjukkan penguasaan..."
+  kkm          Float    @default(70)
+  isTuntas      Boolean  @default(false) // nilaiAkhir >= kkm
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  rapor         Rapor    @relation(fields: [raporId], references: [id], onDelete: Cascade)
+  mapel         MataPelajaran @relation(fields: [mapelId], references: [id])
+
+  @@unique([raporId, mapelId])
+  @@index([mapelId])
+}
+
+model RaporCatatan {
+  id            String   @id @default(cuid())
+  raporId       String   @unique // 1 rapor 1 catatan
+  catatanWaliKelas String? // catatan umum dari wali kelas
+  prestasi     String?  // prestasi santri: "Juara 1 Tahfidz"
+  akhlak       String?  // penilaian akhlak: "Sangat Baik"
+  kehadiran    String?  // rekap kehadiran: "Hadir 90%, Sakit 2, Izin 1, Alfa 0"
+  saran        String?  // saran pengembangan
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  rapor        Rapor    @relation(fields: [raporId], references: [id], onDelete: Cascade)
 }

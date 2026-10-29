@@ -186,6 +186,50 @@ export const KOMPETENSI_CATEGORIES = [
 ]
 
 // ============================================================================
+// V3 — UJIAN & RAPOR TERINTEGRASI
+// ============================================================================
+
+// Tipe Ujian
+export const UJIAN_TYPES = [
+  { value: "UTS", label: "Ujian Tengah Semester" },
+  { value: "UAS", label: "Ujian Akhir Semester" },
+  { value: "QUIZ", label: "Kuis" },
+  { value: "MAKEUP", label: "Ujian Susulan" },
+]
+
+// Tipe Soal Bank Soal
+export const SOAL_TYPES = [
+  { value: "PG", label: "Pilihan Ganda" },
+  { value: "ISIAN", label: "Isian Singkat" },
+  { value: "ESSAY", label: "Essay" },
+  { value: "PRAKTIK", label: "Praktik" },
+]
+
+// Tingkat Kesulitan Soal
+export const SOAL_DIFFICULTY = [
+  { value: "MUDAH", label: "Mudah" },
+  { value: "SEDANG", label: "Sedang" },
+  { value: "SULIT", label: "Sulit" },
+]
+
+// Predikat Nilai Rapor
+export const PREDIKAT_OPTIONS = [
+  { value: "A", label: "A (Sangat Baik)", min: 90 },
+  { value: "B", label: "B (Baik)", min: 80 },
+  { value: "C", label: "C (Cukup)", min: 70 },
+  { value: "D", label: "D (Kurang)", min: 60 },
+  { value: "E", label: "E (Kurang Sekali)", min: 0 },
+]
+
+// Helper: get predikat from score
+export function getPredikat(score: number): string {
+  for (const p of PREDIKAT_OPTIONS) {
+    if (score >= p.min) return p.value
+  }
+  return "E"
+}
+
+// ============================================================================
 // JENIS TAGIHAN
 // ============================================================================
 export const JENIS_TAGIHAN_CATEGORY = [
@@ -238,6 +282,10 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: "pertemuan", label: "Pertemuan & Absensi", icon: "CalendarCheck", group: "pembelajaran", description: "Sesi kelas + absensi + nilai per pertemuan" },
   { id: "kompetensi", label: "Kompetensi", icon: "Target", group: "pembelajaran", description: "Capaian pembelajaran per mapel" },
   // End V2
+  // V3 — Ujian & Rapor
+  { id: "bank-soal", label: "Bank Soal", icon: "Library", group: "pembelajaran", description: "Bank soal PG/isian/essay/praktik" },
+  { id: "ujian", label: "Ujian", icon: "FileQuestion", group: "pembelajaran", description: "Jadwal ujian + peserta + nilai" },
+  // End V3
   { id: "absensi", label: "Data Absensi", icon: "ClipboardCheck", group: "akademik" },
   { id: "nilai", label: "Data Nilai", icon: "Award", group: "akademik" },
   { id: "rapor", label: "Rapor", icon: "FileText", group: "akademik" },

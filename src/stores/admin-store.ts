@@ -19,7 +19,10 @@ export type AdminView =
   | "tugas"
   | "pertemuan"
   | "kompetensi"
-  // End V2
+  // V3 — Ujian & Rapor
+  | "bank-soal"
+  | "ujian"
+  // End V3
   | "absensi"
   | "nilai"
   | "rapor"

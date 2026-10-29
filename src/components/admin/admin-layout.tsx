@@ -26,6 +26,9 @@ import { MateriView } from "./views/materi-view"
 import { TugasView } from "./views/tugas-view"
 import { PertemuanView } from "./views/pertemuan-view"
 import { KompetensiView } from "./views/kompetensi-view"
+// V3 — Ujian & Rapor
+import { BankSoalView } from "./views/bank-soal-view"
+import { UjianView } from "./views/ujian-view"
 
 export function AdminLayout() {
   const currentView = useAdminStore((s) => s.currentView)
@@ -48,7 +51,10 @@ export function AdminLayout() {
       case "tugas": return <TugasView />
       case "pertemuan": return <PertemuanView />
       case "kompetensi": return <KompetensiView />
-      // End V2
+      // V3 — Ujian & Rapor
+      case "bank-soal": return <BankSoalView />
+      case "ujian": return <UjianView />
+      // End V3
       case "absensi": return <AbsensiView />
       case "nilai": return <NilaiView />
       case "rapor": return <RaporView />

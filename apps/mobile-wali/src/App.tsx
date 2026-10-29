@@ -49,7 +49,7 @@ interface SantriData {
 interface SantriDetail {
   santri: any; absensi: any[]; absensiSummary: any; nilai: any[];
   tagihan: any[]; tagihanSummary: any; payments: any[];
-  jadwal: any[]; announcements: any[]; activePeriod: any
+  jadwal: any[]; announcements: any[]; activePeriod: any; rapor?: any
 }
 // V2: Rekap perkembangan dari /api/wali/perkembangan/[santriId]
 interface PerkembanganV2 {

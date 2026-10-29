@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     let semId = semesterId
     if (!semId) {
       const sem = await db.semester.findFirst({ where: { isActive: true } })
-      semId = sem?.id
+      semId = sem?.id ?? null
     }
 
     const where: any = {}
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
         where: { kelasId: body.kelasId, status: "AKTIF", deletedAt: null },
       })
 
-      const results = []
+      const results: any[] = []
       for (const santri of santriList) {
         const absensiList = await db.absensi.findMany({
           where: { santriId: santri.id, tahunAjaranId: ta.id },
