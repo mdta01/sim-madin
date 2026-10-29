@@ -278,6 +278,10 @@ model Wali {
   santriLinks SantriWali[] // semua relasi wali-santri
   activations WaliActivation[]
   phoneChangeLogs PhoneChangeLog[]
+  // V6 — Komunikasi & Notifikasi
+  notifikasi     Notifikasi[]
+  chatRooms      ChatRoom[]
+  chatMessages   ChatMessage[]
 
   @@index([phone])
   @@index([activationStatus])
@@ -376,6 +380,9 @@ model Santri {
   // V3 Complete — Ujian Online
   ujianSesi          UjianSesi[]
   ujianJawaban       UjianJawaban[]
+  // V6 — Komunikasi & Notifikasi
+  notifikasi         Notifikasi[]
+  chatRooms          ChatRoom[]
 
   @@index([kelasId])
   @@index([waliId])
@@ -421,6 +428,9 @@ model Guru {
   catatanWaliKelas   CatatanWaliKelas[]
   // V5 — Keuangan Lanjutan
   honorGuru          HonorGuru[]
+  // V6 — Komunikasi & Notifikasi
+  chatRooms          ChatRoom[]
+  chatMessages       ChatMessage[]
 
   @@index([status])
   @@index([deletedAt])
@@ -1284,4 +1294,85 @@ model UjianJawaban {
 
   @@unique([sesiId, ujianSoalId])
   @@index([santriId])
+}
+
+// ============================================================================
+// 16. V6 — KOMUNIKASI & NOTIFIKASI
+// ============================================================================
+// Sesuai roadmap.pdf V6:
+// - Notifikasi otomatis (absensi ALFA, tagihan due, ujian besok, nilai updated, rapor published)
+// - Chat internal (Wali ↔ Wali Kelas, Wali ↔ Madrasah, Guru ↔ Wali)
+// - Riwayat komunikasi
+// ============================================================================
+
+// Notifikasi otomatis (system-generated, per wali/santri)
+model Notifikasi {
+  id            String   @id @default(cuid())
+  waliId        String?  // target wali (null = broadcast to all wali)
+  santriId      String?  // related santri (for context)
+  type          String   // "ABSENSI_ALFA" | "TAGIHAN_DUE" | "UJIAN_TOMORROW" | "NILAI_UPDATED" | "RAPOR_PUBLISHED" | "PENGUMUMAN" | "CUSTOM"
+  title         String
+  message       String
+  priority      String   @default("NORMAL") // "NORMAL" | "PENTING" | "URGENT"
+  isRead        Boolean  @default(false)
+  readAt        DateTime?
+  // Metadata for deep linking
+  entityType    String?  // "ABSENSI" | "TAGIHAN" | "UJIAN" | "NILAI" | "RAPOR" | "PENGUMUMAN"
+  entityId      String?  // ID of related entity
+  // Delivery channels
+  isEmailSent   Boolean  @default(false)
+  isPushSent    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  wali          Wali?    @relation(fields: [waliId], references: [id], onDelete: Cascade)
+  santri        Santri?  @relation(fields: [santriId], references: [id], onDelete: Cascade)
+
+  @@index([waliId, isRead])
+  @@index([type, createdAt])
+  @@index([createdAt])
+}
+
+// Chat Room (1-on-1 atau group kecil)
+model ChatRoom {
+  id            String   @id @default(cuid())
+  type          String   // "WALI_WALI_KELAS" | "WALI_MADRASAH" | "GURU_WALI"
+  waliId        String?  // wali yang terlibat (untuk WALI_WALI_KELAS / WALI_MADRASAH)
+  guruId        String?  // guru yang terlibat (untuk GURU_WALI / WALI_WALI_KELAS)
+  santriId      String?  // santri yang dibahas (context)
+  title         String?  // optional custom title
+  lastMessageAt DateTime? // auto-update saat message baru
+  lastMessage   String?  // preview pesan terakhir
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  wali          Wali?    @relation(fields: [waliId], references: [id], onDelete: Cascade)
+  guru          Guru?    @relation(fields: [guruId], references: [id], onDelete: Cascade)
+  santri        Santri?  @relation(fields: [santriId], references: [id], onDelete: Cascade)
+  messages      ChatMessage[]
+
+  @@index([waliId, isActive])
+  @@index([guruId, isActive])
+}
+
+// Chat Message (individual messages in chat room)
+model ChatMessage {
+  id            String   @id @default(cuid())
+  chatRoomId    String
+  senderType    String   // "WALI" | "GURU" | "ADMIN" — who sent the message
+  senderWaliId  String?  // if sender is wali
+  senderGuruId  String?  // if sender is guru
+  senderUserId  String?  // if sender is admin (User)
+  message       String
+  attachments   String?  // JSON array of file URLs
+  isRead        Boolean  @default(false)
+  readAt        DateTime?
+  createdAt     DateTime @default(now())
+
+  chatRoom      ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  senderWali    Wali?    @relation(fields: [senderWaliId], references: [id])
+  senderGuru    Guru?    @relation(fields: [senderGuruId], references: [id])
+
+  @@index([chatRoomId, createdAt])
+  @@index([senderType, isRead])
 }

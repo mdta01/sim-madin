@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { notifikasiBroadcast } from "@/lib/notifikasi/helper"
 
 export async function GET(req: NextRequest) {
   const guard = await requireApiPermission("pengumuman:read", req)
@@ -50,6 +51,11 @@ export async function POST(req: NextRequest) {
       },
     })
     await logAudit(session, "CREATE", "PENGUMUMAN", ann.id, { title: ann.title, audience: ann.audience }, req)
+    // V6: Auto-notify all wali about new pengumuman
+    if (ann.isPublished) {
+      await notifikasiBroadcast(ann.title, ann.content.slice(0, 200), ann.id)
+    }
+
     return NextResponse.json({ data: ann })
   } catch (error) {
     console.error("[pengumuman create] error:", error)

@@ -34,6 +34,9 @@ import { PerkembanganView } from "./views/perkembangan-view"
 // V5 — Keuangan Lanjutan
 import { KasView } from "./views/kas-view"
 import { HonorGuruView } from "./views/honor-guru-view"
+// V6 — Komunikasi & Notifikasi
+import { NotifikasiView } from "./views/notifikasi-view"
+import { ChatView } from "./views/chat-view"
 
 export function AdminLayout() {
   const currentView = useAdminStore((s) => s.currentView)
@@ -72,6 +75,10 @@ export function AdminLayout() {
       case "honor-guru": return <HonorGuruView />
       // End V5
       case "pengumuman": return <PengumumanView />
+      // V6 — Komunikasi & Notifikasi
+      case "notifikasi": return <NotifikasiView />
+      case "chat": return <ChatView />
+      // End V6
       case "users": return <UsersView />
       case "pengaturan": return <PengaturanView />
       case "profile": return <ProfileView />

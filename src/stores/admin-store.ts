@@ -35,6 +35,10 @@ export type AdminView =
   | "honor-guru"
   // End V5
   | "pengumuman"
+  // V6 — Komunikasi & Notifikasi
+  | "notifikasi"
+  | "chat"
+  // End V6
   | "users"
   | "pengaturan"
   | "profile"

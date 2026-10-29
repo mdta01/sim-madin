@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { notifikasiTugasBaru } from "@/lib/notifikasi/helper"
 import { validateGuruAccess } from "@/lib/auth/guru-access"
 
 /**
@@ -147,6 +148,17 @@ export async function POST(req: NextRequest) {
     await logAudit(session, "CREATE", "TUGAS", tugas.id, {
       title: tugas.title, mapel: tugas.mapel?.name, dueDate: tugas.dueDate,
     }, req)
+    // V6: Auto-notify all wali in kelas about new tugas
+    if (tugas.isPublished) {
+      const santriList = await db.santri.findMany({
+        where: { kelasId: body.kelasId, status: "AKTIF", deletedAt: null },
+        select: { id: true },
+      })
+      for (const s of santriList) {
+        await notifikasiTugasBaru(s.id, tugas.title, tugas.mapel?.name || "", tugas.id)
+      }
+    }
+
     return NextResponse.json({ data: tugas })
   } catch (error) {
     console.error("[tugas create] error:", error)

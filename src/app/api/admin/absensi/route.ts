@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { notifikasiAbsensiAlfa } from "@/lib/notifikasi/helper"
 
 export async function GET(req: NextRequest) {
   const guard = await requireApiPermission("absensi:read", req)
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
       const dStart = new Date(date.getFullYear(), date.getMonth(), date.getDate())
       const dEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59)
 
-      const results = []
+      const results: any[] = []
       for (const entry of body.entries) {
         const existing = await db.absensi.findFirst({
           where: { santriId: entry.santriId, date: { gte: dStart, lte: dEnd }, tahunAjaranId: ta.id },
@@ -97,6 +98,14 @@ export async function POST(req: NextRequest) {
       await logAudit(session, "CREATE", "ABSENSI", undefined, {
         count: results.length, kelasId: body.kelasId, date: dStart.toISOString(),
       }, req)
+
+      // V6: Auto-notify wali for ALFA absensi
+      for (const r of results) {
+        if (r.status === "ALFA") {
+          await notifikasiAbsensiAlfa(r.santriId, dStart)
+        }
+      }
+
       return NextResponse.json({ data: results, count: results.length })
     }
 

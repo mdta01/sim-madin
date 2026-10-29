@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { notifikasiNilaiUpdated } from "@/lib/notifikasi/helper"
 
 export async function GET(req: NextRequest) {
   const guard = await requireApiPermission("nilai:read", req)
@@ -133,6 +134,9 @@ export async function POST(req: NextRequest) {
         santri: nilai.santri.name, mapel: nilai.mapel.name, type: body.type, score: body.score,
       }, req)
     }
+    // V6: Auto-notify wali about nilai update
+    await notifikasiNilaiUpdated(body.santriId, nilai.mapel?.name || "", Number(body.score), nilai.id)
+
     return NextResponse.json({ data: nilai })
   } catch (error) {
     console.error("[nilai create] error:", error)

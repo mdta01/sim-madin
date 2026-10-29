@@ -373,6 +373,36 @@ export const JENIS_TAGIHAN_V5 = [
 ]
 
 // ============================================================================
+// V6 — KOMUNIKASI & NOTIFIKASI
+// ============================================================================
+
+// Tipe Notifikasi Otomatis (sesuai roadmap.pdf V6)
+export const NOTIFIKASI_TYPES = [
+  { value: "ABSENSI_ALFA", label: "Absensi Alfa", template: "Ananda {santriName} tidak hadir hari ini." },
+  { value: "TAGIHAN_DUE", label: "Tagihan Jatuh Tempo", template: "Tagihan {jenisTagihan} ananda {santriName} belum dibayar." },
+  { value: "UJIAN_TOMORROW", label: "Ujian Besok", template: "Besok terdapat ujian {mapel} ananda {santriName}." },
+  { value: "NILAI_UPDATED", label: "Nilai Diperbarui", template: "Nilai {mapel} ananda {santriName} telah diperbarui." },
+  { value: "RAPOR_PUBLISHED", label: "Rapor Tersedia", template: "Rapor semester ananda {santriName} telah tersedia." },
+  { value: "PENGUMUMAN", label: "Pengumuman Baru", template: "{title}" },
+  { value: "TUGAS_BARU", label: "Tugas Baru", template: "Tugas {tugasTitle} untuk ananda {santriName} telah diberikan." },
+  { value: "CUSTOM", label: "Custom", template: "" },
+]
+
+// Tipe Chat Room (sesuai roadmap.pdf V6: Wali ↔ Wali Kelas, Wali ↔ Madrasah, Guru ↔ Wali)
+export const CHAT_ROOM_TYPES = [
+  { value: "WALI_WALI_KELAS", label: "Wali ↔ Wali Kelas" },
+  { value: "WALI_MADRASAH", label: "Wali ↔ Madrasah" },
+  { value: "GURU_WALI", label: "Guru ↔ Wali" },
+]
+
+// Sender Type untuk Chat Message
+export const CHAT_SENDER_TYPES = [
+  { value: "WALI", label: "Wali" },
+  { value: "GURU", label: "Guru" },
+  { value: "ADMIN", label: "Admin/Madrasah" },
+]
+
+// ============================================================================
 // JENIS TAGIHAN
 // ============================================================================
 export const JENIS_TAGIHAN_CATEGORY = [
@@ -442,6 +472,10 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: "honor-guru", label: "Honor Guru", icon: "Banknote", group: "keuangan", description: "Honor mengajar, insentif, slip honor" },
   // End V5
   { id: "pengumuman", label: "Pengumuman", icon: "Megaphone", group: "sistem" },
+  // V6 — Komunikasi & Notifikasi
+  { id: "notifikasi", label: "Notifikasi", icon: "Bell", group: "sistem", description: "Notifikasi otomatis ke wali" },
+  { id: "chat", label: "Chat Internal", icon: "MessageCircle", group: "sistem", description: "Chat wali ↔ wali kelas ↔ madrasah" },
+  // End V6
   { id: "users", label: "User & Hak Akses", icon: "ShieldCheck", group: "sistem" },
   { id: "pengaturan", label: "Pengaturan Sistem", icon: "Settings", group: "sistem" },
 ]

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { notifikasiRaporPublished } from "@/lib/notifikasi/helper"
 import { NILAI_BOBAT } from "@/lib/constants"
 
 /**
@@ -117,6 +118,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const body = await req.json()
     const updated = await db.rapor.update({ where: { id }, data: body })
     await logAudit(session, "UPDATE", "RAPOR", id, { changes: Object.keys(body) }, req)
+
+    // V6: Auto-notify wali when rapor is published
+    if (body.published === true) {
+      const rapor = await db.rapor.findUnique({
+        where: { id },
+        include: { santri: { select: { id: true, name: true } }, semester: { select: { name: true } } },
+      })
+      if (rapor) {
+        await notifikasiRaporPublished(rapor.santriId, rapor.semester.name, id)
+      }
+    }
+
     return NextResponse.json({ data: updated })
   } catch (error) {
     console.error("[rapor update] error:", error)
