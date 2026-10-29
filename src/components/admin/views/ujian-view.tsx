@@ -207,7 +207,7 @@ function UjianForm({ open, onOpenChange, editing, onSuccess, mapelList, kelasLis
         durationMnt: 90,
         maxScore: 100,
         isPublished: false,
-        isOnline: false,
+        // V3: ujian selalu offline (manual input nilai)
         startTime: now.toISOString().slice(0, 16),
         endTime: later.toISOString().slice(0, 16),
       })

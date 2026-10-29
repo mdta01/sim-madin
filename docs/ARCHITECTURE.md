@@ -388,6 +388,7 @@ Detail lengkap di `docs/DEPLOYMENT.md`.
 
 ## 🔄 Update Log Arsitektur
 
+- **2025-10-29 V3.0**: Rapor Terintegrasi complete. **Klarifikasi penting: TIDAK ADA ujian online di V3** — ujian diinput manual (offline). Fokus V3 adalah **rapor komprehensif** yang mencakup semua kegiatan akademik santri (HARIAN 25% + TUGAS 15% + UTS 25% + UAS 25% + PRAKTIK 10%), plus catatan wali kelas, prestasi, akhlak, saran. 14 endpoint V3 baru, 7 tabel baru (Ujian, BankSoal, UjianSoal, UjianPeserta, UjianNilai, RaporMapel, RaporCatatan). Rapor generate auto-compute nilaiAkhir dengan bobot. PDF cetak via HTML printable. Online exam = future V3.5.
 - **2025-10-29 V2.0 FINAL**: Akademik & Pembelajaran complete. 19 endpoint V2, 4 UI views, mobile-wali + mobile-guru integration. Patterns baru: `validateGuruAccess()` (security per kelas+mapel), compute-on-read auto-complete, N+1 optimization (batch query + Map lookup), bulk operation pattern, schema migration via Supabase Management API. Schema migration: tambah `kompetensiId` di Nilai. Performance: 80% reduction DB calls di rekap wali.
 - **2025-10-28 V1.4**: Keputusan final — Supabase all + Firebase FCM only + R2. Simplify auth dari 3 sistem → 1 sistem (Supabase Auth).
 - **2025-10-27 V1.3**: Implementasi wali auth (WhatsApp+PIN) + NIS auto-generate. Tambah SantriWali pivot untuk multi-wali.

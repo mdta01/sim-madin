@@ -11,14 +11,16 @@
 
 ---
 
-## 📅 Status Saat Ini: V2.0 FINAL (29 Okt 2025)
+## 📅 Status Saat Ini: V3.0 (29 Okt 2025)
 
-**V2 — Akademik & Pembelajaran FINAL.** 15 task plan selesai (5 modul inti + 10 penyempurnaan dalam 3 batch: A=kritis, B=UX guru, C=UX wali/mobile). 19 endpoint API V2, 4 UI views, mobile-wali & mobile-guru integration, schema migration (kompetensiId di Nilai), performance optimization. **Siap lanjut ke V3.**
+**V3.0 — Rapor Terintegrasi selesai.** Fokus: **Rapor Komprehensif** yang mencakup semua kegiatan akademik santri (HARIAN + TUGAS + UTS + UAS + PRAKTIK dengan bobot). Ujian diinput manual (offline) — tidak ada ujian online di V3. 14 endpoint API V3 baru, 2 UI views (Bank Soal + Ujian dengan 4 tabs), rapor-view enhanced dengan breakdown + generate + catatan extensions + PDF cetak.
 
-**Yang belum ada di V2 (direncanakan di versi lain):**
-- 🔔 Sistem notifikasi (FCM push) → V1.6 atau V6
-- 📱 Build APK/IPA mobile apps → setelah V3 stabil
-- mobile-kepala/bendahara V2 integration → low priority (fokus keuangan)
+**Yang belum ada di V3 (future V3.5 atau V4):**
+- 📱 Ujian online (santri take exam via mobile dengan timer) → V3.5
+- 🤖 Auto-correction soal objektif (PG/ISIAN) → V3.5
+- 🔀 Random soal & random pilihan per santri → V3.5
+- 📄 Kartu ujian cetak PDF → low priority
+- 📱 Mobile integration V3 (mobile-wali tab Ujian, mobile-guru input nilai) → pending
 
 ---
 
@@ -120,25 +122,32 @@
 ---
 
 ### V3 — Ujian & Rapor Terintegrasi
-**Estimasi:** 7-10 hari
-**Tujuan:** Eliminasi pekerjaan manual Excel untuk ujian & rapor.
+**Estimasi:** 7-10 hari → Realisasi: 1 hari (29 Okt 2025)
+**Tujuan:** Rapor komprehensif yang eliminasi pekerjaan manual Excel.
+**Status:** ✅ Done (29 Okt 2025) — dengan klarifikasi: **tidak ada ujian online**, fokus pada rapor komprehensif.
 
-- [ ] Jadwal ujian
-- [ ] Peserta ujian
-- [ ] Kartu ujian (cetak)
-- [ ] Pengawas & ruang
-- [ ] Bank soal (PG, isian, essay, praktik)
-- [ ] Ujian online (mobile, dengan timer)
-- [ ] Random soal & random pilihan
-- [ ] Koreksi otomatis soal objektif
-- [ ] Nilai otomatis
-- [ ] Rekap nilai ujian
-- [ ] Nilai akhir
-- [ ] Ranking & leger
-- [ ] Rapor semester dengan deskripsi
-- [ ] Catatan wali kelas di rapor
-- [ ] Prestasi & akhlak di rapor
-- [ ] Cetak PDF rapor
+**Filosofi V3:**
+> V3 bukan tentang ujian online. V3 adalah tentang **rapor yang menggambarkan keseluruhan kegiatan akademik santri**. Ujian dilaksanakan secara nyata di kelas/madrasah, guru input nilai manual. Rapor yang dihasilkan mencakup: HARIAN (25%) + TUGAS (15%) + UTS (25%) + UAS (25%) + PRAKTIK (10%), plus catatan wali kelas, prestasi, akhlak, dan saran.
+
+**Modul yang Ditambahkan:**
+- [x] Bank Soal (PG/ISIAN/ESSAY/PRAKTIK) dengan difficulty + kompetensi link
+- [x] Ujian CRUD + assign soal + assign peserta (manual, **bukan online**)
+- [x] Pengawas & ruang ujian
+- [x] Nilai ujian input manual (guru input setelah ujian selesai)
+- [x] Auto-feed nilai ujian ke Nilai (type=UTS/UAS) untuk rapor aggregation
+- [x] Leger + ranking per kelas/mapel dengan predikat (A/B/C/D/E)
+- [x] Rapor generate otomatis (compute nilaiAkhir dengan bobot)
+- [x] RaporMapel: deskripsi capaian per mapel
+- [x] RaporCatatan: catatan wali kelas + prestasi + akhlak + kehadiran + saran
+- [x] Cetak PDF rapor (HTML printable → Ctrl+P)
+- [x] **Rapor komprehensif**: gabungan semua jenis nilai, bukan hanya ujian
+
+**Yang TIDAK ada di V3 (future V3.5):**
+- [ ] Ujian online (santri take exam via mobile) — **bukan scope V3**
+- [ ] Auto-correction soal objektif (PG/ISIAN)
+- [ ] Random soal & random pilihan per santri
+- [ ] Timer ujian online
+- [ ] Bank soal import/export Excel
 
 ---
 
@@ -327,7 +336,7 @@ Sisanya bisa follow-up sesuai kebutuhan madrasah.
 | V1.5 — Wali Management UI | 📋 Planned | 10 Nov 2025 | - |
 | V1.6 — Firebase FCM Push Notif | 📋 Planned | 15 Nov 2025 | - |
 | V2 — Akademik & Pembelajaran | ✅ Done FINAL | 30 Nov 2025 | 29 Okt 2025 |
-| V3 — Ujian & Rapor | 📋 Planned | 20 Des 2025 | - |
+| V3 — Ujian & Rapor | ✅ Done | 20 Des 2025 | 29 Okt 2025 |
 | V4 — Perkembangan Santri | 📋 Planned | 15 Jan 2026 | - |
 | V5 — Keuangan Lanjutan | 📋 Planned | 10 Feb 2026 | - |
 | V6-V14 | 📋 Long-term | Q1-Q2 2026 | - |

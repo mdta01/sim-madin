@@ -807,7 +807,8 @@ model Ujian {
   ruang         String?  // "Aula Utama" / "Kelas 5A"
   pengawas      String?  // "Ust. Ahmad, Ust. Salim"
   isPublished   Boolean  @default(false) // publish ke wali/santri
-  isOnline      Boolean  @default(false) // true = ujian online (mobile), false = offline (manual)
+  // V3 clarification: ujian SELALU offline (manual input).
+  // Online exam (santri take via mobile) = future V3.5, not implemented.
   maxScore      Float    @default(100)
   passingScore  Float?   // KKM untuk ujian ini (override mapel.kkm)
   createdAt      DateTime @default(now())

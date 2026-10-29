@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
         ruang: body.ruang || null,
         pengawas: body.pengawas || null,
         isPublished: body.isPublished || false,
-        isOnline: body.isOnline || false,
+        // V3: ujian SELALU offline (manual input). Online exam = future V3.5.
         maxScore: body.maxScore || 100,
         passingScore: body.passingScore || null,
       },

@@ -17,8 +17,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useToast } from "@/hooks/use-toast"
-import { formatDate } from "@/lib/constants"
-import { FileText, Plus, Wand2, ArrowLeft, Printer, Award, TrendingUp } from "lucide-react"
+import { formatDate, NILAI_BOBAT } from "@/lib/constants"
+import { FileText, Plus, Wand2, ArrowLeft, Printer, Award, TrendingUp, Loader2, Sparkles, Save, BookOpen } from "lucide-react"
 
 export function RaporView() {
   const selectedId = useAdminStore((s) => s.selectedEntityId)
@@ -170,6 +170,13 @@ function RaporDetail({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null)
   const [notes, setNotes] = useState("")
   const [saving, setSaving] = useState(false)
+  // V3: catatan extensions (prestasi, akhlak, saran)
+  const [catatanWaliKelas, setCatatanWaliKelas] = useState("")
+  const [prestasi, setPrestasi] = useState("")
+  const [akhlak, setAkhlak] = useState("")
+  const [saran, setSaran] = useState("")
+  const [savingCatatan, setSavingCatatan] = useState(false)
+  const [generating, setGenerating] = useState(false)
   const { toast } = useToast()
   const selectEntity = useAdminStore((s) => s.selectEntity)
 
@@ -177,9 +184,19 @@ function RaporDetail({ id }: { id: string }) {
     try {
       setLoading(true)
       setError(null)
-      const res = await apiGet(`/api/admin/rapor/${id}`)
-      setData(res.data)
-      setNotes(res.data.notes || "")
+      const [raporRes, catatanRes] = await Promise.all([
+        apiGet(`/api/admin/rapor/${id}`),
+        apiGet(`/api/admin/rapor/${id}/catatan`).catch(() => ({ data: null })),
+      ])
+      setData(raporRes.data)
+      setNotes(raporRes.data.notes || "")
+      // V3: load catatan extensions
+      if (catatanRes.data) {
+        setCatatanWaliKelas(catatanRes.data.catatanWaliKelas || "")
+        setPrestasi(catatanRes.data.prestasi || "")
+        setAkhlak(catatanRes.data.akhlak || "")
+        setSaran(catatanRes.data.saran || "")
+      }
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -212,6 +229,42 @@ function RaporDetail({ id }: { id: string }) {
       toast({ title: "Gagal", description: e.message, variant: "destructive" })
     } finally {
       setSaving(false)
+    }
+  }
+
+  // V3: Generate rapor (auto-compute nilaiAkhir per mapel from all nilai types)
+  const handleGenerate = async () => {
+    setGenerating(true)
+    try {
+      const res = await apiPost(`/api/admin/rapor/${id}/generate`, { overwrite: true })
+      toast({
+        title: "Rapor di-generate",
+        description: `${res.count} mapel diproses • Rata-rata: ${res.raporStats?.avgNilaiAkhir || 0} • Tuntas: ${res.raporStats?.tuntas || 0}/${res.count}`,
+      })
+      load()
+    } catch (e: any) {
+      toast({ title: "Gagal generate", description: e.message, variant: "destructive" })
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  // V3: Save catatan extensions (prestasi, akhlak, saran, catatanWaliKelas)
+  const handleSaveCatatan = async () => {
+    setSavingCatatan(true)
+    try {
+      await apiPut(`/api/admin/rapor/${id}/catatan`, {
+        catatanWaliKelas,
+        prestasi,
+        akhlak,
+        saran,
+      })
+      toast({ title: "Berhasil", description: "Catatan & pengembangan disimpan" })
+      load()
+    } catch (e: any) {
+      toast({ title: "Gagal", description: e.message, variant: "destructive" })
+    } finally {
+      setSavingCatatan(false)
     }
   }
 
@@ -274,21 +327,38 @@ function RaporDetail({ id }: { id: string }) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Rekap Nilai */}
+        {/* Rekap Nilai — V3: dengan breakdown per jenis + bobot */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="text-base">Rekap Nilai per Mata Pelajaran</CardTitle>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base">Rekap Nilai per Mata Pelajaran</CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Rapor komprehensif: gabungan HARIAN (25%) + TUGAS (15%) + UTS (25%) + UAS (25%) + PRAKTIK (10%)
+                </p>
+              </div>
+              <Button size="sm" variant="outline" onClick={handleGenerate} disabled={generating}>
+                {generating ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
+                Generate
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
-            {rekapNilai?.length === 0 ? <EmptyState title="Belum ada nilai" /> : (
+            {rekapNilai?.length === 0 ? (
+              <EmptyState
+                icon={<FileText className="h-5 w-5" />}
+                title="Belum ada nilai"
+                description="Belum ada nilai yang diinput. Pastikan guru sudah input nilai harian, tugas, dan ujian."
+              />
+            ) : (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Mata Pelajaran</TableHead>
-                      <TableHead>Detail Nilai</TableHead>
-                      <TableHead className="text-center">Rata-rata</TableHead>
-                      <TableHead className="text-center">KKM</TableHead>
+                      <TableHead>Detail Nilai per Jenis</TableHead>
+                      <TableHead className="text-center">Nilai Akhir</TableHead>
+                      <TableHead className="text-center">Predikat</TableHead>
                       <TableHead className="text-center">Status</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -298,15 +368,32 @@ function RaporDetail({ id }: { id: string }) {
                         <TableCell className="font-medium text-sm">{n.mapelName}</TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
-                            {n.detail.map((d: any) => (
-                              <Badge key={d.type} variant="outline" className="text-[10px] font-mono">{d.type}: {d.nilai}</Badge>
-                            ))}
+                            {n.detail.map((d: any) => {
+                              const bobot = NILAI_BOBAT[d.type] || 0
+                              const bobotPct = Math.round(bobot * 100)
+                              return (
+                                <Badge
+                                  key={d.type}
+                                  variant={d.type === "UTS" || d.type === "UAS" ? "default" : "outline"}
+                                  className="text-[10px] font-mono"
+                                  title={`Bobot: ${bobotPct}%`}
+                                >
+                                  {d.type}: {d.nilai}
+                                  {bobot > 0 && <span className="opacity-60 ml-0.5">({bobotPct}%)</span>}
+                                </Badge>
+                              )
+                            })}
                           </div>
+                          {n.detail.length === 0 && <span className="text-xs text-muted-foreground italic">Belum ada nilai</span>}
                         </TableCell>
-                        <TableCell className="text-center font-mono font-bold">{n.rataRata}</TableCell>
-                        <TableCell className="text-center text-xs">{n.kkm}</TableCell>
+                        <TableCell className="text-center font-mono font-bold text-base">{n.rataRata}</TableCell>
                         <TableCell className="text-center">
-                          {n.tuntas ? <Badge variant="default" className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Tuntas</Badge> : <Badge variant="destructive">Belum</Badge>}
+                          <Badge variant={n.rataRata >= 90 ? "default" : n.rataRata >= 70 ? "secondary" : "destructive"}>
+                            {n.rataRata >= 90 ? "A" : n.rataRata >= 80 ? "B" : n.rataRata >= 70 ? "C" : n.rataRata >= 60 ? "D" : "E"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {n.tuntas ? <Badge variant="success">Tuntas</Badge> : <Badge variant="destructive">Remedial</Badge>}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -317,24 +404,62 @@ function RaporDetail({ id }: { id: string }) {
           </CardContent>
         </Card>
 
-        {/* Catatan Wali Kelas */}
+        {/* Catatan Wali Kelas + V3 extensions */}
         <Card>
-          <CardHeader><CardTitle className="text-base">Catatan Wali Kelas</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Catatan & Pengembangan</CardTitle></CardHeader>
           <CardContent className="space-y-3">
-            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={6} placeholder="Catatan untuk wali santri..." />
-            <Button variant="outline" size="sm" className="w-full" onClick={handleSaveNotes} disabled={saving}>Simpan Catatan</Button>
+            <div className="space-y-1">
+              <Label className="text-xs">Catatan Wali Kelas</Label>
+              <Textarea value={catatanWaliKelas} onChange={(e) => setCatatanWaliKelas(e.target.value)} rows={3} placeholder="Catatan umum..." />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Prestasi</Label>
+              <Input value={prestasi} onChange={(e) => setPrestasi(e.target.value)} placeholder="Juara 1 Tahfidz" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Akhlak & Sikap</Label>
+              <Input value={akhlak} onChange={(e) => setAkhlak(e.target.value)} placeholder="Sangat Baik" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Saran Pengembangan</Label>
+              <Textarea value={saran} onChange={(e) => setSaran(e.target.value)} rows={2} placeholder="Saran untuk santri..." />
+            </div>
+            <Button variant="outline" size="sm" className="w-full" onClick={handleSaveCatatan} disabled={savingCatatan}>
+              <Save className="h-3.5 w-3.5 mr-1" /> Simpan Catatan
+            </Button>
           </CardContent>
         </Card>
       </div>
 
+      {/* V3: Komposisi Rapor Info Banner */}
+      <Card className="mt-4 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900">
+        <CardContent className="p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900 text-blue-600 shrink-0">
+              <BookOpen className="h-5 w-5" />
+            </div>
+            <div className="flex-1">
+              <p className="font-medium text-sm">Rapor Komprehensif — Bukan Hanya Hasil Ujian</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Rapor ini mencakup <strong>semua kegiatan akademik</strong> santri selama satu semester:
+                Nilai Harian dari pertemuan (25%), Tugas yang dikumpulkan (15%), UTS (25%), UAS (25%), dan Praktik (10%).
+                Ujian diinput manual oleh guru setelah ujian dilaksanakan secara nyata di kelas.
+                Catatan wali kelas, prestasi, dan akhlak melengkapi rapor untuk gambaran menyeluruh.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* V3: Cetak PDF — sekarang berfungsi */}
       <Card className="mt-4">
         <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-medium">Cetak Rapor</p>
-            <p className="text-xs text-muted-foreground">Format PDF siap cetak (Coming soon)</p>
+            <p className="text-sm font-medium">Cetak Rapor (PDF)</p>
+            <p className="text-xs text-muted-foreground">Format PDF siap cetak — buka di tab baru lalu Ctrl+P</p>
           </div>
-          <Button variant="outline" onClick={() => toast({ title: "Coming Soon", description: "Fitur cetak PDF akan tersedia di MVP V3" })}>
-            <Printer className="h-4 w-4 mr-1" /> Cetak PDF
+          <Button variant="outline" onClick={() => window.open(`/api/admin/rapor/${id}/pdf`, "_blank")}>
+            <Printer className="h-4 w-4 mr-1" /> Buka PDF
           </Button>
         </CardContent>
       </Card>

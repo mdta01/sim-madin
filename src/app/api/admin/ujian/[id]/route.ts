@@ -94,7 +94,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
         ruang: body.ruang ?? existing.ruang,
         pengawas: body.pengawas ?? existing.pengawas,
         isPublished: body.isPublished ?? existing.isPublished,
-        isOnline: body.isOnline ?? existing.isOnline,
+        // V3: ujian SELALU offline. No isOnline field.
         maxScore: body.maxScore ?? existing.maxScore,
         passingScore: body.passingScore !== undefined ? body.passingScore : existing.passingScore,
         mapelId: body.mapelId ?? existing.mapelId,
