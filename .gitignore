@@ -60,4 +60,4 @@ server.log
 /db/*.db-journal
 /uploads/*
 !/uploads/.gitkeep
-/.zscripts/dev.pid
+/.zscripts/dev.pid.netlify/
