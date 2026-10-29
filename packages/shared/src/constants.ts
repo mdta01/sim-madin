@@ -571,6 +571,9 @@ export const MENU_ITEMS: MenuItem[] = [
   // V11 — Dashboard & Analitik
   { id: "dashboard-kepala", label: "Dashboard Kepala", icon: "BarChart3", group: "main", description: "Analitik & grafik madrasah" },
   // End V11
+  // V12 — Sistem Terintegrasi Penuh
+  { id: "siklus", label: "Siklus Terintegrasi", icon: "Workflow", group: "main", description: "Hubungkan semua modul jadi satu siklus utuh" },
+  // End V12
   { id: "users", label: "User & Hak Akses", icon: "ShieldCheck", group: "sistem" },
   { id: "pengaturan", label: "Pengaturan Sistem", icon: "Settings", group: "sistem" },
 ]

@@ -51,6 +51,9 @@ export type AdminView =
   // V11 — Dashboard & Analitik
   | "dashboard-kepala"
   // End V11
+  // V12 — Sistem Terintegrasi Penuh
+  | "siklus"
+  // End V12
   | "users"
   | "pengaturan"
   | "profile"

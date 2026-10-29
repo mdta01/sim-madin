@@ -45,6 +45,8 @@ import { QrView } from "./views/qr-view"
 import { AlumniView } from "./views/alumni-view"
 // V11 — Dashboard & Analitik
 import { DashboardKepalaView } from "./views/dashboard-kepala-view"
+// V12 — Sistem Terintegrasi Penuh
+import { SiklusView } from "./views/siklus-view"
 
 export function AdminLayout() {
   const currentView = useAdminStore((s) => s.currentView)
@@ -99,6 +101,9 @@ export function AdminLayout() {
       // V11 — Dashboard & Analitik
       case "dashboard-kepala": return <DashboardKepalaView />
       // End V11
+      // V12 — Sistem Terintegrasi Penuh
+      case "siklus": return <SiklusView />
+      // End V12
       case "users": return <UsersView />
       case "pengaturan": return <PengaturanView />
       case "profile": return <ProfileView />
