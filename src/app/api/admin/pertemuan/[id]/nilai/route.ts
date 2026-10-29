@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateGuruAccess } from "@/lib/auth/guru-access"
 
 interface Params {
   params: Promise<{ id: string }>
@@ -87,6 +88,14 @@ export async function PUT(req: NextRequest, { params }: Params) {
       include: { kelas: true, mapel: true },
     })
     if (!pertemuan) return NextResponse.json({ error: "Pertemuan tidak ditemukan" }, { status: 404 })
+
+    // V2 security: validate GURU has teaching access to this kelas+mapel
+    const accessCheck = await validateGuruAccess(session, {
+      kelasId: pertemuan.kelasId,
+      mapelId: pertemuan.mapelId,
+      guruId: body.guruId || pertemuan.guruId,
+    }, req)
+    if (!accessCheck.allowed && accessCheck.error) return accessCheck.error
 
     if (!Array.isArray(body.entries)) {
       return NextResponse.json({ error: "entries harus array" }, { status: 400 })

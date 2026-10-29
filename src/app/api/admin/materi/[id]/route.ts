@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateGuruAccess } from "@/lib/auth/guru-access"
 
 interface Params {
   params: Promise<{ id: string }>
@@ -37,6 +38,14 @@ export async function PUT(req: NextRequest, { params }: Params) {
     const body = await req.json()
     const existing = await db.materi.findUnique({ where: { id, deletedAt: null } })
     if (!existing) return NextResponse.json({ error: "Materi tidak ditemukan" }, { status: 404 })
+
+    // V2 security: validate GURU has teaching access to this kelas+mapel
+    const accessCheck = await validateGuruAccess(session, {
+      kelasId: body.kelasId ?? existing.kelasId,
+      mapelId: body.mapelId ?? existing.mapelId,
+      guruId: body.guruId ?? existing.guruId,
+    }, req)
+    if (!accessCheck.allowed && accessCheck.error) return accessCheck.error
 
     const materi = await db.materi.update({
       where: { id },

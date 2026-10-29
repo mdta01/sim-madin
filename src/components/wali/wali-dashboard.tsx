@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { LoadingState, ErrorState, EmptyState } from "@/components/admin/shared/states"
 import { StatusBadge } from "@/components/admin/shared/status-badge"
 import { formatRupiah, formatDate, GENDER_LABELS, DAYS } from "@/lib/constants"
-import { LogOut, ArrowLeft, Phone, User, GraduationCap, Calendar, ClipboardCheck, BookOpen, Wallet, FileText, Megaphone, Clock } from "lucide-react"
+import { LogOut, ArrowLeft, Phone, User, GraduationCap, Calendar, ClipboardCheck, BookOpen, Wallet, FileText, Megaphone, Clock, ClipboardList, FolderOpen, TrendingUp, TrendingDown, Minus, Sparkles } from "lucide-react"
 
 interface WaliDashboardProps {
   token: string
@@ -23,6 +23,7 @@ export function WaliDashboard({ token, wali, initialSantriList, onLogout }: Wali
   const [santriList, setSantriList] = useState(initialSantriList)
   const [selectedSantriId, setSelectedSantriId] = useState<string | null>(null)
   const [santriDetail, setSantriDetail] = useState<any>(null)
+  const [perkembangan, setPerkembangan] = useState<any>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [errorDetail, setErrorDetail] = useState<string | null>(null)
 
@@ -30,15 +31,25 @@ export function WaliDashboard({ token, wali, initialSantriList, onLogout }: Wali
     setLoadingDetail(true)
     setErrorDetail(null)
     try {
-      const res = await fetch(`/api/wali/santri/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setErrorDetail(data.error || data.message || "Gagal memuat data")
+      // Fetch both V1 detail and V2 perkembangan rekap in parallel
+      const [detailRes, perkembanganRes] = await Promise.all([
+        fetch(`/api/wali/santri/${id}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`/api/wali/perkembangan/${id}`, { headers: { Authorization: `Bearer ${token}` } }),
+      ])
+      const detailData = await detailRes.json()
+      if (!detailRes.ok) {
+        setErrorDetail(detailData.error || detailData.message || "Gagal memuat data")
         return
       }
-      setSantriDetail(data.data)
+      setSantriDetail(detailData.data)
+
+      // V2 — rekap perkembangan (best-effort: don't fail whole UI if endpoint errors)
+      if (perkembanganRes.ok) {
+        const perkData = await perkembanganRes.json()
+        setPerkembangan(perkData.data)
+      } else {
+        setPerkembangan(null)
+      }
     } catch (e: any) {
       setErrorDetail(e.message)
     } finally {
@@ -51,6 +62,7 @@ export function WaliDashboard({ token, wali, initialSantriList, onLogout }: Wali
       loadSantriDetail(selectedSantriId)
     } else {
       setSantriDetail(null)
+      setPerkembangan(null)
     }
   }, [selectedSantriId, loadSantriDetail])
 
@@ -69,6 +81,7 @@ export function WaliDashboard({ token, wali, initialSantriList, onLogout }: Wali
         rapor={santriDetail.rapor}
         jadwal={santriDetail.jadwal}
         announcements={santriDetail.announcements}
+        perkembangan={perkembangan}
         waliName={wali.name}
         onBack={() => setSelectedSantriId(null)}
         onLogout={onLogout}
@@ -176,12 +189,16 @@ export function WaliDashboard({ token, wali, initialSantriList, onLogout }: Wali
 
 function WaliSantriDetail({
   santri, activePeriod, absensi, absensiSummary, nilai, tagihan, tagihanSummary,
-  payments, rapor, jadwal, announcements, waliName, onBack, onLogout, loading, error,
+  payments, rapor, jadwal, announcements, perkembangan, waliName, onBack, onLogout, loading, error,
 }: any) {
   const [tab, setTab] = useState("profile")
 
   if (loading) return <LoadingState className="py-20" />
   if (error) return <ErrorState message={error} onRetry={onBack} />
+
+  // V2 quick stats: prefer perkembangan.absensiSummary (90 days) if available
+  const absensiStats = perkembangan?.absensiSummary || absensiSummary || { hadir: 0, sakit: 0, izin: 0, alfa: 0, persentaseHadir: 0 }
+  const tugasStats = perkembangan?.tugasSummary || null
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-background to-amber-50 dark:from-emerald-950/30 dark:via-background dark:to-amber-950/30">
@@ -224,26 +241,60 @@ function WaliSantriDetail({
           </CardContent>
         </Card>
 
-        {/* Quick Stats */}
+        {/* V2 Quick Stats — persentase kehadiran + tugas status */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-          <Card><CardContent className="p-3 text-center">
+          <Card className="border-emerald-200 dark:border-emerald-900"><CardContent className="p-3 text-center">
             <ClipboardCheck className="h-5 w-5 mx-auto mb-1 text-emerald-600" />
-            <p className="text-[10px] text-muted-foreground">Hadir (30 hari)</p>
-            <p className="font-bold text-emerald-600">{absensiSummary.hadir}</p>
+            <p className="text-[10px] text-muted-foreground">Kehadiran 90 hari</p>
+            <p className="font-bold text-emerald-600 text-lg">{absensiStats.persentaseHadir ?? 0}%</p>
           </CardContent></Card>
           <Card><CardContent className="p-3 text-center">
-            <p className="text-[10px] text-muted-foreground">Sakit</p>
-            <p className="font-bold text-amber-600">{absensiSummary.sakit}</p>
+            <p className="text-[10px] text-muted-foreground">Hadir</p>
+            <p className="font-bold text-emerald-600 text-lg">{absensiStats.hadir || 0}</p>
+            <p className="text-[9px] text-muted-foreground">hari</p>
           </CardContent></Card>
           <Card><CardContent className="p-3 text-center">
-            <p className="text-[10px] text-muted-foreground">Izin</p>
-            <p className="font-bold text-blue-600">{absensiSummary.izin}</p>
+            <p className="text-[10px] text-muted-foreground">Sakit/Izin</p>
+            <p className="font-bold text-amber-600 text-lg">{(absensiStats.sakit || 0) + (absensiStats.izin || 0)}</p>
           </CardContent></Card>
           <Card><CardContent className="p-3 text-center">
             <p className="text-[10px] text-muted-foreground">Alfa</p>
-            <p className="font-bold text-red-600">{absensiSummary.alfa}</p>
+            <p className="font-bold text-red-600 text-lg">{absensiStats.alfa || 0}</p>
           </CardContent></Card>
         </div>
+
+        {/* V2 tugas summary mini-card */}
+        {tugasStats && (
+          <Card className="mb-4 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900">
+            <CardContent className="p-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <ClipboardList className="h-4 w-4 text-blue-600" />
+                  <p className="text-sm font-medium">Status Tugas</p>
+                </div>
+                <div className="flex items-center gap-3 text-xs flex-wrap">
+                  <span className="flex items-center gap-1">
+                    <span className="font-bold text-blue-600">{tugasStats.submitted}</span>
+                    <span className="text-muted-foreground">dikumpulkan</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="font-bold text-emerald-600">{tugasStats.graded}</span>
+                    <span className="text-muted-foreground">dinilai</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="font-bold text-orange-600">{tugasStats.notSubmitted}</span>
+                    <span className="text-muted-foreground">belum</span>
+                  </span>
+                  {tugasStats.overdueNotSubmitted > 0 && (
+                    <Badge variant="destructive" className="text-[10px]">
+                      {tugasStats.overdueNotSubmitted} lewat tenggat
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 mb-4 h-auto">
@@ -251,7 +302,7 @@ function WaliSantriDetail({
             <TabsTrigger value="jadwal" className="text-xs"><Calendar className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Jadwal</span></TabsTrigger>
             <TabsTrigger value="absensi" className="text-xs"><ClipboardCheck className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Absensi</span></TabsTrigger>
             <TabsTrigger value="nilai" className="text-xs"><BookOpen className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Nilai</span></TabsTrigger>
-            <TabsTrigger value="tagihan" className="text-xs"><Wallet className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Tagihan</span></TabsTrigger>
+            <TabsTrigger value="tugas" className="text-xs"><ClipboardList className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Tugas</span></TabsTrigger>
             <TabsTrigger value="info" className="text-xs"><Megaphone className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Info</span></TabsTrigger>
           </TabsList>
 
@@ -319,8 +370,46 @@ function WaliSantriDetail({
           </TabsContent>
 
           <TabsContent value="nilai">
+            {/* V2: Trend nilai per mapel — tampilkan hanya jika ada rekap perkembangan */}
+            {perkembangan?.nilaiPerMapel?.length > 0 && (
+              <Card className="mb-3">
+                <CardHeader><CardTitle className="text-base flex items-center gap-2"><Sparkles className="h-4 w-4 text-amber-500" /> Rekap Nilai per Mapel</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {perkembangan.nilaiPerMapel.map((npm: any, i: number) => {
+                      const trendIcon = npm.trend === "NAIK" ? <TrendingUp className="h-3.5 w-3.5 text-emerald-600" />
+                        : npm.trend === "TURUN" ? <TrendingDown className="h-3.5 w-3.5 text-red-600" />
+                        : npm.trend === "STABIL" ? <Minus className="h-3.5 w-3.5 text-muted-foreground" />
+                        : null
+                      const trendLabel = npm.trend === "NAIK" ? "Naik" : npm.trend === "TURUN" ? "Turun" : npm.trend === "STABIL" ? "Stabil" : "Baru"
+                      const trendColor = npm.trend === "NAIK" ? "text-emerald-600" : npm.trend === "TURUN" ? "text-red-600" : "text-muted-foreground"
+                      return (
+                        <div key={i} className="flex items-center justify-between p-2 rounded border">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{npm.mapel?.name}</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {Object.entries(npm.nilaiByType).map(([type, arr]: any) => `${type}: ${arr.length}`).join(" • ")}
+                            </p>
+                          </div>
+                          <div className="text-right flex items-center gap-2">
+                            {trendIcon && (
+                              <span className={`flex items-center gap-1 text-xs ${trendColor}`}>
+                                {trendIcon} {trendLabel}
+                              </span>
+                            )}
+                            <Badge variant={npm.rataRata && npm.rataRata >= (npm.mapel?.kkm || 70) ? "success" : "destructive"}>
+                              {npm.rataRata ?? "-"}
+                            </Badge>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
             <Card>
-              <CardHeader><CardTitle className="text-base flex items-center gap-2"><BookOpen className="h-4 w-4" /> Daftar Nilai</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base flex items-center gap-2"><BookOpen className="h-4 w-4" /> Daftar Nilai Terbaru</CardTitle></CardHeader>
               <CardContent>
                 {nilai.length === 0 ? <EmptyState title="Belum ada nilai" /> : (
                   <div className="overflow-x-auto">
@@ -344,6 +433,104 @@ function WaliSantriDetail({
                         ))}
                       </TableBody>
                     </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* V2: Tugas Tab */}
+          <TabsContent value="tugas">
+            {/* V2: Materi terbaru published untuk kelas santri */}
+            {perkembangan?.materiTerbaru?.length > 0 && (
+              <Card className="mb-3">
+                <CardHeader><CardTitle className="text-base flex items-center gap-2"><FolderOpen className="h-4 w-4 text-purple-600" /> Materi Pembelajaran Terbaru</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {perkembangan.materiTerbaru.map((m: any) => (
+                      <div key={m.id} className="flex items-center gap-3 p-2 rounded border">
+                        <Badge variant="outline" className="text-[10px]">{m.type}</Badge>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{m.title}</p>
+                          <p className="text-[10px] text-muted-foreground">{m.mapel} • {formatDate(m.publishedAt)}</p>
+                        </div>
+                        {(m.fileUrl || m.externalUrl) && (
+                          <a
+                            href={m.externalUrl || m.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-primary hover:underline shrink-0"
+                          >
+                            Buka
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* V2: Pertemuan terbaru dengan absensi santri */}
+            {perkembangan?.pertemuanTerbaru?.length > 0 && (
+              <Card className="mb-3">
+                <CardHeader><CardTitle className="text-base flex items-center gap-2"><Calendar className="h-4 w-4 text-blue-600" /> Pertemuan Terbaru</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="space-y-1.5">
+                    {perkembangan.pertemuanTerbaru.map((p: any) => (
+                      <div key={p.id} className="flex items-center justify-between p-2 rounded border text-sm">
+                        <div className="flex-1 min-w-0">
+                          <p className="truncate"><span className="font-medium">#{p.pertemuanKe}</span> {p.mapel}</p>
+                          <p className="text-[10px] text-muted-foreground">{formatDate(p.date)} {p.topic && `• ${p.topic}`}</p>
+                        </div>
+                        {p.santriAbsensi && p.santriAbsensi !== "BELUM" ? (
+                          <StatusBadge status={p.santriAbsensi} />
+                        ) : (
+                          <Badge variant="outline" className="text-[10px]">Belum Absen</Badge>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* V2: Daftar tugas dengan submission status */}
+            <Card>
+              <CardHeader><CardTitle className="text-base flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Daftar Tugas</CardTitle></CardHeader>
+              <CardContent>
+                {!perkembangan?.tugasTerbaru || perkembangan.tugasTerbaru.length === 0 ? <EmptyState title="Belum ada tugas" /> : (
+                  <div className="space-y-2">
+                    {perkembangan.tugasTerbaru.map((t: any) => {
+                      const sub = t.submission
+                      const isOverdue = !sub && new Date(t.dueDate) < new Date()
+                      const isGraded = sub?.status === "GRADED"
+                      const isLate = sub?.status === "LATE"
+                      return (
+                        <div key={t.id} className={`p-3 rounded border ${isOverdue ? "border-red-300 bg-red-50 dark:bg-red-950/20" : ""}`}>
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm">{t.title}</p>
+                              <p className="text-[10px] text-muted-foreground">{t.mapel} • Tipe: {t.type}</p>
+                            </div>
+                            {!sub && (
+                              <Badge variant={isOverdue ? "destructive" : "outline"} className="text-[10px]">
+                                {isOverdue ? "Lewat Tenggat" : "Belum Kumpul"}
+                              </Badge>
+                            )}
+                            {sub && (
+                              <Badge variant={isGraded ? "success" : isLate ? "warning" : "secondary"} className="text-[10px]">
+                                {isGraded ? `Dinilai: ${sub.score}` : isLate ? "Terlambat" : "Dikumpulkan"}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-muted-foreground">
+                            Tenggat: {formatDate(t.dueDate, true)}
+                            {sub?.feedback && <span className="block mt-1 italic">Feedback: {sub.feedback}</span>}
+                          </p>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </CardContent>

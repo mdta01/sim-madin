@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateGuruAccess } from "@/lib/auth/guru-access"
 
 /**
  * GET /api/admin/materi
@@ -79,13 +80,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Tahun ajaran/semester aktif tidak ditemukan" }, { status: 400 })
     }
 
+    // V2 security: validate GURU has teaching access to this kelas+mapel
+    const accessCheck = await validateGuruAccess(session, {
+      kelasId: body.kelasId,
+      mapelId: body.mapelId,
+      guruId: body.guruId,
+    }, req)
+    if (!accessCheck.allowed && accessCheck.error) return accessCheck.error
+
+    // Auto-bind guruId to current guru if not provided (for GURU role)
+    let guruId = body.guruId
+    if (!guruId && accessCheck.guru) guruId = accessCheck.guru.id
+
     const materi = await db.materi.create({
       data: {
         tahunAjaranId,
         semesterId,
         mapelId: body.mapelId,
         kelasId: body.kelasId || null,
-        guruId: body.guruId || null,
+        guruId,
         title: body.title,
         description: body.description || null,
         type: body.type || "DOKUMEN",

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateGuruAccess } from "@/lib/auth/guru-access"
 
 /**
  * GET /api/admin/kompetensi
@@ -63,6 +64,12 @@ export async function POST(req: NextRequest) {
 
     const existing = await db.kompetensi.findFirst({ where: { code: body.code } })
     if (existing) return NextResponse.json({ error: "Kode kompetensi sudah ada" }, { status: 400 })
+
+    // V2 security: validate GURU has teaching access to this mapel
+    const accessCheck = await validateGuruAccess(session, {
+      mapelId: body.mapelId,
+    }, req)
+    if (!accessCheck.allowed && accessCheck.error) return accessCheck.error
 
     const kompetensi = await db.kompetensi.create({
       data: {

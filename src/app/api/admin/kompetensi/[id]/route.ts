@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateGuruAccess } from "@/lib/auth/guru-access"
 
 interface Params {
   params: Promise<{ id: string }>
@@ -32,6 +33,12 @@ export async function PUT(req: NextRequest, { params }: Params) {
     const body = await req.json()
     const existing = await db.kompetensi.findUnique({ where: { id } })
     if (!existing) return NextResponse.json({ error: "Kompetensi tidak ditemukan" }, { status: 404 })
+
+    // V2 security: validate GURU has teaching access to this mapel
+    const accessCheck = await validateGuruAccess(session, {
+      mapelId: body.mapelId ?? existing.mapelId,
+    }, req)
+    if (!accessCheck.allowed && accessCheck.error) return accessCheck.error
 
     const kompetensi = await db.kompetensi.update({
       where: { id },

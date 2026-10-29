@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateGuruAccess } from "@/lib/auth/guru-access"
 
 /**
  * GET /api/admin/tugas
@@ -101,13 +102,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Tahun ajaran/semester aktif tidak ditemukan" }, { status: 400 })
     }
 
+    // V2 security: validate GURU has teaching access
+    const accessCheck = await validateGuruAccess(session, {
+      kelasId: body.kelasId,
+      mapelId: body.mapelId,
+      guruId: body.guruId,
+    }, req)
+    if (!accessCheck.allowed && accessCheck.error) return accessCheck.error
+
+    // Auto-bind guruId
+    let guruId = body.guruId
+    if (!guruId && accessCheck.guru) guruId = accessCheck.guru.id
+
+    // Validate dueDate is in the future for new tugas
+    if (body.dueDate && new Date(body.dueDate) < new Date()) {
+      return NextResponse.json(
+        { error: "Tenggat waktu tugas harus di masa depan" },
+        { status: 400 },
+      )
+    }
+
     const tugas = await db.tugas.create({
       data: {
         tahunAjaranId,
         semesterId,
         mapelId: body.mapelId,
         kelasId: body.kelasId,
-        guruId: body.guruId || null,
+        guruId,
         materiId: body.materiId || null,
         title: body.title,
         description: body.description || null,

@@ -10,7 +10,14 @@ interface Params {
  * PUT /api/admin/pengumpulan/[id]
  * Grade a submission (or update status/feedback).
  * Body: { score?, feedback?, status? }
- * Side effect: if score is set, status becomes "GRADED"; creates Nilai record with type "TUGAS".
+ *
+ * Side effect: if score is set, status becomes "GRADED" and we recompute the
+ * aggregated Nilai (type=TUGAS) by averaging ALL graded submissions for this
+ * santri+mapel+semester — instead of overwriting the value with the latest
+ * single tugas score (which was a data-loss bug).
+ *
+ * Score normalization: each submission's score is converted to 0-100 scale
+ * (percentage of tugas.maxScore) so multi-tugas averaging is consistent.
  */
 export async function PUT(req: NextRequest, { params }: Params) {
   const guard = await requireApiPermission("pengumpulan:update", req)
@@ -26,8 +33,22 @@ export async function PUT(req: NextRequest, { params }: Params) {
     })
     if (!existing) return NextResponse.json({ error: "Pengumpulan tidak ditemukan" }, { status: 404 })
 
+    // Validate score range
+    if (body.score !== undefined && body.score !== null && body.score !== "") {
+      const scoreNum = Number(body.score)
+      if (Number.isNaN(scoreNum)) {
+        return NextResponse.json({ error: "Skor harus angka" }, { status: 400 })
+      }
+      if (scoreNum < 0 || (existing.tugas.maxScore && scoreNum > existing.tugas.maxScore)) {
+        return NextResponse.json(
+          { error: `Skor harus antara 0 dan ${existing.tugas.maxScore}` },
+          { status: 400 },
+        )
+      }
+    }
+
     const updateData: any = {}
-    if (body.score !== undefined && body.score !== null) {
+    if (body.score !== undefined && body.score !== null && body.score !== "") {
       updateData.score = Number(body.score)
       updateData.status = "GRADED"
       updateData.gradedAt = new Date()
@@ -45,16 +66,40 @@ export async function PUT(req: NextRequest, { params }: Params) {
       },
     })
 
-    // If graded, upsert a Nilai record with type "TUGAS" so it appears in rapor aggregation
-    if (body.score !== undefined && body.score !== null && updated.tugas) {
+    // If graded, recompute aggregated Nilai type=TUGAS as AVERAGE of all graded submissions
+    if (body.score !== undefined && body.score !== null && body.score !== "" && updated.tugas) {
       const ta = await db.tahunAjaran.findFirst({ where: { isActive: true } })
       const sem = await db.semester.findFirst({ where: { isActive: true } })
       if (ta && sem) {
-        // Score normalization: store as percentage of maxScore so KKM comparison is consistent
-        const normalizedScore = updated.tugas.maxScore
-          ? (Number(body.score) / updated.tugas.maxScore) * 100
-          : Number(body.score)
+        // Fetch ALL graded submissions for this santri + this mapel (across all tugas in the mapel)
+        const allGraded = await db.pengumpulanTugas.findMany({
+          where: {
+            santriId: updated.santriId,
+            status: "GRADED",
+            score: { not: null },
+            tugas: {
+              mapelId: updated.tugas.mapelId,
+              tahunAjaranId: ta.id,
+              semesterId: sem.id,
+              deletedAt: null,
+            },
+          },
+          include: {
+            tugas: { select: { id: true, title: true, maxScore: true } },
+          },
+        })
 
+        // Normalize each submission's score to 0-100 scale and average
+        const normalizedScores = allGraded.map((s) => {
+          const max = s.tugas.maxScore || 100
+          return (s.score! / max) * 100
+        })
+        const avgScore = normalizedScores.length > 0
+          ? normalizedScores.reduce((sum, n) => sum + n, 0) / normalizedScores.length
+          : 0
+        const roundedAvg = Math.round(avgScore * 10) / 10 // 1 decimal precision
+
+        // Upsert the aggregated Nilai type=TUGAS
         const existingNilai = await db.nilai.findFirst({
           where: {
             santriId: updated.santriId,
@@ -65,13 +110,16 @@ export async function PUT(req: NextRequest, { params }: Params) {
           },
         })
 
+        const tugasTitles = allGraded.map((s) => s.tugas.title).slice(0, 3).join(", ")
+        const notesSummary = `Rata-rata ${allGraded.length} tugas: ${tugasTitles}${allGraded.length > 3 ? "..." : ""}`
+
         if (existingNilai) {
-          // Average with previous if already exists, else overwrite
           await db.nilai.update({
             where: { id: existingNilai.id },
             data: {
-              score: normalizedScore,
-              notes: `Tugas: ${updated.tugas.title}`,
+              score: roundedAvg,
+              notes: notesSummary,
+              guruId: session.user.id ? undefined : existingNilai.guruId,
               assessmentDate: new Date(),
             },
           })
@@ -84,8 +132,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
               kelasId: updated.tugas.kelasId,
               mapelId: updated.tugas.mapelId,
               type: "TUGAS",
-              score: normalizedScore,
-              notes: `Tugas: ${updated.tugas.title}`,
+              score: roundedAvg,
+              notes: notesSummary,
               assessmentDate: new Date(),
             },
           })

@@ -396,6 +396,7 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
     { id: "jadwal", label: "Jadwal", icon: "calendar" },
     { id: "absensi", label: "Absensi", icon: "checkmark-done" },
     { id: "nilai", label: "Nilai", icon: "school" },
+    { id: "tugas", label: "Tugas", icon: "create" },
     { id: "tagihan", label: "Tagihan", icon: "wallet" },
     { id: "rapor", label: "Rapor", icon: "document-text" },
   ]
@@ -537,6 +538,10 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
                 ))
               )}
             </View>
+          )}
+
+          {activeTab === "tugas" && (
+            <TugasListSection santriId={santri.id} />
           )}
 
           {activeTab === "tagihan" && detail && (
@@ -690,6 +695,248 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <Text style={styles.infoLabel}>{label}</Text>
       <Text style={styles.infoValue}>{value}</Text>
     </View>
+  )
+}
+
+// ============================================================================
+// V2 — Tugas & Pengumpulan (mobile-wali)
+// ============================================================================
+function TugasListSection({ santriId }: { santriId: string }) {
+  const [tugasList, setTugasList] = useState<any[]>([])
+  const [stats, setStats] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [submitModal, setSubmitModal] = useState<any | null>(null)
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const res = await api.get(`/api/wali/tugas`, { santriId })
+      setTugasList(res.data)
+      setStats(res.stats)
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [santriId])
+
+  useEffect(() => { load() }, [load])
+
+  if (loading) {
+    return (
+      <View style={styles.contentCard}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    )
+  }
+
+  if (error) {
+    return (
+      <View style={styles.contentCard}>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity onPress={load} style={styles.retryButton}>
+          <Text style={styles.retryText}>Coba lagi</Text>
+        </TouchableOpacity>
+      </View>
+    )
+  }
+
+  return (
+    <View style={styles.contentCard}>
+      <Text style={styles.contentTitle}>Tugas & Pengumpulan</Text>
+
+      {stats && (
+        <View style={[styles.tagihanSummary, { marginBottom: 12 }]}>
+          <View style={styles.tagihanSummaryItem}>
+            <Text style={styles.tagihanSummaryLabel}>Dikumpul</Text>
+            <Text style={[styles.tagihanSummaryValue, { color: Colors.primary }]}>{stats.submitted}</Text>
+          </View>
+          <View style={styles.tagihanSummaryItem}>
+            <Text style={styles.tagihanSummaryLabel}>Dinilai</Text>
+            <Text style={[styles.tagihanSummaryValue, { color: Colors.success }]}>{stats.graded}</Text>
+          </View>
+          <View style={styles.tagihanSummaryItem}>
+            <Text style={styles.tagihanSummaryLabel}>Belum</Text>
+            <Text style={[styles.tagihanSummaryValue, { color: Colors.warning }]}>{stats.notSubmitted}</Text>
+          </View>
+          <View style={styles.tagihanSummaryItem}>
+            <Text style={styles.tagihanSummaryLabel}>Lewat</Text>
+            <Text style={[styles.tagihanSummaryValue, { color: Colors.danger }]}>{stats.overdue}</Text>
+          </View>
+        </View>
+      )}
+
+      {tugasList.length === 0 ? (
+        <Text style={styles.emptyTextSmall}>Belum ada tugas untuk santri ini</Text>
+      ) : (
+        tugasList.map((t: any, i: number) => {
+          const sub = t.submission
+          const isOverdue = t.isOverdue
+          const isGraded = sub?.status === "GRADED"
+          const isLate = sub?.status === "LATE"
+          const canSubmit = !isGraded
+
+          return (
+            <View key={i} style={[styles.tagihanRow, isOverdue && !sub && { borderColor: Colors.danger, backgroundColor: Colors.dangerLight }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.tagihanName}>{t.title}</Text>
+                <Text style={styles.tagihanDesc}>
+                  {t.mapel?.name} • Tenggat: {formatDate(t.dueDate, true)}
+                </Text>
+                {sub?.feedback && (
+                  <Text style={[styles.tagihanDesc, { fontStyle: "italic", marginTop: 4 }]}>
+                    Feedback: {sub.feedback}
+                  </Text>
+                )}
+              </View>
+              <View>
+                {!sub && (
+                  <View style={[styles.statusBadge, {
+                    backgroundColor: isOverdue ? Colors.dangerLight : Colors.warningLight,
+                  }]}>
+                    <Text style={[styles.statusBadgeText, {
+                      color: isOverdue ? Colors.danger : Colors.warning,
+                    }]}>
+                      {isOverdue ? "Lewat" : "Belum"}
+                    </Text>
+                  </View>
+                )}
+                {sub && (
+                  <View style={[styles.statusBadge, {
+                    backgroundColor: isGraded ? Colors.successLight : isLate ? Colors.warningLight : Colors.primaryLight,
+                  }]}>
+                    <Text style={[styles.statusBadgeText, {
+                      color: isGraded ? Colors.success : isLate ? Colors.warning : Colors.primaryDark,
+                    }]}>
+                      {isGraded ? `Nilai: ${sub.score}` : isLate ? "Terlambat" : "Dikumpul"}
+                    </Text>
+                  </View>
+                )}
+                {canSubmit && (
+                  <TouchableOpacity
+                    onPress={() => setSubmitModal(t)}
+                    style={[styles.submitButton, { marginTop: 6 }]}
+                  >
+                    <Text style={styles.submitButtonText}>
+                      {sub ? "Kumpul Ulang" : "Kumpulkan"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          )
+        })
+      )}
+
+      {submitModal && (
+        <TugasSubmitModal
+          tugas={submitModal}
+          santriId={santriId}
+          onClose={() => setSubmitModal(null)}
+          onSuccess={() => { setSubmitModal(null); load() }}
+        />
+      )}
+    </View>
+  )
+}
+
+function TugasSubmitModal({
+  tugas, santriId, onClose, onSuccess,
+}: {
+  tugas: any
+  santriId: string
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const [textAnswer, setTextAnswer] = useState("")
+  const [fileUrl, setFileUrl] = useState("")
+  const [submitting, setSubmitting] = useState(false)
+
+  const handleSubmit = async () => {
+    if (!textAnswer.trim() && !fileUrl.trim()) {
+      Alert.alert("Validasi", "Isi jawaban teks atau tempel URL file jawaban")
+      return
+    }
+    setSubmitting(true)
+    try {
+      const res = await api.post(`/api/wali/tugas/${tugas.id}/submit`, {
+        santriId,
+        textAnswer: textAnswer.trim() || null,
+        fileUrl: fileUrl.trim() || null,
+      })
+      Alert.alert("Berhasil", res.message || "Tugas berhasil dikumpulkan", [
+        { text: "OK", onPress: onSuccess },
+      ])
+    } catch (e: any) {
+      Alert.alert("Gagal", e.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Modal visible={true} animationType="slide" transparent={true}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Kumpulkan Tugas</Text>
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={24} color={Colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={{ maxHeight: 400 }}>
+            <Text style={styles.modalTugasTitle}>{tugas.title}</Text>
+            <Text style={styles.modalTugasMeta}>
+              {tugas.mapel?.name} • Tenggat: {formatDate(tugas.dueDate, true)}
+            </Text>
+            {tugas.description ? (
+              <Text style={styles.modalTugasDesc}>{tugas.description}</Text>
+            ) : null}
+
+            <Text style={[styles.infoLabel, { marginTop: 12 }]}>Jawaban Teks (opsional)</Text>
+            <TextInput
+              style={[styles.textInput, { minHeight: 80, textAlignVertical: "top" }]}
+              value={textAnswer}
+              onChangeText={setTextAnswer}
+              placeholder="Tulis jawaban di sini..."
+              multiline
+              numberOfLines={4}
+            />
+
+            <Text style={[styles.infoLabel, { marginTop: 12 }]}>URL File Jawaban (opsional)</Text>
+            <TextInput
+              style={styles.textInput}
+              value={fileUrl}
+              onChangeText={setFileUrl}
+              placeholder="https://drive.google.com/..."
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+            />
+            <Text style={styles.modalHint}>
+              Tip: Upload file ke Google Drive atau layanan lain, lalu tempel link-nya di sini.
+              File lokal akan didukung di versi mendatang.
+            </Text>
+          </ScrollView>
+
+          <View style={styles.modalFooter}>
+            <TouchableOpacity style={styles.modalCancelButton} onPress={onClose} disabled={submitting}>
+              <Text style={styles.modalCancelText}>Batal</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalSubmitButton} onPress={handleSubmit} disabled={submitting}>
+              {submitting ? (
+                <ActivityIndicator size="small" color={Colors.white} />
+              ) : (
+                <Text style={styles.modalSubmitText}>Kumpulkan</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
   )
 }
 
@@ -877,4 +1124,106 @@ const styles = StyleSheet.create({
   tagihanName: { fontSize: 14, fontWeight: "500", color: Colors.text },
   tagihanDesc: { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
   tagihanAmount: { fontSize: 14, fontWeight: "600", color: Colors.text, textAlign: "right" },
+  // V2 — Tugas submit modal
+  submitButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    alignSelf: "flex-end",
+  },
+  submitButtonText: {
+    color: Colors.white,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    padding: 16,
+    width: "100%",
+    maxWidth: 400,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: Colors.text,
+  },
+  modalTugasTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: Colors.text,
+    marginBottom: 4,
+  },
+  modalTugasMeta: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginBottom: 8,
+  },
+  modalTugasDesc: {
+    fontSize: 13,
+    color: Colors.text,
+    backgroundColor: Colors.background,
+    padding: 8,
+    borderRadius: 6,
+    marginTop: 4,
+  },
+  modalHint: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    marginTop: 6,
+    fontStyle: "italic",
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    color: Colors.text,
+    backgroundColor: Colors.background,
+    marginTop: 4,
+  },
+  modalFooter: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8,
+    marginTop: 16,
+  },
+  modalCancelButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 6,
+    backgroundColor: Colors.border,
+  },
+  modalCancelText: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  modalSubmitButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 6,
+    backgroundColor: Colors.primary,
+  },
+  modalSubmitText: {
+    color: Colors.white,
+    fontSize: 14,
+    fontWeight: "600",
+  },
 })

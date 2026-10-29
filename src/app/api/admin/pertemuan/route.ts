@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateGuruAccess } from "@/lib/auth/guru-access"
 
 /**
  * GET /api/admin/pertemuan
@@ -113,13 +114,25 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // V2 security: validate GURU has teaching access to this kelas+mapel
+    const accessCheck = await validateGuruAccess(session, {
+      kelasId: body.kelasId,
+      mapelId: body.mapelId,
+      guruId: body.guruId,
+    }, req)
+    if (!accessCheck.allowed && accessCheck.error) return accessCheck.error
+
+    // Auto-bind guruId
+    let guruId = body.guruId
+    if (!guruId && accessCheck.guru) guruId = accessCheck.guru.id
+
     const pertemuan = await db.pertemuan.create({
       data: {
         tahunAjaranId,
         semesterId,
         kelasId: body.kelasId,
         mapelId: body.mapelId,
-        guruId: body.guruId || null,
+        guruId,
         pertemuanKe: Number(body.pertemuanKe),
         date: new Date(body.date),
         topic: body.topic || null,

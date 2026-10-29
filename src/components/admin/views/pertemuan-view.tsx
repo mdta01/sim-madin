@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { formatDate, STATUS_STYLES } from "@/lib/constants"
-import { CalendarCheck, Plus, Pencil, Trash2, Eye, Save, ClipboardCheck, Award, CheckCircle2 } from "lucide-react"
+import { CalendarCheck, Plus, Pencil, Trash2, Eye, Save, ClipboardCheck, Award, CheckCircle2, Sparkles, Loader2 } from "lucide-react"
 
 const ABSENSI_OPTIONS = [
   { value: "HADIR", label: "Hadir", color: "bg-green-100 text-green-800 border-green-300" },
@@ -40,6 +40,7 @@ export function PertemuanView() {
   const [editing, setEditing] = useState<any | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailPertemuan, setDetailPertemuan] = useState<any | null>(null)
+  const [generateOpen, setGenerateOpen] = useState(false)
   const { toast } = useToast()
 
   const load = useCallback(async () => {
@@ -91,7 +92,14 @@ export function PertemuanView() {
         title="Pertemuan & Absensi"
         description="Sesi kelas per pertemuan + absensi + nilai harian terstruktur"
         icon={<CalendarCheck className="h-5 w-5" />}
-        actions={<Button onClick={() => { setEditing(null); setDialogOpen(true) }}><Plus className="h-4 w-4 mr-1" /> Tambah Pertemuan</Button>}
+        actions={
+          <>
+            <Button variant="outline" onClick={() => setGenerateOpen(true)}>
+              <Sparkles className="h-4 w-4 mr-1" /> Generate dari Jadwal
+            </Button>
+            <Button onClick={() => { setEditing(null); setDialogOpen(true) }}><Plus className="h-4 w-4 mr-1" /> Tambah Pertemuan</Button>
+          </>
+        }
       />
       <DataTableToolbar
         searchValue={search}
@@ -180,6 +188,14 @@ export function PertemuanView() {
         onOpenChange={setDetailOpen}
         pertemuan={detailPertemuan}
         onSuccess={load}
+      />
+
+      <GeneratePertemuanDialog
+        open={generateOpen}
+        onOpenChange={setGenerateOpen}
+        onSuccess={load}
+        kelasList={kelasList}
+        mapelList={mapelList}
       />
     </div>
   )
@@ -547,6 +563,175 @@ function PertemuanDetailDialog({ open, onOpenChange, pertemuan, onSuccess }: {
             </TabsContent>
           </Tabs>
         )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function GeneratePertemuanDialog({ open, onOpenChange, onSuccess, kelasList, mapelList }: {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  onSuccess: () => void
+  kelasList: any[]
+  mapelList: any[]
+}) {
+  const [weekStart, setWeekStart] = useState<string>(new Date().toISOString().slice(0, 10))
+  const [kelasId, setKelasId] = useState<string>("all")
+  const [mapelId, setMapelId] = useState<string>("all")
+  const [dryRun, setDryRun] = useState(true)
+  const [generating, setGenerating] = useState(false)
+  const [result, setResult] = useState<any>(null)
+  const { toast } = useToast()
+
+  const handleGenerate = async () => {
+    if (!weekStart) {
+      toast({ title: "Validasi", description: "Tanggal mulai minggu wajib diisi", variant: "destructive" })
+      return
+    }
+    setGenerating(true)
+    setResult(null)
+    try {
+      const payload: any = { weekStartDate: weekStart, dryRun }
+      if (kelasId !== "all") payload.kelasId = kelasId
+      if (mapelId !== "all") payload.mapelId = mapelId
+
+      const res = await apiPost("/api/admin/pertemuan/generate-from-jadwal", payload)
+      setResult(res)
+
+      if (!dryRun && res.created?.length > 0) {
+        toast({
+          title: "Berhasil",
+          description: `${res.created.length} pertemuan dibuat, ${res.skipped?.length || 0} dilewati`,
+        })
+        onSuccess()
+      } else if (dryRun) {
+        toast({
+          title: "Preview siap",
+          description: `${res.created?.length || 0} pertemuan akan dibuat. Hapus centang "Preview" untuk eksekusi.`,
+        })
+      } else {
+        toast({
+          title: "Tidak ada perubahan",
+          description: res.skipped?.length > 0
+            ? `Semua ${res.skipped.length} pertemuan sudah ada untuk minggu ini`
+            : "Tidak ada jadwal yang cocok untuk filter ini",
+        })
+      }
+    } catch (e: any) {
+      toast({ title: "Gagal", description: e.message, variant: "destructive" })
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) setResult(null) }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>
+            <span className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-amber-500" /> Generate Pertemuan dari Jadwal
+            </span>
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <p className="text-sm text-muted-foreground">
+            Auto-create pertemuan untuk minggu tertentu berdasarkan Jadwal Pelajaran yang sudah ada di TA/Semester aktif.
+            Setiap jadwal akan jadi 1 pertemuan dengan nomor urut otomatis.
+          </p>
+          <div className="grid grid-cols-1 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Tanggal di Minggu Target *</Label>
+              <Input
+                type="date"
+                value={weekStart}
+                onChange={(e) => setWeekStart(e.target.value)}
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Bisa tanggal apa saja di minggu target. Sistem akan auto-adjust ke hari Senin minggu itu.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Filter Kelas (opsional)</Label>
+                <Select value={kelasId} onValueChange={setKelasId}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Kelas</SelectItem>
+                    {kelasList.map((k) => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Filter Mapel (opsional)</Label>
+                <Select value={mapelId} onValueChange={setMapelId}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Mapel</SelectItem>
+                    {mapelList.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm cursor-pointer pt-1">
+              <input
+                type="checkbox"
+                checked={dryRun}
+                onChange={(e) => setDryRun(e.target.checked)}
+                className="rounded border-input"
+              />
+              <span>Preview dulu (rekomendasi) — tidak menyimpan, hanya lihat apa yang akan dibuat</span>
+            </label>
+          </div>
+
+          {result && (
+            <div className="border rounded-md p-3 bg-muted/30 space-y-2 max-h-60 overflow-y-auto">
+              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                <div><p className="text-muted-foreground">Dibuat</p><p className="font-bold text-green-600">{result.created?.length || 0}</p></div>
+                <div><p className="text-muted-foreground">Dilewati</p><p className="font-bold text-blue-600">{result.skipped?.length || 0}</p></div>
+                <div><p className="text-muted-foreground">Error</p><p className="font-bold text-red-600">{result.errors?.length || 0}</p></div>
+              </div>
+              {result.created?.length > 0 && (
+                <div className="space-y-1 pt-2 border-t">
+                  <p className="text-xs font-medium">Pertemuan {dryRun ? "yang akan dibuat" : "yang dibuat"}:</p>
+                  {result.created.slice(0, 8).map((c: any, i: number) => (
+                    <div key={i} className="text-xs flex justify-between gap-2">
+                      <span className="truncate">{c.kelas} • {c.mapel}</span>
+                      <span className="text-muted-foreground">#{c.pertemuanKe} • {c.date}</span>
+                    </div>
+                  ))}
+                  {result.created.length > 8 && <p className="text-[10px] text-muted-foreground">+ {result.created.length - 8} lainnya...</p>}
+                </div>
+              )}
+              {result.skipped?.length > 0 && (
+                <div className="space-y-1 pt-2 border-t">
+                  <p className="text-xs font-medium text-blue-700">Dilewati (sudah ada):</p>
+                  {result.skipped.slice(0, 4).map((s: any, i: number) => (
+                    <div key={i} className="text-xs text-muted-foreground">
+                      • {s.kelas} • {s.mapel} ({s.date})
+                    </div>
+                  ))}
+                  {result.skipped.length > 4 && <p className="text-[10px] text-muted-foreground">+ {result.skipped.length - 4} lainnya...</p>}
+                </div>
+              )}
+              {result.errors?.length > 0 && (
+                <div className="space-y-1 pt-2 border-t">
+                  <p className="text-xs font-medium text-red-700">Error:</p>
+                  {result.errors.slice(0, 3).map((e: any, i: number) => (
+                    <div key={i} className="text-xs text-red-700">• {e.kelas} • {e.mapel}: {e.reason}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Tutup</Button>
+          <Button onClick={handleGenerate} disabled={generating}>
+            {generating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
+            {generating ? "Memproses..." : dryRun ? "Preview" : "Generate Sekarang"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
