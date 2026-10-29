@@ -78,7 +78,7 @@ const Colors = {
 // ============================================================================
 
 // --- Login Screen ---
-function LoginScreen({ onLogin }: { onLogin: (token: string, wali: WaliData, santriList: SantriData[]) => void }) {
+function LoginScreen({ onLogin, onForgotPin }: { onLogin: (token: string, wali: WaliData, santriList: SantriData[]) => void; onForgotPin?: () => void }) {
   const [phone, setPhone] = useState("081234511001")
   const [pin, setPin] = useState("")
   const [loading, setLoading] = useState(false)
@@ -168,6 +168,139 @@ function LoginScreen({ onLogin }: { onLogin: (token: string, wali: WaliData, san
           </TouchableOpacity>
 
           <Text style={styles.demoText}>Demo: 081234511001 / PIN: 258041</Text>
+
+          <TouchableOpacity onPress={() => onForgotPin?.()} style={styles.forgotPinBtn}>
+            <Text style={styles.forgotPinText}>Lupa PIN?</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  )
+}
+
+// --- Forgot PIN Screen (3-step OTP flow) ---
+function ForgotPinScreen({ onBack }: { onBack: () => void }) {
+  const [step, setStep] = useState<"phone" | "otp" | "setPin">("phone")
+  const [phone, setPhone] = useState("")
+  const [otp, setOtp] = useState("")
+  const [newPin, setNewPin] = useState("")
+  const [confirmPin, setConfirmPin] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [verifyToken, setVerifyToken] = useState("")
+
+  const handleRequestOtp = async () => {
+    if (!phone) { Alert.alert("Validasi", "Nomor WhatsApp wajib diisi"); return }
+    setLoading(true)
+    try {
+      const res = await api.post("/api/wali/request-otp", { phone, type: "FORGOT_PIN" })
+      Alert.alert("OTP Terkirim", res.devOtp ? `Kode OTP (DEV): ${res.devOtp}` : res.message)
+      setStep("otp")
+    } catch (e: any) { Alert.alert("Gagal", e.message) }
+    finally { setLoading(false) }
+  }
+
+  const handleVerifyOtp = async () => {
+    if (!otp || otp.length !== 6) { Alert.alert("Validasi", "OTP harus 6 digit"); return }
+    setLoading(true)
+    try {
+      const res = await api.post("/api/wali/verify-otp", { phone, otpCode: otp })
+      if (res.verifyToken) {
+        setVerifyToken(res.verifyToken)
+        setStep("setPin")
+        Alert.alert("Terverifikasi", "Silakan buat PIN baru")
+      } else { Alert.alert("Gagal", "Token verifikasi tidak diterima") }
+    } catch (e: any) { Alert.alert("Gagal", e.message) }
+    finally { setLoading(false) }
+  }
+
+  const handleSetPin = async () => {
+    if (!newPin || newPin.length !== 6) { Alert.alert("Validasi", "PIN harus 6 digit"); return }
+    if (newPin !== confirmPin) { Alert.alert("Validasi", "PIN tidak cocok"); return }
+    setLoading(true)
+    try {
+      await api.post("/api/wali/set-pin", { verifyToken, pin: newPin })
+      Alert.alert("Berhasil", "PIN berhasil diubah. Silakan login dengan PIN baru.", [{ text: "OK", onPress: onBack }])
+    } catch (e: any) { Alert.alert("Gagal", e.message) }
+    finally { setLoading(false) }
+  }
+
+  return (
+    <SafeAreaView style={styles.loginContainer}>
+      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+      <ScrollView contentContainerStyle={styles.loginScroll}>
+        <View style={styles.loginLogo}>
+          <Ionicons name="key" size={80} color={Colors.white} />
+          <Text style={styles.loginTitle}>Lupa PIN</Text>
+          <Text style={styles.loginSubtitle}>Reset PIN via OTP</Text>
+        </View>
+
+        <View style={styles.loginCard}>
+          {step === "phone" && (
+            <>
+              <Text style={styles.loginCardTitle}>Masukkan Nomor WhatsApp</Text>
+              <Text style={styles.loginCardDesc}>Kami akan kirim kode OTP ke nomor Anda</Text>
+              <Text style={styles.label}>Nomor WhatsApp</Text>
+              <View style={styles.inputContainer}>
+                <Ionicons name="call" size={20} color={Colors.textMuted} style={styles.inputIcon} />
+                <TextInput style={styles.input} placeholder="08xxx atau 628xxx" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+              </View>
+              <TouchableOpacity style={[styles.loginButton, loading && { opacity: 0.6 }]} onPress={handleRequestOtp} disabled={loading}>
+                {loading ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.loginButtonText}>Kirim OTP</Text>}
+              </TouchableOpacity>
+            </>
+          )}
+
+          {step === "otp" && (
+            <>
+              <Text style={styles.loginCardTitle}>Verifikasi OTP</Text>
+              <Text style={styles.loginCardDesc}>Masukkan 6 digit kode yang dikirim</Text>
+              <TextInput
+                style={[styles.input, { textAlign: "center", fontSize: 24, letterSpacing: 8, fontFamily: "monospace" }]}
+                placeholder="000000"
+                value={otp}
+                onChangeText={(t) => setOtp(t.replace(/\D/g, "").slice(0, 6))}
+                keyboardType="numeric"
+                maxLength={6}
+              />
+              <TouchableOpacity style={[styles.loginButton, loading && { opacity: 0.6 }]} onPress={handleVerifyOtp} disabled={loading}>
+                {loading ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.loginButtonText}>Verifikasi</Text>}
+              </TouchableOpacity>
+            </>
+          )}
+
+          {step === "setPin" && (
+            <>
+              <Text style={styles.loginCardTitle}>Buat PIN Baru</Text>
+              <Text style={styles.loginCardDesc}>PIN 6 digit untuk login</Text>
+              <Text style={styles.label}>PIN Baru</Text>
+              <TextInput
+                style={[styles.input, { textAlign: "center", fontSize: 20, letterSpacing: 6, fontFamily: "monospace" }]}
+                placeholder="••••••"
+                value={newPin}
+                onChangeText={(t) => setNewPin(t.replace(/\D/g, "").slice(0, 6))}
+                keyboardType="numeric"
+                secureTextEntry
+                maxLength={6}
+              />
+              <Text style={styles.label}>Konfirmasi PIN</Text>
+              <TextInput
+                style={[styles.input, { textAlign: "center", fontSize: 20, letterSpacing: 6, fontFamily: "monospace" }]}
+                placeholder="••••••"
+                value={confirmPin}
+                onChangeText={(t) => setConfirmPin(t.replace(/\D/g, "").slice(0, 6))}
+                keyboardType="numeric"
+                secureTextEntry
+                maxLength={6}
+              />
+              <TouchableOpacity style={[styles.loginButton, loading && { opacity: 0.6 }]} onPress={handleSetPin} disabled={loading}>
+                {loading ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.loginButtonText}>Simpan PIN</Text>}
+              </TouchableOpacity>
+            </>
+          )}
+
+          <TouchableOpacity onPress={onBack} style={[styles.forgotPinBtn, { marginTop: 16 }]}>
+            <Text style={styles.forgotPinText}>← Kembali ke Login</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -474,6 +607,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 // ============================================================================
 type RootStackParamList = {
   Login: undefined
+  ForgotPin: undefined
   Dashboard: { wali: WaliData; santriList: SantriData[] }
   SantriDetail: { santri: SantriData }
 }
@@ -515,7 +649,7 @@ export default function App() {
         screenOptions={{ headerShown: false }}
       >
         <Stack.Screen name="Login">
-          {() => (
+          {({ navigation }) => (
             <LoginScreen
               onLogin={(token, wali, santriList) => {
                 waliToken = token
@@ -523,7 +657,13 @@ export default function App() {
                 setSavedSantri(santriList)
                 setInitialRoute("Dashboard")
               }}
+              onForgotPin={() => navigation.navigate("ForgotPin")}
             />
+          )}
+        </Stack.Screen>
+        <Stack.Screen name="ForgotPin" options={{ headerShown: false }}>
+          {({ navigation }) => (
+            <ForgotPinScreen onBack={() => navigation.goBack()} />
           )}
         </Stack.Screen>
         <Stack.Screen name="Dashboard" options={{ headerShown: false }}>
@@ -575,6 +715,8 @@ const styles = StyleSheet.create({
   loginButton: { backgroundColor: Colors.primary, borderRadius: 8, paddingVertical: 14, alignItems: "center", marginTop: 24 },
   loginButtonText: { color: Colors.white, fontSize: 16, fontWeight: "600" },
   demoText: { fontSize: 12, color: Colors.textMuted, textAlign: "center", marginTop: 16 },
+  forgotPinBtn: { alignItems: "center", marginTop: 12 },
+  forgotPinText: { fontSize: 13, color: Colors.primary, fontWeight: "500" },
   screen: { flex: 1, backgroundColor: Colors.background },
   header: { backgroundColor: Colors.primary, paddingHorizontal: 16, paddingVertical: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 48 },
   headerTitle: { fontSize: 14, color: Colors.white, opacity: 0.9 },
