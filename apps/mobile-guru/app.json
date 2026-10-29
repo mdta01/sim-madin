@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "SIM MADIN - Guru",
+    "slug": "sim-madin-guru",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": { "resizeMode": "contain", "backgroundColor": "#ea580c" },
+    "ios": { "supportsTablet": true, "bundleIdentifier": "id.madrasah.madin.guru" },
+    "android": { "adaptiveIcon": { "backgroundColor": "#ea580c" }, "package": "id.madrasah.madin.guru" },
+    "plugins": ["expo-router"],
+    "scheme": "simadinguru"
+  }
+}

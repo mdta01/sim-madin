@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      "@sim-madin/shared": ["packages/shared/src/index.ts"],
+      "@sim-madin/shared/*": ["packages/shared/src/*"],
+      "@sim-madin/database": ["packages/database/src/index.ts"],
+      "@sim-madin/api-client": ["packages/api-client/src/index.ts"],
+      "@sim-madin/mobile-shared": ["packages/mobile-shared/src/index.ts"]
+    }
+  },
+  "exclude": ["node_modules", ".next", "dist"]
+}

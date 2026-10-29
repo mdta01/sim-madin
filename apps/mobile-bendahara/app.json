@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "SIM MADIN - Bendahara",
+    "slug": "sim-madin-bendahara",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": { "resizeMode": "contain", "backgroundColor": "#7c3aed" },
+    "ios": { "supportsTablet": true, "bundleIdentifier": "id.madrasah.madin.bendahara" },
+    "android": { "adaptiveIcon": { "backgroundColor": "#7c3aed" }, "package": "id.madrasah.madin.bendahara" },
+    "scheme": "simadinbendahara"
+  }
+}

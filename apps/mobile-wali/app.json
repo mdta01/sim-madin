@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "SIM MADIN - Wali Santri",
+    "slug": "sim-madin-wali",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "simmadinwali",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#059669"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "id.madrasah.madin.wali"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#059669"
+      },
+      "package": "id.madrasah.madin.wali"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": ""
+      }
+    }
+  }
+}
