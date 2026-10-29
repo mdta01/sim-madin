@@ -43,32 +43,56 @@ async function main() {
     await db.rolePermission.upsert({ where: { roleId_permissionId: { roleId: superAdminRole.id, permissionId: p.id } }, update: {}, create: { roleId: superAdminRole.id, permissionId: p.id } })
   }
   const kepalaRole = roles[1]
+  // Kepala: read ALL modules (including V11 dashboard analytics)
   for (const p of permissions.filter(p => p.code.endsWith(":read"))) {
     await db.rolePermission.upsert({ where: { roleId_permissionId: { roleId: kepalaRole.id, permissionId: p.id } }, update: {}, create: { roleId: kepalaRole.id, permissionId: p.id } })
   }
   const bendaharaRole = roles[2]
-  const bendaharaPerms = permissions.filter(p => p.module === "tagihan" || p.module === "pembayaran" || p.module === "santri" || p.module === "pengumuman" || p.module === "kas" || p.module === "honor_guru")
+  // Bendahara: CRUD keuangan + read santri/pengumuman/dashboard
+  const bendaharaPerms = permissions.filter(p =>
+    p.module === "tagihan" || p.module === "pembayaran" || p.module === "santri" ||
+    p.module === "pengumuman" || p.module === "kas" || p.module === "honor_guru" ||
+    p.module === "surat" || p.module === "notifikasi" ||
+    (p.code === "dashboard:read")
+  )
   for (const p of bendaharaPerms) {
     await db.rolePermission.upsert({ where: { roleId_permissionId: { roleId: bendaharaRole.id, permissionId: p.id } }, update: {}, create: { roleId: bendaharaRole.id, permissionId: p.id } })
   }
   const guruRole = roles[3]
   const guruPerms = permissions.filter(p => {
-    // V2 — Akademik & Pembelajaran: guru punya akses penuh CRUD materi/tugas/pengumpulan/pertemuan, read kompetensi
+    // V1 — Guru: absensi, nilai, read santri/kelas/mapel/jadwal/pengumuman
     if (p.module === "absensi" || p.module === "nilai") return true
+    // V2 — Akademik & Pembelajaran: guru CRUD materi/tugas/pengumpulan/pertemuan
     if (p.module === "materi" || p.module === "tugas" || p.module === "pengumpulan" || p.module === "pertemuan") return true
-    // V3 — Ujian & Rapor: guru CRUD ujian/bank_soal/ujian_peserta/ujian_nilai, read rapor
+    // V3 — Ujian & Rapor: guru CRUD ujian/bank_soal/ujian_peserta/ujian_nilai
     if (p.module === "ujian" || p.module === "bank_soal" || p.module === "ujian_peserta" || p.module === "ujian_nilai") return true
     // V4 — Perkembangan Santri: guru CRUD semua perkembangan
     if (p.module === "perkembangan") return true
-    if (p.code.endsWith(":read") && ["santri","kelas","mapel","jadwal","pengumuman","rapor","tahun_ajaran","kompetensi","rapor_mapel","rapor_catatan"].includes(p.module)) return true
+    // V6 — Komunikasi: guru CRUD chat, read notifikasi
+    if (p.module === "chat") return true
+    // Read-only untuk modul lain yang relevan
+    if (p.code.endsWith(":read") && [
+      "santri","kelas","mapel","jadwal","pengumuman","rapor","tahun_ajaran",
+      "kompetensi","rapor_mapel","rapor_catatan","notifikasi","surat","qr","alumni",
+      "dashboard",
+    ].includes(p.module)) return true
     return false
   })
   for (const p of guruPerms) {
     await db.rolePermission.upsert({ where: { roleId_permissionId: { roleId: guruRole.id, permissionId: p.id } }, update: {}, create: { roleId: guruRole.id, permissionId: p.id } })
   }
   const waliRole = roles[4]
-  const waliPerms = permissions.filter(p => p.code.endsWith(":read") && ["santri","tagihan","pembayaran","rapor","absensi","nilai","pengumuman","kelas","tahun_ajaran","materi","tugas","pertemuan","kompetensi","ujian","bank_soal","ujian_peserta","ujian_nilai","rapor_mapel","rapor_catatan","perkembangan","honor_guru","notifikasi","chat","surat","qr","alumni"].includes(p.module))
-  for (const p of waliPerms) {
+  // Wali: read-only semua modul yang relevan (V1-V11)
+  const waliPerms = permissions.filter(p => p.code.endsWith(":read") && [
+    "santri","tagihan","pembayaran","rapor","absensi","nilai","pengumuman",
+    "kelas","tahun_ajaran","materi","tugas","pertemuan","kompetensi",
+    "ujian","bank_soal","ujian_peserta","ujian_nilai","rapor_mapel","rapor_catatan",
+    "perkembangan","honor_guru","notifikasi","chat","surat","qr","alumni","dashboard",
+  ].includes(p.module))
+  // Wali juga bisa CREATE chat messages (untuk chat dengan wali kelas/madrasah)
+  const waliChatCreate = permissions.filter(p => p.code === "chat:create")
+  const waliAllPerms = [...waliPerms, ...waliChatCreate]
+  for (const p of waliAllPerms) {
     await db.rolePermission.upsert({ where: { roleId_permissionId: { roleId: waliRole.id, permissionId: p.id } }, update: {}, create: { roleId: waliRole.id, permissionId: p.id } })
   }
 

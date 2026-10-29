@@ -416,7 +416,6 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
 
   const tabs = [
     { id: "profile", label: "Profil", icon: "person" },
-    { id: "jadwal", label: "Jadwal", icon: "calendar" },
     { id: "absensi", label: "Absensi", icon: "checkmark-done" },
     { id: "nilai", label: "Nilai", icon: "school" },
     { id: "perkembangan", label: "Rekap", icon: "stats-chart" },
@@ -424,6 +423,9 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
     { id: "ujian", label: "Ujian", icon: "file-tray-full" },
     { id: "tagihan", label: "Tagihan", icon: "wallet" },
     { id: "rapor", label: "Rapor", icon: "document-text" },
+    { id: "notifikasi", label: "Notif", icon: "notifications" },
+    { id: "chat", label: "Chat", icon: "chatbubble" },
+    { id: "qr", label: "QR", icon: "qr-code" },
   ]
 
   return (
@@ -715,9 +717,270 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
               )}
             </View>
           )}
+
+          {/* V6 — Notifikasi */}
+          {activeTab === "notifikasi" && (
+            <WaliNotifikasiSection token={waliToken} />
+          )}
+
+          {/* V6 — Chat */}
+          {activeTab === "chat" && (
+            <WaliChatSection token={waliToken} />
+          )}
+
+          {/* V8 — QR Digital Card */}
+          {activeTab === "qr" && (
+            <WaliQrSection santriId={santri.id} token={waliToken} />
+          )}
         </ScrollView>
       )}
     </SafeAreaView>
+  )
+}
+
+// ============================================================================
+// V6 — Notifikasi, Chat, QR (mobile-wali)
+// ============================================================================
+function WaliNotifikasiSection({ token }: { token: string | null }) {
+  const [list, setList] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState<any>(null)
+
+  const load = useCallback(async () => {
+    if (!token) return
+    try {
+      setLoading(true)
+      const res = await fetch(`${API_BASE_URL}/api/wali/notifikasi`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      setList(data.data || [])
+      setStats(data.stats)
+    } catch (e: any) {
+      console.error("notif load error:", e.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [token])
+
+  useEffect(() => { load() }, [load])
+
+  const markRead = async (id: string) => {
+    try {
+      await fetch(`${API_BASE_URL}/api/wali/notifikasi/${id}`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      load()
+    } catch (e: any) {
+      Alert.alert("Gagal", e.message)
+    }
+  }
+
+  if (loading) return <View style={styles.contentCard}><ActivityIndicator size="large" color={Colors.primary} /></View>
+
+  return (
+    <View style={styles.contentCard}>
+      <Text style={styles.contentTitle}>Notifikasi</Text>
+      {stats && stats.totalUnread > 0 && (
+        <View style={[styles.statusBadge, { backgroundColor: Colors.dangerLight, alignSelf: "flex-start", marginBottom: 8 }]}>
+          <Text style={[styles.statusBadgeText, { color: Colors.danger }]}>{stats.totalUnread} belum dibaca</Text>
+        </View>
+      )}
+      {list.length === 0 ? (
+        <Text style={styles.emptyTextSmall}>Tidak ada notifikasi</Text>
+      ) : (
+        list.map((n: any, i: number) => (
+          <View key={i} style={[styles.listRow, !n.isRead && { backgroundColor: Colors.primaryLight + "40" }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.tagihanName, !n.isRead && { fontWeight: "bold" }]}>{n.title}</Text>
+              <Text style={styles.tagihanDesc}>{n.message}</Text>
+              <Text style={[styles.tagihanDesc, { fontSize: 10 }]}>{formatDate(n.createdAt, true)}</Text>
+            </View>
+            {!n.isRead && (
+              <TouchableOpacity onPress={() => markRead(n.id)} style={[styles.submitButton, { backgroundColor: Colors.primary }]}>
+                <Text style={styles.submitButtonText}>Baca</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ))
+      )}
+    </View>
+  )
+}
+
+function WaliChatSection({ token }: { token: string | null }) {
+  const [rooms, setRooms] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedRoom, setSelectedRoom] = useState<any | null>(null)
+
+  const load = useCallback(async () => {
+    if (!token) return
+    try {
+      setLoading(true)
+      const res = await fetch(`${API_BASE_URL}/api/wali/chat`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      setRooms(data.data || [])
+    } catch (e: any) {
+      console.error("chat load error:", e.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [token])
+
+  useEffect(() => { load() }, [load])
+
+  if (loading) return <View style={styles.contentCard}><ActivityIndicator size="large" color={Colors.primary} /></View>
+
+  if (selectedRoom) {
+    return <WaliChatRoom room={selectedRoom} token={token} onBack={() => { setSelectedRoom(null); load() }} />
+  }
+
+  return (
+    <View style={styles.contentCard}>
+      <Text style={styles.contentTitle}>Chat</Text>
+      {rooms.length === 0 ? (
+        <Text style={styles.emptyTextSmall}>Belum ada percakapan. Mulai chat dengan wali kelas atau madrasah.</Text>
+      ) : (
+        rooms.map((r: any, i: number) => (
+          <TouchableOpacity key={i} style={styles.listRow} onPress={() => setSelectedRoom(r)}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.tagihanName}>{r.type === "WALI_WALI_KELAS" ? "Wali Kelas" : r.type === "WALI_MADRASAH" ? "Madrasah" : r.type}</Text>
+              {r.lastMessage && <Text style={styles.tagihanDesc} numberOfLines={1}>{r.lastMessage}</Text>}
+              {r.santri && <Text style={[styles.tagihanDesc, { fontSize: 10 }]}>Tentang: {r.santri.name}</Text>}
+            </View>
+            {r._count?.messages > 0 && (
+              <View style={[styles.statusBadge, { backgroundColor: Colors.dangerLight }]}>
+                <Text style={[styles.statusBadgeText, { color: Colors.danger, fontSize: 10 }]}>{r._count.messages}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        ))
+      )}
+    </View>
+  )
+}
+
+function WaliChatRoom({ room, token, onBack }: { room: any, token: string | null, onBack: () => void }) {
+  const [messages, setMessages] = useState<any[]>([])
+  const [input, setInput] = useState("")
+  const [loading, setLoading] = useState(true)
+
+  const loadMessages = useCallback(async () => {
+    if (!token) return
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/wali/chat/${room.id}/messages`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      setMessages(data.data || [])
+    } catch (e: any) {
+      console.error("msg load error:", e.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [token, room.id])
+
+  useEffect(() => { loadMessages() }, [loadMessages])
+
+  const send = async () => {
+    if (!input.trim() || !token) return
+    try {
+      await fetch(`${API_BASE_URL}/api/wali/chat/${room.id}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ message: input }),
+      })
+      setInput("")
+      loadMessages()
+    } catch (e: any) {
+      Alert.alert("Gagal", e.message)
+    }
+  }
+
+  if (loading) return <View style={styles.contentCard}><ActivityIndicator size="large" color={Colors.primary} /></View>
+
+  return (
+    <View style={styles.contentCard}>
+      <TouchableOpacity onPress={onBack} style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
+        <Ionicons name="arrow-back" size={20} color={Colors.primary} />
+        <Text style={{ color: Colors.primary, marginLeft: 4 }}>Kembali</Text>
+      </TouchableOpacity>
+      <Text style={styles.contentTitle}>{room.type === "WALI_WALI_KELAS" ? "Chat Wali Kelas" : "Chat Madrasah"}</Text>
+      <View style={{ maxHeight: 300, marginBottom: 8 }}>
+        <ScrollView>
+          {messages.map((m: any, i: number) => (
+            <View key={i} style={{
+              alignSelf: m.senderType === "WALI" ? "flex-end" : "flex-start",
+              backgroundColor: m.senderType === "WALI" ? Colors.primaryLight : Colors.border,
+              padding: 8, borderRadius: 8, marginBottom: 4, maxWidth: "80%",
+            }}>
+              <Text style={{ fontSize: 13, color: m.senderType === "WALI" ? Colors.primaryDark : Colors.text }}>{m.message}</Text>
+              <Text style={{ fontSize: 9, color: Colors.textMuted, marginTop: 2 }}>{formatDate(m.createdAt, true)}</Text>
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <TextInput
+          style={[styles.textInput, { flex: 1 }]}
+          value={input}
+          onChangeText={setInput}
+          placeholder="Tulis pesan..."
+        />
+        <TouchableOpacity onPress={send} style={[styles.submitButton, { paddingHorizontal: 16 }]}>
+          <Ionicons name="send" size={18} color={Colors.white} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  )
+}
+
+function WaliQrSection({ santriId, token }: { santriId: string, token: string | null }) {
+  const [qrData, setQrData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!token) return
+    ;(async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/wali/qr/${santriId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const data = await res.json()
+        setQrData(data.data)
+      } catch (e: any) {
+        console.error("qr load error:", e.message)
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [santriId, token])
+
+  if (loading) return <View style={styles.contentCard}><ActivityIndicator size="large" color={Colors.primary} /></View>
+
+  return (
+    <View style={styles.contentCard}>
+      <Text style={styles.contentTitle}>QR Santri</Text>
+      {qrData ? (
+        <View style={{ alignItems: "center", marginTop: 16 }}>
+          <Image
+            source={{ uri: qrData.qrDataUrl }}
+            style={{ width: 200, height: 200, borderRadius: 12 }}
+          />
+          <Text style={{ fontSize: 16, fontWeight: "bold", marginTop: 12, color: Colors.text }}>{qrData.santri?.name}</Text>
+          <Text style={{ fontSize: 12, color: Colors.textMuted }}>NIS: {qrData.santri?.nis}</Text>
+          {qrData.santri?.kelas && <Text style={{ fontSize: 12, color: Colors.textMuted }}>{qrData.santri.kelas.name}</Text>}
+          <Text style={{ fontSize: 10, color: Colors.textMuted, marginTop: 8, textAlign: "center" }}>
+            Tunjukkan QR ini untuk absensi, identitas, atau keperluan lain di madrasah.
+          </Text>
+        </View>
+      ) : (
+        <Text style={styles.emptyTextSmall}>Gagal memuat QR</Text>
+      )}
+    </View>
   )
 }
 
