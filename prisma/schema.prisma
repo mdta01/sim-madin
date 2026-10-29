@@ -1420,3 +1420,29 @@ model Surat {
   @@index([santriId])
   @@index([tanggalSurat])
 }
+
+// ============================================================================
+// 18. V8 — QR CODE & DIGITALISASI
+// ============================================================================
+// Sesuai roadmap.pdf V8:
+// - QR Santri: absensi, identitas, perpustakaan, kegiatan
+// - QR Guru: absensi guru, identitas guru
+// - Digital Card: kartu santri digital, kartu guru digital
+// ============================================================================
+
+model QRScan {
+  id            String   @id @default(cuid())
+  qrType        String   // "SANTRI" | "GURU"
+  entityId      String   // santriId or guruId
+  scanType      String   // "ABSENSI" | "IDENTITAS" | "PERPUSTAKAAN" | "KEGIATAN"
+  scannedById   String?  // user/guru yang scan
+  deviceInfo    String?  // device info (user agent / device ID)
+  location      String?  // optional location info
+  result        String   @default("SUCCESS") // "SUCCESS" | "ALREADY_SCANNED" | "NOT_FOUND" | "ERROR"
+  message       String?  // detail result message
+  createdAt     DateTime @default(now())
+
+  @@index([qrType, entityId])
+  @@index([scanType, createdAt])
+  @@index([createdAt])
+}

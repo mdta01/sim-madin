@@ -434,6 +434,32 @@ export const DOKUMEN_TYPES = [
 ]
 
 // ============================================================================
+// V8 — QR CODE & DIGITALISASI
+// ============================================================================
+
+// Tipe QR (sesuai roadmap.pdf V8)
+export const QR_TYPES = [
+  { value: "SANTRI", label: "QR Santri", color: "#059669" },
+  { value: "GURU", label: "QR Guru", color: "#7c3aed" },
+]
+
+// Tipe Scan QR (sesuai roadmap.pdf V8: absensi, identitas, perpustakaan, kegiatan)
+export const QR_SCAN_TYPES = [
+  { value: "ABSENSI", label: "Absensi" },
+  { value: "IDENTITAS", label: "Identitas" },
+  { value: "PERPUSTAKAAN", label: "Perpustakaan" },
+  { value: "KEGIATAN", label: "Kegiatan" },
+]
+
+// Status QR Scan Result
+export const QR_SCAN_RESULT: Record<string, { label: string; variant: BadgeVariant }> = {
+  SUCCESS: { label: "Berhasil", variant: "success" },
+  ALREADY_SCANNED: { label: "Sudah Scan", variant: "warning" },
+  NOT_FOUND: { label: "Tidak Ditemukan", variant: "destructive" },
+  ERROR: { label: "Error", variant: "destructive" },
+}
+
+// ============================================================================
 // JENIS TAGIHAN
 // ============================================================================
 export const JENIS_TAGIHAN_CATEGORY = [
@@ -510,6 +536,9 @@ export const MENU_ITEMS: MenuItem[] = [
   // V7 — Administrasi & Dokumen
   { id: "surat", label: "Surat & Dokumen", icon: "FileText", group: "sistem", description: "Surat otomatis, sertifikat, kartu, berita acara" },
   // End V7
+  // V8 — QR Code & Digitalisasi
+  { id: "qr", label: "QR & Digital Card", icon: "QrCode", group: "sistem", description: "QR santri/guru, scan absensi, digital card" },
+  // End V8
   { id: "users", label: "User & Hak Akses", icon: "ShieldCheck", group: "sistem" },
   { id: "pengaturan", label: "Pengaturan Sistem", icon: "Settings", group: "sistem" },
 ]

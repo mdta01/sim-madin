@@ -39,6 +39,8 @@ import { NotifikasiView } from "./views/notifikasi-view"
 import { ChatView } from "./views/chat-view"
 // V7 — Administrasi & Dokumen
 import { SuratView } from "./views/surat-view"
+// V8 — QR Code & Digitalisasi
+import { QrView } from "./views/qr-view"
 
 export function AdminLayout() {
   const currentView = useAdminStore((s) => s.currentView)
@@ -84,6 +86,9 @@ export function AdminLayout() {
       // V7 — Administrasi & Dokumen
       case "surat": return <SuratView />
       // End V7
+      // V8 — QR Code & Digitalisasi
+      case "qr": return <QrView />
+      // End V8
       case "users": return <UsersView />
       case "pengaturan": return <PengaturanView />
       case "profile": return <ProfileView />

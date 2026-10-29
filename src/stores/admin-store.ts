@@ -42,6 +42,9 @@ export type AdminView =
   // V7 — Administrasi & Dokumen
   | "surat"
   // End V7
+  // V8 — QR Code & Digitalisasi
+  | "qr"
+  // End V8
   | "users"
   | "pengaturan"
   | "profile"
