@@ -423,6 +423,7 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
     { id: "ujian", label: "Ujian", icon: "file-tray-full" },
     { id: "tagihan", label: "Tagihan", icon: "wallet" },
     { id: "rapor", label: "Rapor", icon: "document-text" },
+    { id: "pengumuman", label: "Info", icon: "megaphone" },
     { id: "notifikasi", label: "Notif", icon: "notifications" },
     { id: "chat", label: "Chat", icon: "chatbubble" },
     { id: "qr", label: "QR", icon: "qr-code" },
@@ -714,6 +715,26 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
                 </View>
               ) : (
                 <Text style={styles.emptyTextSmall}>Belum ada rapor untuk semester ini</Text>
+              )}
+            </View>
+          )}
+
+          {/* Pengumuman */}
+          {activeTab === "pengumuman" && detail && (
+            <View style={styles.contentCard}>
+              <Text style={styles.contentTitle}>Pengumuman</Text>
+              {detail.announcements?.length === 0 ? (
+                <Text style={styles.emptyTextSmall}>Belum ada pengumuman</Text>
+              ) : (
+                detail.announcements?.map((a: any, i: number) => (
+                  <View key={i} style={styles.listRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.tagihanName}>{a.title}</Text>
+                      <Text style={styles.tagihanDesc} numberOfLines={2}>{a.content}</Text>
+                      <Text style={[styles.tagihanDesc, { fontSize: 10 }]}>{formatDate(a.publishedAt, true)}</Text>
+                    </View>
+                  </View>
+                ))
               )}
             </View>
           )}

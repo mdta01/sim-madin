@@ -8,6 +8,7 @@ import React, { useState, useEffect, useCallback } from "react"
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, SafeAreaView, StatusBar, ScrollView, Alert,
+  FlatList,
 } from "react-native"
 import { NavigationContainer } from "@react-navigation/native"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
@@ -230,6 +231,18 @@ function DashboardScreen({ onLogout, navigation }: { onLogout: () => void; navig
               </View>
               <Text style={styles.menuTitle}>Pengumuman</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.statCard} onPress={() => navigation.navigate("MonitorNilai")}>
+              <View style={[styles.statIcon, { backgroundColor: "#ede9fe" }]}>
+                <Ionicons name="star" size={24} color="#7c3aed" />
+              </View>
+              <Text style={styles.menuTitle}>Monitoring Nilai</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.statCard} onPress={() => navigation.navigate("DashboardKepala")}>
+              <View style={[styles.statIcon, { backgroundColor: Colors.primaryLight }]}>
+                <Ionicons name="bar-chart" size={24} color={Colors.primary} />
+              </View>
+              <Text style={styles.menuTitle}>Dashboard Analitik</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={{ height: 24 }} />
@@ -418,6 +431,157 @@ function MonitorPengumumanScreen({ navigation }: { navigation: any }) {
   )} />
 }
 
+// ============================================================================
+// V11 — Monitoring Nilai Santri
+// Fetch dari /api/admin/nilai?limit=50 (sudah sort by assessmentDate desc)
+// ============================================================================
+function MonitorNilaiScreen({ navigation }: { navigation: any }) {
+  return <MonitorListScreen navigation={navigation} title="Monitoring Nilai" endpoint="/api/admin/nilai?limit=50" renderItem={(item: any) => {
+    const kkm = item.mapel?.kkm ?? 70
+    const lulus = item.score >= kkm
+    const typeColor = item.type === "UAS" ? Colors.danger : item.type === "UTS" ? Colors.warning : Colors.primary
+    const typeBg = item.type === "UAS" ? Colors.dangerLight : item.type === "UTS" ? Colors.warningLight : Colors.primaryLight
+    return (
+      <View style={styles.kelasCard}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.kelasName}>{item.santri?.name || "-"}</Text>
+            <Text style={styles.kelasWali}>{item.mapel?.name || "-"} • {item.kelas?.name || "-"}</Text>
+            <Text style={[styles.kelasWali, { fontSize: 11, marginTop: 2 }]}>{formatDate(item.assessmentDate)}</Text>
+          </View>
+          <View style={{ alignItems: "flex-end" }}>
+            <Text style={{ fontSize: 22, fontWeight: "bold", color: lulus ? Colors.success : Colors.danger }}>{item.score}</Text>
+            <View style={{ backgroundColor: typeBg, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, marginTop: 4 }}>
+              <Text style={{ fontSize: 10, fontWeight: "600", color: typeColor }}>{item.type}</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    )
+  }} />
+}
+
+// ============================================================================
+// V11 — Dashboard Kepala (Comprehensive Analytics)
+// Fetch dari /api/admin/dashboard-kepala
+// ============================================================================
+function DashboardKepalaScreen({ navigation }: { navigation: any }) {
+  const [data, setData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true)
+      const res = await apiGet("/api/admin/dashboard-kepala")
+      setData(res.data || res)
+    } catch (e: any) { Alert.alert("Error", e.message) }
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const statCards = data ? [
+    { label: "Total Santri", value: String(data.santri?.total ?? 0), icon: "people", color: Colors.success, bg: Colors.successLight },
+    { label: "Santri Aktif", value: String(data.santri?.aktif ?? 0), icon: "person", color: Colors.primary, bg: Colors.primaryLight },
+    { label: "Guru Aktif", value: String(data.guru?.aktif ?? 0), icon: "school", color: Colors.primary, bg: Colors.primaryLight },
+    { label: "Saldo Kas", value: formatRupiah(data.keuangan?.saldo ?? 0), icon: "cash", color: Colors.success, bg: Colors.successLight },
+    { label: "Tunggakan", value: formatRupiah(data.keuangan?.totalTunggakan ?? 0), icon: "warning", color: Colors.danger, bg: Colors.dangerLight },
+    { label: "Kehadiran", value: `${data.kehadiran?.persentaseHadir ?? 0}%`, icon: "checkmark-done", color: Colors.success, bg: Colors.successLight },
+  ] : []
+
+  const topSantri = (data?.akademik?.topSantri || []).slice(0, 5)
+  const seringTidakHadir = (data?.kehadiran?.santriSeringTidakHadir || []).slice(0, 5)
+  const rekapPerKelas = data?.kehadiran?.rekapPerKelas || []
+
+  return (
+    <SafeAreaView style={styles.screen}>
+      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4 }}>
+          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Dashboard Analitik</Text>
+        <View style={{ width: 24 }} />
+      </View>
+      {loading ? (
+        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+      ) : (
+        <ScrollView style={styles.content}>
+          {/* Stat cards */}
+          <Text style={styles.sectionTitle}>Ringkasan</Text>
+          <View style={styles.statsGrid}>
+            {statCards.map((s, i) => (
+              <View key={i} style={styles.statCard}>
+                <View style={[styles.statIcon, { backgroundColor: s.bg }]}>
+                  <Ionicons name={s.icon as any} size={24} color={s.color} />
+                </View>
+                <Text style={styles.statLabel}>{s.label}</Text>
+                <Text style={styles.statValue}>{s.value}</Text>
+              </View>
+            ))}
+          </View>
+
+          {/* Top 5 Santri by avg nilai */}
+          <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Top 5 Santri (by Avg Nilai)</Text>
+          {topSantri.length > 0 ? topSantri.map((s: any, i: number) => (
+            <View key={i} style={styles.kelasCard}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.kelasName}>#{s.rank} {s.name}</Text>
+                  <Text style={styles.kelasWali}>{s.nis} • {s.kelas}</Text>
+                </View>
+                <View style={{ alignItems: "flex-end" }}>
+                  <Text style={{ fontSize: 22, fontWeight: "bold", color: Colors.success }}>{s.avg}</Text>
+                  <Text style={{ fontSize: 10, color: Colors.textMuted, marginTop: 2 }}>{s.count} nilai</Text>
+                </View>
+              </View>
+            </View>
+          )) : <View style={styles.emptyCard}><Text style={styles.emptyText}>Belum ada data nilai</Text></View>}
+
+          {/* Santri sering tidak hadir (<80%) */}
+          <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Sering Tidak Hadir (≤80%)</Text>
+          {seringTidakHadir.length > 0 ? seringTidakHadir.map((s: any, i: number) => (
+            <View key={i} style={styles.kelasCard}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.kelasName}>{s.name}</Text>
+                  <Text style={styles.kelasWali}>{s.nis} • {s.kelas}</Text>
+                  <Text style={[styles.kelasWali, { fontSize: 11 }]}>{s.hadir}/{s.total} hari hadir</Text>
+                </View>
+                <View style={{ backgroundColor: Colors.dangerLight, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
+                  <Text style={{ fontSize: 14, fontWeight: "600", color: Colors.danger }}>{s.persentase}%</Text>
+                </View>
+              </View>
+            </View>
+          )) : <View style={styles.emptyCard}><Text style={styles.emptyText}>Semua santri hadir ≥80%</Text></View>}
+
+          {/* Rekap kehadiran per kelas */}
+          <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Rekap Kehadiran per Kelas</Text>
+          {rekapPerKelas.length > 0 ? rekapPerKelas.map((k: any, i: number) => {
+            const color = k.persentase >= 80 ? Colors.success : k.persentase >= 60 ? Colors.warning : Colors.danger
+            const bg = k.persentase >= 80 ? Colors.successLight : k.persentase >= 60 ? Colors.warningLight : Colors.dangerLight
+            return (
+              <View key={i} style={styles.kelasCard}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.kelasName}>{k.kelas}</Text>
+                    <Text style={styles.kelasWali}>{k.hadir}/{k.total} hadir</Text>
+                  </View>
+                  <View style={{ backgroundColor: bg, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
+                    <Text style={{ fontSize: 14, fontWeight: "600", color }}>{k.persentase}%</Text>
+                  </View>
+                </View>
+              </View>
+            )
+          }) : <View style={styles.emptyCard}><Text style={styles.emptyText}>Belum ada data absensi</Text></View>}
+
+          <View style={{ height: 24 }} />
+        </ScrollView>
+      )}
+    </SafeAreaView>
+  )
+}
+
 const Stack = createNativeStackNavigator()
 
 export default function App() {
@@ -454,6 +618,8 @@ export default function App() {
             <Stack.Screen name="MonitorAbsensi" component={MonitorAbsensiScreen} />
             <Stack.Screen name="MonitorKeuangan" component={MonitorKeuanganScreen} />
             <Stack.Screen name="MonitorPengumuman" component={MonitorPengumumanScreen} />
+            <Stack.Screen name="MonitorNilai" component={MonitorNilaiScreen} />
+            <Stack.Screen name="DashboardKepala" component={DashboardKepalaScreen} />
           </>
         ) : (
           <Stack.Screen name="Login">{() => <LoginScreen onLogin={() => setIsLoggedIn(true)} />}</Stack.Screen>

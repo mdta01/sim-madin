@@ -1,0 +1,988 @@
+     1→     1→/**
+     2→     2→ * SIM MADIN — Guru Mobile App (V1 Complete)
+     3→     3→ * Login: Email + Password (Supabase Auth)
+     4→     4→ * Fitur: Jadwal mengajar, Input absensi cepat, Input nilai
+     5→     5→ */
+     6→     6→
+     7→     7→import React, { useState, useEffect, useCallback } from "react"
+     8→     8→import {
+     9→     9→  View, Text, TextInput, TouchableOpacity, StyleSheet,
+    10→    10→  ActivityIndicator, SafeAreaView, StatusBar, ScrollView, Alert,
+    11→    11→  FlatList, Modal, Picker,
+    12→    12→} from "react-native"
+    13→    13→import { NavigationContainer } from "@react-navigation/native"
+    14→    14→import { createNativeStackNavigator } from "@react-navigation/native-stack"
+    15→    15→import { Ionicons } from "@expo/vector-icons"
+    16→    16→import { createClient, SupabaseClient } from "@supabase/supabase-js"
+    17→    17→import * as SecureStore from "expo-secure-store"
+    18→    18→import { formatRupiah, formatDate, STATUS_STYLES, DAYS, NILAI_TYPES } from "../../../packages/mobile-shared/src"
+    19→    19→
+    20→    20→const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "https://sim-madin.vercel.app"
+    21→    21→const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "https://ooglxextkliuhpequwme.supabase.co"
+    22→    22→const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9vZ2x4ZXh0a2xpdWhwZXF1d21lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyMDYyNzUsImV4cCI6MjEwODc4MjI3NX0.os3Vbdo0TB6z4OrH4b3ZLFQqBpNY1pMN-8LKyhZaK2w"
+    23→    23→
+    24→    24→let supabase: SupabaseClient | null = null
+    25→    25→function getSupabase() {
+    26→    26→  if (supabase) return supabase
+    27→    27→  supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    28→    28→    auth: {
+    29→    29→      storage: {
+    30→    30→        getItem: async (k: string) => { try { return await SecureStore.getItemAsync(k) } catch { return null } },
+    31→    31→        setItem: async (k: string, v: string) => { try { await SecureStore.setItemAsync(k, v) } catch {} },
+    32→    32→        removeItem: async (k: string) => { try { await SecureStore.deleteItemAsync(k) } catch {} },
+    33→    33→      },
+    34→    34→      autoRefreshToken: true, persistSession: true,
+    35→    35→    },
+    36→    36→  })
+    37→    37→  return supabase
+    38→    38→}
+    39→    39→
+    40→    40→let authToken: string | null = null
+    41→    41→
+    42→    42→async function apiGet(path: string) {
+    43→    43→  const res = await fetch(`${API_BASE_URL}${path}`, { headers: authToken ? { Authorization: `Bearer ${authToken}` } : {} })
+    44→    44→  if (!res.ok) throw new Error((await res.json())?.error || `Failed: ${res.status}`)
+    45→    45→  return res.json()
+    46→    46→}
+    47→    47→
+    48→    48→async function apiPost(path: string, body: any) {
+    49→    49→  const res = await fetch(`${API_BASE_URL}${path}`, {
+    50→    50→    method: "POST",
+    51→    51→    headers: { "Content-Type": "application/json", ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
+    52→    52→    body: JSON.stringify(body),
+    53→    53→  })
+    54→    54→  if (!res.ok) throw new Error((await res.json())?.error || `Failed: ${res.status}`)
+    55→    55→  return res.json()
+    56→    56→}
+    57→    57→
+    58→    58→const Colors = {
+    59→    59→  primary: "#ea580c", primaryLight: "#fed7aa", primaryDark: "#c2410c",
+    60→    60→  background: "#f8fafc", card: "#ffffff", text: "#1e293b", textMuted: "#64748b",
+    61→    61→  border: "#e2e8f0", danger: "#dc2626", dangerLight: "#fee2e2",
+    62→    62→  warning: "#d97706", warningLight: "#fef3c7",
+    63→    63→  success: "#059669", successLight: "#d1fae5",
+    64→    64→  info: "#3b82f6", infoLight: "#dbeafe",
+    65→    65→  white: "#ffffff",
+    66→    66→}
+    67→    67→
+    68→    68→const ABS_STATUS = [
+    69→    69→  { value: "HADIR", label: "Hadir", color: Colors.success, bg: Colors.successLight },
+    70→    70→  { value: "SAKIT", label: "Sakit", color: Colors.warning, bg: Colors.warningLight },
+    71→    71→  { value: "IZIN", label: "Izin", color: Colors.info, bg: Colors.infoLight },
+    72→    72→  { value: "ALFA", label: "Alfa", color: Colors.danger, bg: Colors.dangerLight },
+    73→    73→]
+    74→    74→
+    75→    75→// ============================================================================
+    76→    76→// LOGIN SCREEN
+    77→    77→// ============================================================================
+    78→    78→function LoginScreen({ onLogin }: { onLogin: () => void }) {
+    79→    79→  const [email, setEmail] = useState("guru@madrasah.test")
+    80→    80→  const [password, setPassword] = useState("admin123")
+    81→    81→  const [loading, setLoading] = useState(false)
+    82→    82→
+    83→    83→  const handleLogin = async () => {
+    84→    84→    if (!email || !password) { Alert.alert("Validasi", "Email dan password wajib diisi"); return }
+    85→    85→    setLoading(true)
+    86→    86→    try {
+    87→    87→      const { data, error } = await getSupabase().auth.signInWithPassword({ email, password })
+    88→    88→      if (error) throw error
+    89→    89→      authToken = data.session?.access_token || null
+    90→    90→      await SecureStore.setItemAsync("authToken", authToken || "")
+    91→    91→      onLogin()
+    92→    92→    } catch (e: any) { Alert.alert("Login Gagal", e.message) }
+    93→    93→    finally { setLoading(false) }
+    94→    94→  }
+    95→    95→
+    96→    96→  return (
+    97→    97→    <SafeAreaView style={styles.loginContainer}>
+    98→    98→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+    99→    99→      <ScrollView contentContainerStyle={styles.loginScroll}>
+   100→   100→        <View style={styles.loginLogo}>
+   101→   101→          <Ionicons name="school" size={80} color={Colors.primary} />
+   102→   102→          <Text style={styles.loginTitle}>SIM MADIN</Text>
+   103→   103→          <Text style={styles.loginSubtitle}>Guru</Text>
+   104→   104→        </View>
+   105→   105→        <View style={styles.loginCard}>
+   106→   106→          <Text style={styles.loginCardTitle}>Masuk sebagai Guru</Text>
+   107→   107→          <Text style={styles.label}>Email</Text>
+   108→   108→          <TextInput style={styles.input} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" placeholder="guru@madrasah.test" />
+   109→   109→          <Text style={styles.label}>Password</Text>
+   110→   110→          <TextInput style={styles.input} value={password} onChangeText={setPassword} secureTextEntry placeholder="••••••••" />
+   111→   111→          <TouchableOpacity style={[styles.loginButton, loading && { opacity: 0.6 }]} onPress={handleLogin} disabled={loading}>
+   112→   112→            {loading ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.loginButtonText}>Masuk</Text>}
+   113→   113→          </TouchableOpacity>
+   114→   114→          <Text style={styles.demoText}>Demo: guru@madrasah.test / admin123</Text>
+   115→   115→        </View>
+   116→   116→      </ScrollView>
+   117→   117→    </SafeAreaView>
+   118→   118→  )
+   119→   119→}
+   120→   120→
+   121→   121→// ============================================================================
+   122→   122→// DASHBOARD SCREEN (Home with menu)
+   123→   123→// ============================================================================
+   124→   124→function DashboardScreen({ onLogout, navigation }: { onLogout: () => void; navigation: any }) {
+   125→   125→  const [jadwal, setJadwal] = useState<any[]>([])
+   126→   126→  const [loading, setLoading] = useState(true)
+   127→   127→  // V2: guru-specific stats
+   128→   128→  const [v2Stats, setV2Stats] = useState<{
+   129→   129→    pertemuanToday: number
+   130→   130→    pendingGrading: number
+   131→   131→    materiCount: number
+   132→   132→    tugasActive: number
+   133→   133→  } | null>(null)
+   134→   134→
+   135→   135→  const loadJadwal = useCallback(async () => {
+   136→   136→    try {
+   137→   137→      setLoading(true)
+   138→   138→      const res = await apiGet("/api/admin/jadwal")
+   139→   139→      setJadwal(res.data || [])
+   140→   140→      // V2: fetch guru dashboard stats in parallel (best-effort, don't fail whole load)
+   141→   141→      apiGet("/api/admin/guru/stats").then((statsRes) => setV2Stats(statsRes.data)).catch(() => setV2Stats(null))
+   142→   142→    } catch (e: any) { Alert.alert("Error", e.message) }
+   143→   143→    finally { setLoading(false) }
+   144→   144→  }, [])
+   145→   145→
+   146→   146→  useEffect(() => { loadJadwal() }, [loadJadwal])
+   147→   147→
+   148→   148→  const today = new Date().getDay() || 7
+   149→   149→  const todayJadwal = jadwal.filter(j => j.dayOfWeek === today)
+   150→   150→
+   151→   151→  const menuItems = [
+   152→   152→    { id: "absensi", title: "Input Absensi", icon: "checkmark-done", color: Colors.success, bg: Colors.successLight, onPress: () => navigation.navigate("AbsensiInput") },
+   153→   153→    { id: "nilai", title: "Input Nilai", icon: "school", color: Colors.primary, bg: Colors.primaryLight, onPress: () => navigation.navigate("NilaiInput") },
+   154→   154→    { id: "santri", title: "Daftar Santri", icon: "people", color: "#7c3aed", bg: "#ede9fe", onPress: () => navigation.navigate("SantriList") },
+   155→   155→    { id: "jadwal", title: "Lihat Jadwal", icon: "calendar", color: Colors.info, bg: Colors.infoLight, onPress: () => navigation.navigate("JadwalList") },
+   156→   156→    { id: "info", title: "Pengumuman", icon: "megaphone", color: Colors.warning, bg: Colors.warningLight, onPress: () => navigation.navigate("PengumumanList") },
+   157→   157→  ]
+   158→   158→
+   159→   159→  return (
+   160→   160→    <SafeAreaView style={styles.screen}>
+   161→   161→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+   162→   162→      <View style={styles.header}>
+   163→   163→        <View>
+   164→   164→          <Text style={styles.headerTitle}>Dashboard Guru</Text>
+   165→   165→        </View>
+   166→   166→        <TouchableOpacity onPress={onLogout}>
+   167→   167→          <Ionicons name="log-out-outline" size={24} color={Colors.white} />
+   168→   168→        </TouchableOpacity>
+   169→   169→      </View>
+   170→   170→
+   171→   171→      <ScrollView style={styles.content}>
+   172→   172→        {/* V2 — Guru Quick Stats */}
+   173→   173→        {v2Stats && (
+   174→   174→          <View style={styles.v2StatsRow}>
+   175→   175→            <View style={styles.v2StatCard}>
+   176→   176→              <Ionicons name="calendar" size={20} color={Colors.info} />
+   177→   177→              <Text style={styles.v2StatValue}>{v2Stats.pertemuanToday}</Text>
+   178→   178→              <Text style={styles.v2StatLabel}>Pertemuan Hari Ini</Text>
+   179→   179→            </View>
+   180→   180→            <View style={[styles.v2StatCard, v2Stats.pendingGrading > 0 && { borderColor: Colors.warning }]}>
+   181→   181→              <Ionicons name="alert-circle" size={20} color={Colors.warning} />
+   182→   182→              <Text style={styles.v2StatValue}>{v2Stats.pendingGrading}</Text>
+   183→   183→              <Text style={styles.v2StatLabel}>Perlu Dinilai</Text>
+   184→   184→            </View>
+   185→   185→            <View style={styles.v2StatCard}>
+   186→   186→              <Ionicons name="folder-open" size={20} color="#7c3aed" />
+   187→   187→              <Text style={styles.v2StatValue}>{v2Stats.materiCount}</Text>
+   188→   188→              <Text style={styles.v2StatLabel}>Materi Saya</Text>
+   189→   189→            </View>
+   190→   190→            <View style={styles.v2StatCard}>
+   191→   191→              <Ionicons name="create" size={20} color={Colors.success} />
+   192→   192→              <Text style={styles.v2StatValue}>{v2Stats.tugasActive}</Text>
+   193→   193→              <Text style={styles.v2StatLabel}>Tugas Aktif</Text>
+   194→   194→            </View>
+   195→   195→          </View>
+   196→   196→        )}
+   197→   197→
+   198→   198→        {/* Menu Grid */}
+   199→   199→        <View style={styles.menuGrid}>
+   200→   200→          {menuItems.map((item) => (
+   201→   201→            <TouchableOpacity key={item.id} style={styles.menuCard} onPress={item.onPress}>
+   202→   202→              <View style={[styles.menuIcon, { backgroundColor: item.bg }]}>
+   203→   203→                <Ionicons name={item.icon as any} size={28} color={item.color} />
+   204→   204→              </View>
+   205→   205→              <Text style={styles.menuTitle}>{item.title}</Text>
+   206→   206→            </TouchableOpacity>
+   207→   207→          ))}
+   208→   208→        </View>
+   209→   209→
+   210→   210→        {/* Today's Schedule */}
+   211→   211→        <Text style={styles.sectionTitle}>Jadwal Hari Ini ({DAYS.find(d => d.value === today)?.label || "-"})</Text>
+   212→   212→        {loading ? (
+   213→   213→          <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+   214→   214→        ) : todayJadwal.length === 0 ? (
+   215→   215→          <View style={styles.emptyCard}>
+   216→   216→            <Text style={styles.emptyText}>Tidak ada jadwal hari ini 🎉</Text>
+   217→   217→          </View>
+   218→   218→        ) : (
+   219→   219→          todayJadwal.map((j, i) => (
+   220→   220→            <View key={i} style={styles.jadwalCard}>
+   221→   221→              <View style={styles.jadwalTime}>
+   222→   222→                <Text style={styles.jadwalStartTime}>{j.startTime}</Text>
+   223→   223→                <Text style={styles.jadwalEndTime}>{j.endTime}</Text>
+   224→   224→              </View>
+   225→   225→              <View style={styles.jadwalInfo}>
+   226→   226→                <Text style={styles.jadwalMapel}>{j.mapel?.name}</Text>
+   227→   227→                <Text style={styles.jadwalKelas}>{j.kelas?.name}</Text>
+   228→   228→              </View>
+   229→   229→              <TouchableOpacity
+   230→   230→                style={styles.absensiQuickBtn}
+   231→   231→                onPress={() => navigation.navigate("AbsensiInput", { kelasId: j.kelasId, kelasName: j.kelas?.name })}
+   232→   232→              >
+   233→   233→                <Ionicons name="checkmark-done" size={18} color={Colors.white} />
+   234→   234→                <Text style={styles.absensiQuickText}>Absen</Text>
+   235→   235→              </TouchableOpacity>
+   236→   236→            </View>
+   237→   237→          ))
+   238→   238→        )}
+   239→   239→      </ScrollView>
+   240→   240→    </SafeAreaView>
+   241→   241→  )
+   242→   242→}
+   243→   243→
+   244→   244→// ============================================================================
+   245→   245→// ABSENSI INPUT SCREEN
+   246→   246→// ============================================================================
+   247→   247→function AbsensiInputScreen({ route, navigation }: { route: any; navigation: any }) {
+   248→   248→  const kelasIdFromRoute = route?.params?.kelasId
+   249→   249→  const kelasNameFromRoute = route?.params?.kelasName
+   250→   250→
+   251→   251→  const [kelasList, setKelasList] = useState<any[]>([])
+   252→   252→  const [selectedKelas, setSelectedKelas] = useState(kelasIdFromRoute || "")
+   253→   253→  const [santriList, setSantriList] = useState<any[]>([])
+   254→   254→  const [absensiData, setAbsensiData] = useState<Record<string, string>>({})
+   255→   255→  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0])
+   256→   256→  const [loading, setLoading] = useState(false)
+   257→   257→  const [saving, setSaving] = useState(false)
+   258→   258→
+   259→   259→  const loadKelas = useCallback(async () => {
+   260→   260→    try {
+   261→   261→      const res = await apiGet("/api/admin/kelas")
+   262→   262→      setKelasList(res.data || [])
+   263→   263→      if (!selectedKelas && res.data?.length > 0) {
+   264→   264→        setSelectedKelas(res.data[0].id)
+   265→   265→      }
+   266→   266→    } catch (e: any) { Alert.alert("Error", e.message) }
+   267→   267→  }, [selectedKelas])
+   268→   268→
+   269→   269→  const loadSantri = useCallback(async () => {
+   270→   270→    if (!selectedKelas) return
+   271→   271→    try {
+   272→   272→      setLoading(true)
+   273→   273→      const res = await apiGet(`/api/admin/santri?kelasId=${selectedKelas}&status=AKTIF`)
+   274→   274→      setSantriList(res.data || [])
+   275→   275→      // Default semua HADIR
+   276→   276→      const defaults: Record<string, string> = {}
+   277→   277→      res.data?.forEach((s: any) => { defaults[s.id] = "HADIR" })
+   278→   278→      setAbsensiData(defaults)
+   279→   279→    } catch (e: any) { Alert.alert("Error", e.message) }
+   280→   280→    finally { setLoading(false) }
+   281→   281→  }, [selectedKelas])
+   282→   282→
+   283→   283→  useEffect(() => { loadKelas() }, [loadKelas])
+   284→   284→  useEffect(() => { if (selectedKelas) loadSantri() }, [selectedKelas, loadSantri])
+   285→   285→
+   286→   286→  const setStatus = (santriId: string, status: string) => {
+   287→   287→    setAbsensiData(prev => ({ ...prev, [santriId]: status }))
+   288→   288→  }
+   289→   289→
+   290→   290→  const setAllStatus = (status: string) => {
+   291→   291→    const newData: Record<string, string> = {}
+   292→   292→    santriList.forEach(s => { newData[s.id] = status })
+   293→   293→    setAbsensiData(newData)
+   294→   294→  }
+   295→   295→
+   296→   296→  const handleSave = async () => {
+   297→   297→    if (santriList.length === 0) { Alert.alert("Error", "Belum ada santri"); return }
+   298→   298→    setSaving(true)
+   299→   299→    try {
+   300→   300→      const entries = Object.entries(absensiData).map(([santriId, status]) => ({ santriId, status }))
+   301→   301→      const res = await apiPost("/api/admin/absensi", { entries, kelasId: selectedKelas, date: selectedDate })
+   302→   302→      Alert.alert("Berhasil", `${res.count} absensi tersimpan`)
+   303→   303→      navigation.goBack()
+   304→   304→    } catch (e: any) { Alert.alert("Gagal", e.message) }
+   305→   305→    finally { setSaving(false) }
+   306→   306→  }
+   307→   307→
+   308→   308→  return (
+   309→   309→    <SafeAreaView style={styles.screen}>
+   310→   310→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+   311→   311→      <View style={styles.header}>
+   312→   312→        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+   313→   313→          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+   314→   314→        </TouchableOpacity>
+   315→   315→        <Text style={styles.headerTitle}>Input Absensi</Text>
+   316→   316→        <View style={{ width: 24 }} />
+   317→   317→      </View>
+   318→   318→
+   319→   319→      <View style={styles.absensiControls}>
+   320→   320→        {/* Date picker */}
+   321→   321→        <Text style={styles.label}>Tanggal</Text>
+   322→   322→        <TextInput
+   323→   323→          style={styles.dateInput}
+   324→   324→          value={selectedDate}
+   325→   325→          onChangeText={setSelectedDate}
+   326→   326→          placeholder="YYYY-MM-DD"
+   327→   327→        />
+   328→   328→
+   329→   329→        {/* Kelas selector */}
+   330→   330→        <Text style={styles.label}>Kelas</Text>
+   331→   331→        <View style={styles.pickerContainer}>
+   332→   332→          {kelasList.map((k) => (
+   333→   333→            <TouchableOpacity
+   334→   334→              key={k.id}
+   335→   335→              style={[styles.kelasPill, selectedKelas === k.id && styles.kelasPillActive]}
+   336→   336→              onPress={() => setSelectedKelas(k.id)}
+   337→   337→            >
+   338→   338→              <Text style={[styles.kelasPillText, selectedKelas === k.id && styles.kelasPillTextActive]}>
+   339→   339→                {k.name}
+   340→   340→              </Text>
+   341→   341→            </TouchableOpacity>
+   342→   342→          ))}
+   343→   343→        </View>
+   344→   344→
+   345→   345→        {/* Quick set all */}
+   346→   346→        <View style={styles.quickSetRow}>
+   347→   347→          <Text style={styles.quickSetLabel}>Set Semua:</Text>
+   348→   348→          {ABS_STATUS.map(s => (
+   349→   349→            <TouchableOpacity
+   350→   350→              key={s.value}
+   351→   351→              style={[styles.quickSetBtn, { backgroundColor: s.bg, borderColor: s.color }]}
+   352→   352→              onPress={() => setAllStatus(s.value)}
+   353→   353→            >
+   354→   354→              <Text style={[styles.quickSetText, { color: s.color }]}>{s.label}</Text>
+   355→   355→            </TouchableOpacity>
+   356→   356→          ))}
+   357→   357→        </View>
+   358→   358→      </View>
+   359→   359→
+   360→   360→      {loading ? (
+   361→   361→        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+   362→   362→      ) : (
+   363→   363→        <FlatList
+   364→   364→          data={santriList}
+   365→   365→          keyExtractor={(item) => item.id}
+   366→   366→          renderItem={({ item }) => (
+   367→   367→            <View style={styles.absensiRow}>
+   368→   368→              <View style={styles.absensiInfo}>
+   369→   369→                <Text style={styles.absensiName}>{item.name}</Text>
+   370→   370→                <Text style={styles.absensiNis}>{item.nis}</Text>
+   371→   371→              </View>
+   372→   372→              <View style={styles.absensiButtons}>
+   373→   373→                {ABS_STATUS.map(s => (
+   374→   374→                  <TouchableOpacity
+   375→   375→                    key={s.value}
+   376→   376→                    style={[
+   377→   377→                      styles.absensiBtn,
+   378→   378→                      absensiData[item.id] === s.value && { backgroundColor: s.bg, borderColor: s.color },
+   379→   379→                    ]}
+   380→   380→                    onPress={() => setStatus(item.id, s.value)}
+   381→   381→                  >
+   382→   382→                    <Text style={[
+   383→   383→                      styles.absensiBtnText,
+   384→   384→                      absensiData[item.id] === s.value ? { color: s.color, fontWeight: "bold" } : { color: Colors.textMuted },
+   385→   385→                    ]}>
+   386→   386→                      {s.label}
+   387→   387→                    </Text>
+   388→   388→                  </TouchableOpacity>
+   389→   389→                ))}
+   390→   390→              </View>
+   391→   391→            </View>
+   392→   392→          )}
+   393→   393→          ListEmptyComponent={() => (
+   394→   394→            <View style={styles.emptyCard}>
+   395→   395→              <Text style={styles.emptyText}>Pilih kelas untuk melihat daftar santri</Text>
+   396→   396→            </View>
+   397→   397→          )}
+   398→   398→          contentContainerStyle={{ paddingBottom: 80 }}
+   399→   399→        />
+   400→   400→      )}
+   401→   401→
+   402→   402→      {/* Save button */}
+   403→   403→      {santriList.length > 0 && (
+   404→   404→        <TouchableOpacity
+   405→   405→          style={[styles.saveButton, saving && { opacity: 0.6 }]}
+   406→   406→          onPress={handleSave}
+   407→   407→          disabled={saving}
+   408→   408→        >
+   409→   409→          {saving ? <ActivityIndicator color={Colors.white} /> : (
+   410→   410→            <>
+   411→   411→              <Ionicons name="save" size={20} color={Colors.white} />
+   412→   412→              <Text style={styles.saveButtonText}>Simpan Absensi ({santriList.length} santri)</Text>
+   413→   413→            </>
+   414→   414→          )}
+   415→   415→        </TouchableOpacity>
+   416→   416→      )}
+   417→   417→    </SafeAreaView>
+   418→   418→  )
+   419→   419→}
+   420→   420→
+   421→   421→// ============================================================================
+   422→   422→// NILAI INPUT SCREEN
+   423→   423→// ============================================================================
+   424→   424→function NilaiInputScreen({ navigation }: { navigation: any }) {
+   425→   425→  const [kelasList, setKelasList] = useState<any[]>([])
+   426→   426→  const [mapelList, setMapelList] = useState<any[]>([])
+   427→   427→  const [selectedKelas, setSelectedKelas] = useState("")
+   428→   428→  const [selectedMapel, setSelectedMapel] = useState("")
+   429→   429→  const [selectedType, setSelectedType] = useState("HARIAN")
+   430→   430→  const [santriList, setSantriList] = useState<any[]>([])
+   431→   431→  const [nilaiData, setNilaiData] = useState<Record<string, string>>({})
+   432→   432→  const [loading, setLoading] = useState(false)
+   433→   433→  const [saving, setSaving] = useState(false)
+   434→   434→
+   435→   435→  const loadMaster = useCallback(async () => {
+   436→   436→    try {
+   437→   437→      const [kelasRes, mapelRes] = await Promise.all([
+   438→   438→        apiGet("/api/admin/kelas"),
+   439→   439→        apiGet("/api/admin/mapel"),
+   440→   440→      ])
+   441→   441→      setKelasList(kelasRes.data || [])
+   442→   442→      setMapelList(mapelRes.data || [])
+   443→   443→      if (kelasRes.data?.length > 0) setSelectedKelas(kelasRes.data[0].id)
+   444→   444→      if (mapelRes.data?.length > 0) setSelectedMapel(mapelRes.data[0].id)
+   445→   445→    } catch (e: any) { Alert.alert("Error", e.message) }
+   446→   446→  }, [])
+   447→   447→
+   448→   448→  const loadSantri = useCallback(async () => {
+   449→   449→    if (!selectedKelas) return
+   450→   450→    try {
+   451→   451→      setLoading(true)
+   452→   452→      const res = await apiGet(`/api/admin/santri?kelasId=${selectedKelas}&status=AKTIF`)
+   453→   453→      setSantriList(res.data || [])
+   454→   454→      const defaults: Record<string, string> = {}
+   455→   455→      res.data?.forEach((s: any) => { defaults[s.id] = "" })
+   456→   456→      setNilaiData(defaults)
+   457→   457→    } catch (e: any) { Alert.alert("Error", e.message) }
+   458→   458→    finally { setLoading(false) }
+   459→   459→  }, [selectedKelas])
+   460→   460→
+   461→   461→  useEffect(() => { loadMaster() }, [loadMaster])
+   462→   462→  useEffect(() => { if (selectedKelas) loadSantri() }, [selectedKelas, loadSantri])
+   463→   463→
+   464→   464→  const setNilai = (santriId: string, value: string) => {
+   465→   465→    const numValue = value.replace(/\D/g, "").slice(0, 3)
+   466→   466→    setNilaiData(prev => ({ ...prev, [santriId]: numValue }))
+   467→   467→  }
+   468→   468→
+   469→   469→  const handleSave = async () => {
+   470→   470→    const entries = Object.entries(nilaiData).filter(([_, v]) => v && Number(v) > 0)
+   471→   471→    if (entries.length === 0) { Alert.alert("Validasi", "Isi minimal 1 nilai"); return }
+   472→   472→
+   473→   473→    setSaving(true)
+   474→   474→    try {
+   475→   475→      const promises = entries.map(([santriId, score]) =>
+   476→   476→        apiPost("/api/admin/nilai", {
+   477→   477→          santriId, kelasId: selectedKelas, mapelId: selectedMapel,
+   478→   478→          type: selectedType, score: Number(score),
+   479→   479→        })
+   480→   480→      )
+   481→   481→      await Promise.all(promises)
+   482→   482→      Alert.alert("Berhasil", `${entries.length} nilai tersimpan`)
+   483→   483→      navigation.goBack()
+   484→   484→    } catch (e: any) { Alert.alert("Gagal", e.message) }
+   485→   485→    finally { setSaving(false) }
+   486→   486→  }
+   487→   487→
+   488→   488→  return (
+   489→   489→    <SafeAreaView style={styles.screen}>
+   490→   490→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+   491→   491→      <View style={styles.header}>
+   492→   492→        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+   493→   493→          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+   494→   494→        </TouchableOpacity>
+   495→   495→        <Text style={styles.headerTitle}>Input Nilai</Text>
+   496→   496→        <View style={{ width: 24 }} />
+   497→   497→      </View>
+   498→   498→
+   499→   499→      <View style={styles.nilaiControls}>
+   500→   500→        {/* Kelas selector */}
+   501→   501→        <Text style={styles.label}>Kelas</Text>
+   502→   502→        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pickerScroll}>
+   503→   503→          {kelasList.map(k => (
+   504→   504→            <TouchableOpacity
+   505→   505→              key={k.id}
+   506→   506→              style={[styles.pill, selectedKelas === k.id && styles.pillActive]}
+   507→   507→              onPress={() => setSelectedKelas(k.id)}
+   508→   508→            >
+   509→   509→              <Text style={[styles.pillText, selectedKelas === k.id && styles.pillTextActive]}>{k.name}</Text>
+   510→   510→            </TouchableOpacity>
+   511→   511→          ))}
+   512→   512→        </ScrollView>
+   513→   513→
+   514→   514→        {/* Mapel selector */}
+   515→   515→        <Text style={styles.label}>Mata Pelajaran</Text>
+   516→   516→        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pickerScroll}>
+   517→   517→          {mapelList.map(m => (
+   518→   518→            <TouchableOpacity
+   519→   519→              key={m.id}
+   520→   520→              style={[styles.pill, selectedMapel === m.id && styles.pillActive]}
+   521→   521→              onPress={() => setSelectedMapel(m.id)}
+   522→   522→            >
+   523→   523→              <Text style={[styles.pillText, selectedMapel === m.id && styles.pillTextActive]}>{m.name}</Text>
+   524→   524→            </TouchableOpacity>
+   525→   525→          ))}
+   526→   526→        </ScrollView>
+   527→   527→
+   528→   528→        {/* Type selector */}
+   529→   529→        <Text style={styles.label}>Jenis Nilai</Text>
+   530→   530→        <View style={styles.typeRow}>
+   531→   531→          {NILAI_TYPES.map(t => (
+   532→   532→            <TouchableOpacity
+   533→   533→              key={t.value}
+   534→   534→              style={[styles.typeBtn, selectedType === t.value && styles.typeBtnActive]}
+   535→   535→              onPress={() => setSelectedType(t.value)}
+   536→   536→            >
+   537→   537→              <Text style={[styles.typeBtnText, selectedType === t.value && styles.typeBtnTextActive]}>{t.label}</Text>
+   538→   538→            </TouchableOpacity>
+   539→   539→          ))}
+   540→   540→        </View>
+   541→   541→      </View>
+   542→   542→
+   543→   543→      {loading ? (
+   544→   544→        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+   545→   545→      ) : (
+   546→   546→        <FlatList
+   547→   547→          data={santriList}
+   548→   548→          keyExtractor={item => item.id}
+   549→   549→          renderItem={({ item }) => (
+   550→   550→            <View style={styles.nilaiRow}>
+   551→   551→              <View style={styles.nilaiInfo}>
+   552→   552→                <Text style={styles.nilaiName}>{item.name}</Text>
+   553→   553→                <Text style={styles.nilaiNis}>{item.nis}</Text>
+   554→   554→              </View>
+   555→   555→              <TextInput
+   556→   556→                style={[
+   557→   557→                  styles.nilaiInput,
+   558→   558→                  nilaiData[item.id] && Number(nilaiData[item.id]) >= 70
+   559→   559→                    ? { borderColor: Colors.success, color: Colors.success }
+   560→   560→                    : nilaiData[item.id] && Number(nilaiData[item.id]) < 70
+   561→   561→                    ? { borderColor: Colors.danger, color: Colors.danger }
+   562→   562→                    : {},
+   563→   563→                ]}
+   564→   564→                value={nilaiData[item.id] || ""}
+   565→   565→                onChangeText={(v) => setNilai(item.id, v)}
+   566→   566→                keyboardType="numeric"
+   567→   567→                maxLength={3}
+   568→   568→                placeholder="0-100"
+   569→   569→              />
+   570→   570→            </View>
+   571→   571→          )}
+   572→   572→          ListEmptyComponent={() => (
+   573→   573→            <View style={styles.emptyCard}>
+   574→   574→              <Text style={styles.emptyText}>Pilih kelas untuk melihat santri</Text>
+   575→   575→            </View>
+   576→   576→          )}
+   577→   577→          contentContainerStyle={{ paddingBottom: 80 }}
+   578→   578→        />
+   579→   579→      )}
+   580→   580→
+   581→   581→      {santriList.length > 0 && (
+   582→   582→        <TouchableOpacity
+   583→   583→          style={[styles.saveButton, saving && { opacity: 0.6 }]}
+   584→   584→          onPress={handleSave}
+   585→   585→          disabled={saving}
+   586→   586→        >
+   587→   587→          {saving ? <ActivityIndicator color={Colors.white} /> : (
+   588→   588→            <>
+   589→   589→              <Ionicons name="save" size={20} color={Colors.white} />
+   590→   590→              <Text style={styles.saveButtonText}>Simpan Nilai</Text>
+   591→   591→            </>
+   592→   592→          )}
+   593→   593→        </TouchableOpacity>
+   594→   594→      )}
+   595→   595→    </SafeAreaView>
+   596→   596→  )
+   597→   597→}
+   598→   598→
+   599→   599→// ============================================================================
+   600→   600→// JADWAL LIST SCREEN
+   601→   601→// ============================================================================
+   602→   602→function JadwalListScreen({ navigation }: { navigation: any }) {
+   603→   603→  const [jadwal, setJadwal] = useState<any[]>([])
+   604→   604→  const [loading, setLoading] = useState(true)
+   605→   605→
+   606→   606→  const load = useCallback(async () => {
+   607→   607→    try {
+   608→   608→      setLoading(true)
+   609→   609→      const res = await apiGet("/api/admin/jadwal")
+   610→   610→      setJadwal(res.data || [])
+   611→   611→    } catch (e: any) { Alert.alert("Error", e.message) }
+   612→   612→    finally { setLoading(false) }
+   613→   613→  }, [])
+   614→   614→
+   615→   615→  useEffect(() => { load() }, [load])
+   616→   616→
+   617→   617→  const grouped = DAYS.map(d => ({
+   618→   618→    ...d,
+   619→   619→    items: jadwal.filter(j => j.dayOfWeek === d.value).sort((a, b) => a.startTime.localeCompare(b.startTime)),
+   620→   620→  })).filter(g => g.items.length > 0)
+   621→   621→
+   622→   622→  return (
+   623→   623→    <SafeAreaView style={styles.screen}>
+   624→   624→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+   625→   625→      <View style={styles.header}>
+   626→   626→        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+   627→   627→          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+   628→   628→        </TouchableOpacity>
+   629→   629→        <Text style={styles.headerTitle}>Jadwal Mengajar</Text>
+   630→   630→        <View style={{ width: 24 }} />
+   631→   631→      </View>
+   632→   632→
+   633→   633→      {loading ? (
+   634→   634→        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+   635→   635→      ) : (
+   636→   636→        <ScrollView style={styles.content}>
+   637→   637→          {grouped.map(day => (
+   638→   638→            <View key={day.value}>
+   639→   639→              <Text style={styles.dayTitle}>{day.label}</Text>
+   640→   640→              {day.items.map((j, i) => (
+   641→   641→                <View key={i} style={styles.jadwalCard}>
+   642→   642→                  <View style={styles.jadwalTime}>
+   643→   643→                    <Text style={styles.jadwalStartTime}>{j.startTime}</Text>
+   644→   644→                    <Text style={styles.jadwalEndTime}>{j.endTime}</Text>
+   645→   645→                  </View>
+   646→   646→                  <View style={styles.jadwalInfo}>
+   647→   647→                    <Text style={styles.jadwalMapel}>{j.mapel?.name}</Text>
+   648→   648→                    <Text style={styles.jadwalKelas}>{j.kelas?.name}</Text>
+   649→   649→                  </View>
+   650→   650→                </View>
+   651→   651→              ))}
+   652→   652→            </View>
+   653→   653→          ))}
+   654→   654→          {grouped.length === 0 && (
+   655→   655→            <View style={styles.emptyCard}>
+   656→   656→              <Text style={styles.emptyText}>Belum ada jadwal</Text>
+   657→   657→            </View>
+   658→   658→          )}
+   659→   659→        </ScrollView>
+   660→   660→      )}
+   661→   661→    </SafeAreaView>
+   662→   662→  )
+   663→   663→}
+   664→   664→
+   665→   665→// ============================================================================
+   666→   666→// SANTRI LIST SCREEN
+   667→   667→// ============================================================================
+   668→   668→function SantriListScreen({ navigation }: { navigation: any }) {
+   669→   669→  const [kelasList, setKelasList] = useState<any[]>([])
+   670→   670→  const [selectedKelas, setSelectedKelas] = useState("")
+   671→   671→  const [santriList, setSantriList] = useState<any[]>([])
+   672→   672→  const [loading, setLoading] = useState(true)
+   673→   673→
+   674→   674→  const loadKelas = useCallback(async () => {
+   675→   675→    try {
+   676→   676→      const res = await apiGet("/api/admin/kelas")
+   677→   677→      setKelasList(res.data || [])
+   678→   678→      if (res.data?.length > 0) setSelectedKelas(res.data[0].id)
+   679→   679→    } catch (e: any) { Alert.alert("Error", e.message) }
+   680→   680→  }, [])
+   681→   681→
+   682→   682→  const loadSantri = useCallback(async () => {
+   683→   683→    if (!selectedKelas) return
+   684→   684→    try {
+   685→   685→      setLoading(true)
+   686→   686→      const res = await apiGet(`/api/admin/santri?kelasId=${selectedKelas}&status=AKTIF`)
+   687→   687→      setSantriList(res.data || [])
+   688→   688→    } catch (e: any) { Alert.alert("Error", e.message) }
+   689→   689→    finally { setLoading(false) }
+   690→   690→  }, [selectedKelas])
+   691→   691→
+   692→   692→  useEffect(() => { loadKelas() }, [loadKelas])
+   693→   693→  useEffect(() => { if (selectedKelas) loadSantri() }, [selectedKelas, loadSantri])
+   694→   694→
+   695→   695→  return (
+   696→   696→    <SafeAreaView style={styles.screen}>
+   697→   697→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+   698→   698→      <View style={styles.header}>
+   699→   699→        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+   700→   700→          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+   701→   701→        </TouchableOpacity>
+   702→   702→        <Text style={styles.headerTitle}>Daftar Santri</Text>
+   703→   703→        <View style={{ width: 24 }} />
+   704→   704→      </View>
+   705→   705→
+   706→   706→      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pickerScroll}>
+   707→   707→        {kelasList.map(k => (
+   708→   708→          <TouchableOpacity
+   709→   709→            key={k.id}
+   710→   710→            style={[styles.pill, selectedKelas === k.id && styles.pillActive]}
+   711→   711→            onPress={() => setSelectedKelas(k.id)}
+   712→   712→          >
+   713→   713→            <Text style={[styles.pillText, selectedKelas === k.id && styles.pillTextActive]}>{k.name}</Text>
+   714→   714→          </TouchableOpacity>
+   715→   715→        ))}
+   716→   716→      </ScrollView>
+   717→   717→
+   718→   718→      {loading ? (
+   719→   719→        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+   720→   720→      ) : (
+   721→   721→        <FlatList
+   722→   722→          data={santriList}
+   723→   723→          keyExtractor={item => item.id}
+   724→   724→          renderItem={({ item }) => (
+   725→   725→            <View style={styles.jadwalCard}>
+   726→   726→              <View style={[styles.jadwalTime, { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primaryLight, justifyContent: "center", alignItems: "center" }]}>
+   727→   727→                <Text style={{ fontSize: 18, fontWeight: "bold", color: Colors.primary }}>{item.name[0]}</Text>
+   728→   728→              </View>
+   729→   729→              <View style={styles.jadwalInfo}>
+   730→   730→                <Text style={styles.jadwalMapel}>{item.name}</Text>
+   731→   731→                <Text style={styles.jadwalKelas}>NIS: {item.nis} • {item.gender === "L" ? "Laki-laki" : "Perempuan"}</Text>
+   732→   732→                {item.wali && <Text style={[styles.jadwalKelas, { fontSize: 11 }]}>Wali: {item.wali.name}</Text>}
+   733→   733→              </View>
+   734→   734→              <View style={[styles.statusBadge, { backgroundColor: item.status === "AKTIF" ? Colors.successLight : Colors.dangerLight }]}>
+   735→   735→                <Text style={[styles.statusText, { color: item.status === "AKTIF" ? Colors.success : Colors.danger, fontSize: 10 }]}>
+   736→   736→                  {item.status}
+   737→   737→                </Text>
+   738→   738→              </View>
+   739→   739→            </View>
+   740→   740→          )}
+   741→   741→          ListEmptyComponent={() => (
+   742→   742→            <View style={styles.emptyCard}><Text style={styles.emptyText}>Belum ada santri di kelas ini</Text></View>
+   743→   743→          )}
+   744→   744→          contentContainerStyle={{ padding: 16 }}
+   745→   745→        />
+   746→   746→      )}
+   747→   747→    </SafeAreaView>
+   748→   748→  )
+   749→   749→}
+   750→   750→
+   751→   751→// ============================================================================
+   752→   752→// PENGUMUMAN LIST SCREEN
+   753→   753→// ============================================================================
+   754→   754→function PengumumanListScreen({ navigation }: { navigation: any }) {
+   755→   755→  const [announcements, setAnnouncements] = useState<any[]>([])
+   756→   756→  const [loading, setLoading] = useState(true)
+   757→   757→
+   758→   758→  const load = useCallback(async () => {
+   759→   759→    try {
+   760→   760→      setLoading(true)
+   761→   761→      const res = await apiGet("/api/admin/pengumuman")
+   762→   762→      setAnnouncements(res.data || [])
+   763→   763→    } catch (e: any) { Alert.alert("Error", e.message) }
+   764→   764→    finally { setLoading(false) }
+   765→   765→  }, [])
+   766→   766→
+   767→   767→  useEffect(() => { load() }, [load])
+   768→   768→
+   769→   769→  const getPriorityColor = (priority: string) => {
+   770→   770→    if (priority === "URGENT") return { bg: Colors.dangerLight, color: Colors.danger }
+   771→   771→    if (priority === "PENTING") return { bg: Colors.warningLight, color: Colors.warning }
+   772→   772→    return { bg: "#f1f5f9", color: Colors.textMuted }
+   773→   773→  }
+   774→   774→
+   775→   775→  return (
+   776→   776→    <SafeAreaView style={styles.screen}>
+   777→   777→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+   778→   778→      <View style={styles.header}>
+   779→   779→        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+   780→   780→          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+   781→   781→        </TouchableOpacity>
+   782→   782→        <Text style={styles.headerTitle}>Pengumuman</Text>
+   783→   783→        <View style={{ width: 24 }} />
+   784→   784→      </View>
+   785→   785→
+   786→   786→      {loading ? (
+   787→   787→        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+   788→   788→      ) : (
+   789→   789→        <FlatList
+   790→   790→          data={announcements}
+   791→   791→          keyExtractor={item => item.id}
+   792→   792→          renderItem={({ item }) => {
+   793→   793→            const pc = getPriorityColor(item.priority)
+   794→   794→            return (
+   795→   795→              <View style={styles.jadwalCard}>
+   796→   796→                <View style={{ flex: 1 }}>
+   797→   797→                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+   798→   798→                    <View style={[styles.statusBadge, { backgroundColor: pc.bg }]}>
+   799→   799→                      <Text style={[styles.statusText, { color: pc.color, fontSize: 10 }]}>{item.priority}</Text>
+   800→   800→                    </View>
+   801→   801→                    <View style={[styles.statusBadge, { backgroundColor: "#dbeafe" }]}>
+   802→   802→                      <Text style={[styles.statusText, { color: "#3b82f6", fontSize: 10 }]}>{item.audience}</Text>
+   803→   803→                    </View>
+   804→   804→                  </View>
+   805→   805→                  <Text style={[styles.jadwalMapel, { marginTop: 8 }]}>{item.title}</Text>
+   806→   806→                  <Text style={[styles.jadwalKelas, { marginTop: 4 }]} numberOfLines={3}>{item.content}</Text>
+   807→   807→                  <Text style={[styles.jadwalKelas, { fontSize: 11, marginTop: 4, color: Colors.textMuted }]}>{formatDate(item.publishedAt, true)}</Text>
+   808→   808→                </View>
+   809→   809→              </View>
+   810→   810→            )
+   811→   811→          }}
+   812→   812→          ListEmptyComponent={() => (
+   813→   813→            <View style={styles.emptyCard}><Text style={styles.emptyText}>Belum ada pengumuman</Text></View>
+   814→   814→          )}
+   815→   815→          contentContainerStyle={{ padding: 16 }}
+   816→   816→        />
+   817→   817→      )}
+   818→   818→    </SafeAreaView>
+   819→   819→  )
+   820→   820→}
+   821→   821→
+   822→   822→// ============================================================================
+   823→   823→// APP ROOT
+   824→   824→// ============================================================================
+   825→   825→type RootStackParamList = {
+   826→   826→  Login: undefined
+   827→   827→  Dashboard: undefined
+   828→   828→  AbsensiInput: { kelasId?: string; kelasName?: string }
+   829→   829→  NilaiInput: undefined
+   830→   830→  JadwalList: undefined
+   831→   831→  SantriList: undefined
+   832→   832→  PengumumanList: undefined
+   833→   833→}
+   834→   834→
+   835→   835→const Stack = createNativeStackNavigator<RootStackParamList>()
+   836→   836→
+   837→   837→export default function App() {
+   838→   838→  const [isLoggedIn, setIsLoggedIn] = useState(false)
+   839→   839→  const [checking, setChecking] = useState(true)
+   840→   840→
+   841→   841→  useEffect(() => {
+   842→   842→    async function checkSession() {
+   843→   843→      const token = await SecureStore.getItemAsync("authToken")
+   844→   844→      if (token) {
+   845→   845→        authToken = token
+   846→   846→        const sb = getSupabase()
+   847→   847→        const { data } = await sb.auth.getSession()
+   848→   848→        if (data.session) {
+   849→   849→          authToken = data.session.access_token
+   850→   850→          setIsLoggedIn(true)
+   851→   851→        }
+   852→   852→      }
+   853→   853→      setChecking(false)
+   854→   854→    }
+   855→   855→    checkSession()
+   856→   856→  }, [])
+   857→   857→
+   858→   858→  if (checking) {
+   859→   859→    return (
+   860→   860→      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: Colors.primary }}>
+   861→   861→        <ActivityIndicator size="large" color={Colors.white} />
+   862→   862→      </View>
+   863→   863→    )
+   864→   864→  }
+   865→   865→
+   866→   866→  return (
+   867→   867→    <NavigationContainer>
+   868→   868→      <Stack.Navigator screenOptions={{ headerShown: false }}>
+   869→   869→        {isLoggedIn ? (
+   870→   870→          <>
+   871→   871→            <Stack.Screen name="Dashboard">
+   872→   872→              {({ navigation }) => (
+   873→   873→                <DashboardScreen
+   874→   874→                  navigation={navigation}
+   875→   875→                  onLogout={async () => {
+   876→   876→                    await getSupabase().auth.signOut()
+   877→   877→                    await SecureStore.deleteItemAsync("authToken")
+   878→   878→                    authToken = null
+   879→   879→                    setIsLoggedIn(false)
+   880→   880→                  }}
+   881→   881→                />
+   882→   882→              )}
+   883→   883→            </Stack.Screen>
+   884→   884→            <Stack.Screen name="AbsensiInput" component={AbsensiInputScreen} />
+   885→   885→            <Stack.Screen name="NilaiInput" component={NilaiInputScreen} />
+   886→   886→            <Stack.Screen name="JadwalList" component={JadwalListScreen} />
+   887→   887→            <Stack.Screen name="SantriList" component={SantriListScreen} />
+   888→   888→            <Stack.Screen name="PengumumanList" component={PengumumanListScreen} />
+   889→   889→          </>
+   890→   890→        ) : (
+   891→   891→          <Stack.Screen name="Login">
+   892→   892→            {() => <LoginScreen onLogin={() => setIsLoggedIn(true)} />}
+   893→   893→          </Stack.Screen>
+   894→   894→        )}
+   895→   895→      </Stack.Navigator>
+   896→   896→    </NavigationContainer>
+   897→   897→  )
+   898→   898→}
+   899→   899→
+   900→   900→// ============================================================================
+   901→   901→// STYLES
+   902→   902→// ============================================================================
+   903→   903→const styles = StyleSheet.create({
+   904→   904→  loginContainer: { flex: 1, backgroundColor: Colors.primary },
+   905→   905→  loginScroll: { flexGrow: 1, justifyContent: "center", padding: 24 },
+   906→   906→  loginLogo: { alignItems: "center", marginBottom: 32 },
+   907→   907→  loginTitle: { fontSize: 28, fontWeight: "bold", color: Colors.white, marginTop: 8 },
+   908→   908→  loginSubtitle: { fontSize: 16, color: Colors.white, opacity: 0.8 },
+   909→   909→  loginCard: { backgroundColor: Colors.white, borderRadius: 16, padding: 24, elevation: 4 },
+   910→   910→  loginCardTitle: { fontSize: 20, fontWeight: "bold", color: Colors.text, marginBottom: 20 },
+   911→   911→  label: { fontSize: 12, fontWeight: "600", color: Colors.text, marginTop: 12, marginBottom: 4 },
+   912→   912→  input: { borderWidth: 1, borderColor: Colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12, fontSize: 16, color: Colors.text },
+   913→   913→  loginButton: { backgroundColor: Colors.primary, borderRadius: 8, paddingVertical: 14, alignItems: "center", marginTop: 24, flexDirection: "row", justifyContent: "center", gap: 8 },
+   914→   914→  loginButtonText: { color: Colors.white, fontSize: 16, fontWeight: "600" },
+   915→   915→  demoText: { fontSize: 12, color: Colors.textMuted, textAlign: "center", marginTop: 16 },
+   916→   916→  screen: { flex: 1, backgroundColor: Colors.background },
+   917→   917→  header: { backgroundColor: Colors.primary, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingVertical: 12, paddingTop: 48 },
+   918→   918→  backButton: { padding: 4 },
+   919→   919→  headerTitle: { fontSize: 16, fontWeight: "600", color: Colors.white },
+   920→   920→  content: { flex: 1, padding: 16 },
+   921→   921→  sectionTitle: { fontSize: 16, fontWeight: "600", color: Colors.text, marginBottom: 12 },
+   922→   922→  menuGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginBottom: 24 },
+   923→   923→  menuCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 20, width: "47%", alignItems: "center", elevation: 1 },
+   924→   924→  menuIcon: { width: 48, height: 48, borderRadius: 12, justifyContent: "center", alignItems: "center", marginBottom: 8 },
+   925→   925→  menuTitle: { fontSize: 14, fontWeight: "500", color: Colors.text, textAlign: "center" },
+   926→   926→  // V2 — Guru Quick Stats
+   927→   927→  v2StatsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 },
+   928→   928→  v2StatCard: {
+   929→   929→    backgroundColor: Colors.white, borderRadius: 12, padding: 12,
+   930→   930→    width: "48%", alignItems: "center", elevation: 1,
+   931→   931→    borderWidth: 1, borderColor: Colors.border,
+   932→   932→  },
+   933→   933→  v2StatValue: { fontSize: 24, fontWeight: "bold", color: Colors.text, marginTop: 4 },
+   934→   934→  v2StatLabel: { fontSize: 10, color: Colors.textMuted, marginTop: 2, textAlign: "center" },
+   935→   935→  emptyCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 24, alignItems: "center" },
+   936→   936→  emptyText: { fontSize: 14, color: Colors.textMuted },
+   937→   937→  jadwalCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 16, marginBottom: 8, flexDirection: "row", alignItems: "center", elevation: 1 },
+   938→   938→  jadwalTime: { width: 60, alignItems: "center" },
+   939→   939→  jadwalStartTime: { fontSize: 14, fontWeight: "600", color: Colors.primary },
+   940→   940→  jadwalEndTime: { fontSize: 11, color: Colors.textMuted },
+   941→   941→  jadwalInfo: { flex: 1, marginLeft: 12 },
+   942→   942→  jadwalMapel: { fontSize: 15, fontWeight: "500", color: Colors.text },
+   943→   943→  jadwalKelas: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+   944→   944→  absensiQuickBtn: { backgroundColor: Colors.success, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6, flexDirection: "row", alignItems: "center", gap: 4 },
+   945→   945→  absensiQuickText: { fontSize: 12, color: Colors.white, fontWeight: "600" },
+   946→   946→  // Absensi Input
+   947→   947→  absensiControls: { padding: 16, backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.border },
+   948→   948→  dateInput: { borderWidth: 1, borderColor: Colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: Colors.text },
+   949→   949→  pickerContainer: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
+   950→   950→  pickerScroll: { marginTop: 4 },
+   951→   951→  kelasPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.white, marginRight: 8 },
+   952→   952→  kelasPillActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+   953→   953→  kelasPillText: { fontSize: 12, color: Colors.textMuted },
+   954→   954→  kelasPillTextActive: { color: Colors.white, fontWeight: "600" },
+   955→   955→  pill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.white, marginRight: 8 },
+   956→   956→  pillActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+   957→   957→  pillText: { fontSize: 12, color: Colors.textMuted },
+   958→   958→  pillTextActive: { color: Colors.white, fontWeight: "600" },
+   959→   959→  quickSetRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12, flexWrap: "wrap" },
+   960→   960→  quickSetLabel: { fontSize: 12, fontWeight: "600", color: Colors.text },
+   961→   961→  quickSetBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, borderWidth: 1 },
+   962→   962→  quickSetText: { fontSize: 11, fontWeight: "600" },
+   963→   963→  absensiRow: { flexDirection: "row", alignItems: "center", padding: 12, backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.border },
+   964→   964→  absensiInfo: { flex: 1 },
+   965→   965→  absensiName: { fontSize: 14, fontWeight: "500", color: Colors.text },
+   966→   966→  absensiNis: { fontSize: 11, color: Colors.textMuted, marginTop: 1 },
+   967→   967→  absensiButtons: { flexDirection: "row", gap: 4 },
+   968→   968→  absensiBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.white },
+   969→   969→  absensiBtnText: { fontSize: 10 },
+   970→   970→  // Nilai Input
+   971→   971→  nilaiControls: { padding: 16, backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.border },
+   972→   972→  typeRow: { flexDirection: "row", gap: 8, marginTop: 4, flexWrap: "wrap" },
+   973→   973→  typeBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.white },
+   974→   974→  typeBtnActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+   975→   975→  typeBtnText: { fontSize: 12, color: Colors.textMuted },
+   976→   976→  typeBtnTextActive: { color: Colors.white, fontWeight: "600" },
+   977→   977→  nilaiRow: { flexDirection: "row", alignItems: "center", padding: 12, backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.border },
+   978→   978→  nilaiInfo: { flex: 1 },
+   979→   979→  nilaiName: { fontSize: 14, fontWeight: "500", color: Colors.text },
+   980→   980→  nilaiNis: { fontSize: 11, color: Colors.textMuted, marginTop: 1 },
+   981→   981→  nilaiInput: { width: 70, height: 40, borderWidth: 2, borderColor: Colors.border, borderRadius: 8, textAlign: "center", fontSize: 18, fontWeight: "bold", color: Colors.text },
+   982→   982→  // Save button
+   983→   983→  saveButton: { position: "absolute", bottom: 16, left: 16, right: 16, backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 14, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8, elevation: 4 },
+   984→   984→  saveButtonText: { color: Colors.white, fontSize: 16, fontWeight: "600" },
+   985→   985→  // Jadwal List
+   986→   986→  dayTitle: { fontSize: 14, fontWeight: "bold", color: Colors.primary, marginTop: 16, marginBottom: 8, paddingHorizontal: 4 },
+   987→   987→})
+   988→   988→
