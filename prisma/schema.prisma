@@ -134,6 +134,10 @@ model TahunAjaran {
   rapor     Rapor[]
   tagihan   Tagihan[]
   pembayaran Payment[]
+  materi     Materi[]
+  tugas      Tugas[]
+  pertemuan Pertemuan[]
+  kompetensi Kompetensi[]
 }
 
 model Semester {
@@ -152,6 +156,9 @@ model Semester {
   jadwal       Jadwal[]
   nilai        Nilai[]
   rapor        Rapor[]
+  materi     Materi[]
+  tugas      Tugas[]
+  pertemuan Pertemuan[]
 
   @@index([tahunAjaranId])
 }
@@ -178,6 +185,9 @@ model Kelas {
   nilai       Nilai[]
   rapor       Rapor[]
   tagihan     Tagihan[]
+  materi     Materi[]
+  tugas      Tugas[]
+  pertemuan Pertemuan[]
 
   @@index([level])
   @@index([isActive])
@@ -200,6 +210,10 @@ model MataPelajaran {
 
   jadwal      Jadwal[]
   nilai       Nilai[]
+  materi     Materi[]
+  tugas      Tugas[]
+  pertemuan Pertemuan[]
+  kompetensi Kompetensi[]
 
   @@index([category])
   @@index([isActive])
@@ -326,6 +340,7 @@ model Santri {
   rapor         Rapor[]
   tagihan       Tagihan[]
   payments      Payment[]
+  pengumpulanTugas PengumpulanTugas[]
 
   @@index([kelasId])
   @@index([waliId])
@@ -357,6 +372,9 @@ model Guru {
   kelasWali   Kelas[]  @relation("KelasWali")
   jadwal      Jadwal[]
   absensi     Absensi[] @relation("RecordedByGuru")
+  materi      Materi[]
+  tugas       Tugas[]
+  pertemuan   Pertemuan[]
   nilai       Nilai[]
 
   @@index([status])
@@ -601,4 +619,143 @@ model SystemSetting {
   type      String   @default("STRING") // "STRING" | "NUMBER" | "JSON" | "BOOLEAN"
   updatedAt DateTime @updatedAt
   updatedBy String?
+}
+
+// ============================================================================
+// 11. V2 — AKADEMIK & PEMBELAJARAN
+// ============================================================================
+
+model Materi {
+  id            String   @id @default(cuid())
+  tahunAjaranId String
+  semesterId    String
+  mapelId       String
+  kelasId       String?
+  guruId        String?
+  title         String
+  description   String?
+  type          String   @default("DOKUMEN")
+  fileUrl       String?
+  externalUrl   String?
+  pertemuan     Int?
+  sortOrder     Int      @default(0)
+  isPublished   Boolean  @default(true)
+  publishedAt   DateTime @default(now())
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deletedAt     DateTime?
+
+  tahunAjaran   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
+  semester      Semester    @relation(fields: [semesterId], references: [id])
+  mapel         MataPelajaran @relation(fields: [mapelId], references: [id])
+  kelas         Kelas?      @relation(fields: [kelasId], references: [id])
+  guru          Guru?       @relation(fields: [guruId], references: [id])
+  tugas         Tugas[]
+
+  @@index([mapelId, kelasId])
+  @@index([tahunAjaranId, semesterId])
+  @@index([deletedAt])
+}
+
+model Tugas {
+  id            String   @id @default(cuid())
+  tahunAjaranId String
+  semesterId    String
+  mapelId       String
+  kelasId       String
+  guruId        String?
+  materiId      String?
+  title         String
+  description   String?
+  type          String   @default("INDIVIDU")
+  fileUrl       String?
+  maxScore      Float    @default(100)
+  dueDate       DateTime
+  isPublished   Boolean  @default(true)
+  publishedAt   DateTime @default(now())
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deletedAt     DateTime?
+
+  tahunAjaran   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
+  semester      Semester    @relation(fields: [semesterId], references: [id])
+  mapel         MataPelajaran @relation(fields: [mapelId], references: [id])
+  kelas         Kelas       @relation(fields: [kelasId], references: [id])
+  guru          Guru?       @relation(fields: [guruId], references: [id])
+  materi        Materi?     @relation(fields: [materiId], references: [id])
+  submissions   PengumpulanTugas[]
+
+  @@index([kelasId, mapelId])
+  @@index([dueDate])
+  @@index([deletedAt])
+}
+
+model PengumpulanTugas {
+  id            String   @id @default(cuid())
+  tugasId       String
+  santriId      String
+  fileUrl       String?
+  textAnswer    String?
+  submittedAt   DateTime @default(now())
+  status        String   @default("SUBMITTED")
+  score         Float?
+  feedback      String?
+  gradedAt      DateTime?
+  gradedById    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tugas         Tugas      @relation(fields: [tugasId], references: [id], onDelete: Cascade)
+  santri        Santri     @relation(fields: [santriId], references: [id], onDelete: Cascade)
+
+  @@unique([tugasId, santriId])
+  @@index([santriId])
+  @@index([status])
+}
+
+model Pertemuan {
+  id            String   @id @default(cuid())
+  tahunAjaranId String
+  semesterId    String
+  kelasId       String
+  mapelId       String
+  guruId        String?
+  pertemuanKe   Int
+  date          DateTime
+  topic         String?
+  description   String?
+  isCompleted   Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tahunAjaran   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
+  semester      Semester    @relation(fields: [semesterId], references: [id])
+  kelas         Kelas       @relation(fields: [kelasId], references: [id])
+  mapel         MataPelajaran @relation(fields: [mapelId], references: [id])
+  guru          Guru?       @relation(fields: [guruId], references: [id])
+
+  @@unique([kelasId, mapelId, pertemuanKe, tahunAjaranId, semesterId])
+  @@index([kelasId, date])
+}
+
+model Kompetensi {
+  id            String   @id @default(cuid())
+  mapelId       String
+  tahunAjaranId String
+  code          String   @unique
+  name          String
+  description   String?
+  category      String   @default("UMUM")
+  sortOrder     Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  mapel         MataPelajaran @relation(fields: [mapelId], references: [id])
+  tahunAjaran   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
+
+  @@index([mapelId])
+  @@index([category])
 }
