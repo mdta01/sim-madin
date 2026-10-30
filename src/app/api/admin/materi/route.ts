@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 import { validateGuruAccess } from "@/lib/auth/guru-access"
+import { validateBody } from "@/lib/validation/helpers"
+import { materiCreateSchema } from "@/lib/validation/akademik-detail"
 
 /**
  * GET /api/admin/materi
@@ -61,13 +63,17 @@ export async function POST(req: NextRequest) {
   if (guard.error) return guard.error
   const session = guard.session
   try {
-    const body = await req.json()
-    if (!body.title || !body.mapelId) {
-      return NextResponse.json({ error: "Judul dan Mata Pelajaran wajib diisi" }, { status: 400 })
-    }
+    // ── Validate body with Zod ─────────────────────────────────────
+    const body = await validateBody(req, materiCreateSchema)
+    if (!body.ok) return body.error
+    const {
+      mapelId, kelasId: bodyKelasId, guruId: bodyGuruId, title, description,
+      type, fileUrl, externalUrl, pertemuan, sortOrder, isPublished,
+      tahunAjaranId: bodyTA, semesterId: bodySem,
+    } = body.data
 
-    let tahunAjaranId = body.tahunAjaranId
-    let semesterId = body.semesterId
+    let tahunAjaranId: string | null | undefined = bodyTA
+    let semesterId: string | null | undefined = bodySem
     if (!tahunAjaranId) {
       const ta = await db.tahunAjaran.findFirst({ where: { isActive: true } })
       tahunAjaranId = ta?.id ?? null
@@ -82,31 +88,31 @@ export async function POST(req: NextRequest) {
 
     // V2 security: validate GURU has teaching access to this kelas+mapel
     const accessCheck = await validateGuruAccess(session, {
-      kelasId: body.kelasId,
-      mapelId: body.mapelId,
-      guruId: body.guruId,
+      kelasId: bodyKelasId ?? undefined,
+      mapelId,
+      guruId: bodyGuruId,
     }, req)
     if (!accessCheck.allowed && accessCheck.error) return accessCheck.error
 
     // Auto-bind guruId to current guru if not provided (for GURU role)
-    let guruId = body.guruId
+    let guruId = bodyGuruId
     if (!guruId && accessCheck.guru) guruId = accessCheck.guru.id
 
     const materi = await db.materi.create({
       data: {
         tahunAjaranId,
         semesterId,
-        mapelId: body.mapelId,
-        kelasId: body.kelasId || null,
+        mapelId,
+        kelasId: bodyKelasId || null,
         guruId,
-        title: body.title,
-        description: body.description || null,
-        type: body.type || "DOKUMEN",
-        fileUrl: body.fileUrl || null,
-        externalUrl: body.externalUrl || null,
-        pertemuan: body.pertemuan || null,
-        sortOrder: body.sortOrder || 0,
-        isPublished: body.isPublished !== false,
+        title,
+        description: description || null,
+        type,
+        fileUrl: fileUrl || null,
+        externalUrl: externalUrl || null,
+        pertemuan: pertemuan ?? null,
+        sortOrder,
+        isPublished,
         createdById: session.user.id,
       },
       include: { mapel: { select: { name: true } }, kelas: { select: { name: true } } },

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateBody } from "@/lib/validation/helpers"
+import { honorGuruCreateSchema } from "@/lib/validation/keuangan"
 
 export async function GET(req: NextRequest) {
   const guard = await requireApiPermission("honor_guru:read", req)
@@ -49,43 +51,47 @@ export async function POST(req: NextRequest) {
   if (guard.error) return guard.error
   const session = guard.session
   try {
-    const body = await req.json()
-    if (!body.guruId || !body.periode || !body.periodeLabel) {
-      return NextResponse.json({ error: "Guru, Periode, dan Label Periode wajib diisi" }, { status: 400 })
-    }
+    const body = await validateBody(req, honorGuruCreateSchema)
+    if (!body.ok) return body.error
+    const {
+      guruId, tahunAjaranId, semesterId, periode, periodeLabel,
+      honorMengajar, insentif, tunjangan, potongan, status, catatan,
+    } = body.data
 
-    let tahunAjaranId = body.tahunAjaranId
-    let semesterId = body.semesterId
-    if (!tahunAjaranId) {
+    let finalTahunAjaranId: string | null = tahunAjaranId ?? null
+    let finalSemesterId: string | null = semesterId ?? null
+    if (!finalTahunAjaranId) {
       const ta = await db.tahunAjaran.findFirst({ where: { isActive: true } })
-      tahunAjaranId = ta?.id ?? null
+      finalTahunAjaranId = ta?.id ?? null
     }
-    if (!semesterId) {
+    if (!finalSemesterId) {
       const sem = await db.semester.findFirst({ where: { isActive: true } })
-      semesterId = sem?.id ?? null
+      finalSemesterId = sem?.id ?? null
+    }
+    if (!finalTahunAjaranId) {
+      return NextResponse.json({ error: "Tidak ada tahun ajaran aktif" }, { status: 400 })
+    }
+    if (!finalSemesterId) {
+      return NextResponse.json({ error: "Tidak ada semester aktif" }, { status: 400 })
     }
 
     // Compute total: mengajar + insentif + tunjangan - potongan
-    const honorMengajar = Number(body.honorMengajar) || 0
-    const insentif = Number(body.insentif) || 0
-    const tunjangan = Number(body.tunjangan) || 0
-    const potongan = Number(body.potongan) || 0
     const totalHonor = honorMengajar + insentif + tunjangan - potongan
 
     const honor = await db.honorGuru.create({
       data: {
-        tahunAjaranId,
-        semesterId,
-        guruId: body.guruId,
-        periode: body.periode,
-        periodeLabel: body.periodeLabel,
+        tahunAjaranId: finalTahunAjaranId,
+        semesterId: finalSemesterId,
+        guruId,
+        periode,
+        periodeLabel,
         honorMengajar,
         insentif,
         tunjangan,
         potongan,
         totalHonor,
-        status: body.status || "DRAFT",
-        catatan: body.catatan || null,
+        status: status || "DRAFT",
+        catatan: catatan || null,
       },
       include: { guru: { select: { name: true } } },
     })

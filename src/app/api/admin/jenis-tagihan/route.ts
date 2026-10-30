@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiAuth, logAudit } from "@/lib/auth/guards"
+import { validateBody } from "@/lib/validation/helpers"
+import { jenisTagihanCreateSchema } from "@/lib/validation/keuangan"
 
 export async function GET(req: NextRequest) {
   const guard = await requireApiAuth(req)
@@ -24,21 +26,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Hanya Super Admin atau Bendahara" }, { status: 403 })
   }
   try {
-    const body = await req.json()
-    if (!body.code || !body.name || !body.defaultAmount) {
-      return NextResponse.json({ error: "Kode, Nama, dan Nominal wajib diisi" }, { status: 400 })
-    }
-    const existing = await db.jenisTagihan.findFirst({ where: { code: body.code } })
+    const body = await validateBody(req, jenisTagihanCreateSchema)
+    if (!body.ok) return body.error
+    const { code, name, description, defaultAmount, category, isActive } = body.data
+
+    const existing = await db.jenisTagihan.findFirst({ where: { code } })
     if (existing) return NextResponse.json({ error: "Kode sudah terdaftar" }, { status: 400 })
 
     const jt = await db.jenisTagihan.create({
       data: {
-        code: body.code,
-        name: body.name,
-        description: body.description || null,
-        defaultAmount: Number(body.defaultAmount),
-        category: body.category || "RUTIN",
-        isActive: body.isActive !== false,
+        code,
+        name,
+        description: description || null,
+        defaultAmount,
+        category: category || "RUTIN",
+        isActive: isActive !== false,
       },
     })
     await logAudit(session, "CREATE", "JENIS_TAGIHAN", jt.id, { code: jt.code, name: jt.name }, req)

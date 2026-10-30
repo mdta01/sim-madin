@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateBody } from "@/lib/validation/helpers"
+import { tagihanCreateSchema } from "@/lib/validation/keuangan"
 
 export async function GET(req: NextRequest) {
   const guard = await requireApiPermission("tagihan:read", req)
@@ -47,13 +49,12 @@ export async function POST(req: NextRequest) {
   if (guard.error) return guard.error
   const session = guard.session
   try {
-    const body = await req.json()
+    const body = await validateBody(req, tagihanCreateSchema)
+    if (!body.ok) return body.error
+    const data = body.data
 
-    if (body.bulk) {
-      const { kelasId, jenisTagihanId, amount, description, dueDate, santriIds } = body
-      if (!jenisTagihanId || !amount) {
-        return NextResponse.json({ error: "Jenis tagihan dan nominal wajib diisi" }, { status: 400 })
-      }
+    if (data.bulk) {
+      const { kelasId, jenisTagihanId, amount, description, dueDate, santriIds } = data
       const ta = await db.tahunAjaran.findFirst({ where: { isActive: true } })
       if (!ta) return NextResponse.json({ error: "Tidak ada tahun ajaran aktif" }, { status: 400 })
 
@@ -69,9 +70,9 @@ export async function POST(req: NextRequest) {
             santriId: santri.id,
             kelasId: santri.kelasId,
             jenisTagihanId,
-            amount: Number(amount),
+            amount,
             description: description || null,
-            dueDate: dueDate ? new Date(dueDate) : null,
+            dueDate: dueDate ?? null,
             status: "BELUM_BAYAR",
           },
         })
@@ -83,22 +84,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ data: created, count: created.length })
     }
 
-    if (!body.santriId || !body.jenisTagihanId || !body.amount) {
-      return NextResponse.json({ error: "Santri, Jenis Tagihan, dan Nominal wajib diisi" }, { status: 400 })
-    }
+    // ── Single tagihan creation ────────────────────────────────────────────
+    const { santriId, kelasId, jenisTagihanId, amount, description, dueDate, status } = data
     const ta = await db.tahunAjaran.findFirst({ where: { isActive: true } })
     if (!ta) return NextResponse.json({ error: "Tidak ada tahun ajaran aktif" }, { status: 400 })
 
     const tagihan = await db.tagihan.create({
       data: {
         tahunAjaranId: ta.id,
-        santriId: body.santriId,
-        kelasId: body.kelasId || null,
-        jenisTagihanId: body.jenisTagihanId,
-        amount: Number(body.amount),
-        description: body.description || null,
-        dueDate: body.dueDate ? new Date(body.dueDate) : null,
-        status: body.status || "BELUM_BAYAR",
+        santriId,
+        kelasId: kelasId || null,
+        jenisTagihanId,
+        amount,
+        description: description || null,
+        dueDate: dueDate ?? null,
+        status: status || "BELUM_BAYAR",
       },
       include: { santri: true, jenisTagihan: true },
     })

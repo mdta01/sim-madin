@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { normalizeWhatsApp } from "@/lib/wali/helpers"
+import { validateBody } from "@/lib/validation/helpers"
+import { waliOtpVerifySchema } from "@/lib/validation/wali"
 import jwt from "jsonwebtoken"
 
 const JWT_SECRET =
@@ -12,25 +14,19 @@ const JWT_SECRET =
  * POST /api/wali/verify-otp
  * Verify OTP yang diinput wali.
  *
- * Body: { phone, otpCode }
+ * Body: { phone, otp }
  * Return: { verifyToken } (token sementara untuk set-pin, valid 10 menit)
  */
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
-    const { phone, otpCode } = body
-
-    if (!phone || !otpCode) {
-      return NextResponse.json({ error: "Nomor WhatsApp dan kode OTP wajib diisi" }, { status: 400 })
-    }
+    // ── Validate body with Zod ────────────────────────────────────────────
+    const body = await validateBody(req, waliOtpVerifySchema)
+    if (!body.ok) return body.error
+    const { phone, otp: otpCode } = body.data
 
     const normalizedPhone = normalizeWhatsApp(phone)
     if (!normalizedPhone) {
       return NextResponse.json({ error: "Format nomor WhatsApp tidak valid" }, { status: 400 })
-    }
-
-    if (!/^\d{6}$/.test(otpCode)) {
-      return NextResponse.json({ error: "OTP harus 6 digit angka" }, { status: 400 })
     }
 
     const wali = await db.wali.findFirst({

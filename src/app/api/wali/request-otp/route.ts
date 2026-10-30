@@ -3,6 +3,8 @@ import { db } from "@/lib/db"
 import { normalizeWhatsApp, generateOTP, generateActivationToken } from "@/lib/wali/helpers"
 import { canRequestOTP, incrementOTPRequest } from "@/lib/wali/auth"
 import { rateLimit, getClientIP, rateLimitHeaders, RATE_LIMITS } from "@/lib/auth/rate-limit"
+import { validateBody } from "@/lib/validation/helpers"
+import { waliOtpRequestSchema } from "@/lib/validation/wali"
 
 /**
  * POST /api/wali/request-otp
@@ -29,15 +31,10 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const body = await req.json()
-    const { phone, type } = body
-
-    if (!phone) {
-      return NextResponse.json({ error: "Nomor WhatsApp wajib diisi" }, { status: 400 })
-    }
-    if (!["INVITE", "FORGOT_PIN"].includes(type)) {
-      return NextResponse.json({ error: "Type tidak valid. Gunakan INVITE atau FORGOT_PIN" }, { status: 400 })
-    }
+    // ── Validate body with Zod ────────────────────────────────────────────
+    const body = await validateBody(req, waliOtpRequestSchema)
+    if (!body.ok) return body.error
+    const { phone, type } = body.data
 
     const normalizedPhone = normalizeWhatsApp(phone)
     if (!normalizedPhone) {

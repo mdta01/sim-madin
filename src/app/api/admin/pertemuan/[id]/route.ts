@@ -3,6 +3,8 @@ import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 import { validateGuruAccess } from "@/lib/auth/guru-access"
 import { markOverduePertemuanCompletedSafe } from "@/lib/pertemuan/auto-complete"
+import { validateBody } from "@/lib/validation/helpers"
+import { pertemuanUpdateSchema } from "@/lib/validation/akademik-detail"
 
 interface Params {
   params: Promise<{ id: string }>
@@ -113,18 +115,22 @@ export async function PUT(req: NextRequest, { params }: Params) {
   const session = guard.session
   try {
     const { id } = await params
-    const body = await req.json()
+    // ── Validate body with Zod ─────────────────────────────────────
+    const body = await validateBody(req, pertemuanUpdateSchema)
+    if (!body.ok) return body.error
+    const data = body.data
+
     const existing = await db.pertemuan.findUnique({ where: { id } })
     if (!existing) return NextResponse.json({ error: "Pertemuan tidak ditemukan" }, { status: 404 })
 
     const pertemuan = await db.pertemuan.update({
       where: { id },
       data: {
-        topic: body.topic ?? existing.topic,
-        description: body.description ?? existing.description,
-        isCompleted: body.isCompleted ?? existing.isCompleted,
-        date: body.date ? new Date(body.date) : existing.date,
-        guruId: body.guruId !== undefined ? body.guruId : existing.guruId,
+        topic: data.topic ?? existing.topic,
+        description: data.description ?? existing.description,
+        isCompleted: data.isCompleted ?? existing.isCompleted,
+        date: data.date ?? existing.date,
+        guruId: data.guruId !== undefined ? data.guruId : existing.guruId,
       },
       include: { mapel: { select: { name: true } }, kelas: { select: { name: true } } },
     })

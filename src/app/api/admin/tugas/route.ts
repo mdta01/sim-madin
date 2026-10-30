@@ -3,6 +3,8 @@ import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 import { notifikasiTugasBaru } from "@/lib/notifikasi/helper"
 import { validateGuruAccess } from "@/lib/auth/guru-access"
+import { validateBody } from "@/lib/validation/helpers"
+import { tugasCreateSchema } from "@/lib/validation/akademik-detail"
 
 /**
  * GET /api/admin/tugas
@@ -84,13 +86,17 @@ export async function POST(req: NextRequest) {
   if (guard.error) return guard.error
   const session = guard.session
   try {
-    const body = await req.json()
-    if (!body.title || !body.mapelId || !body.kelasId || !body.dueDate) {
-      return NextResponse.json({ error: "Judul, Mapel, Kelas, dan Tenggat wajib diisi" }, { status: 400 })
-    }
+    // ── Validate body with Zod ─────────────────────────────────────
+    const body = await validateBody(req, tugasCreateSchema)
+    if (!body.ok) return body.error
+    const {
+      mapelId, kelasId, guruId: bodyGuruId, materiId, title, description,
+      type, fileUrl, dueDate, maxScore, isPublished,
+      tahunAjaranId: bodyTA, semesterId: bodySem,
+    } = body.data
 
-    let tahunAjaranId = body.tahunAjaranId
-    let semesterId = body.semesterId
+    let tahunAjaranId: string | null | undefined = bodyTA
+    let semesterId: string | null | undefined = bodySem
     if (!tahunAjaranId) {
       const ta = await db.tahunAjaran.findFirst({ where: { isActive: true } })
       tahunAjaranId = ta?.id ?? null
@@ -105,39 +111,33 @@ export async function POST(req: NextRequest) {
 
     // V2 security: validate GURU has teaching access
     const accessCheck = await validateGuruAccess(session, {
-      kelasId: body.kelasId,
-      mapelId: body.mapelId,
-      guruId: body.guruId,
+      kelasId,
+      mapelId,
+      guruId: bodyGuruId,
     }, req)
     if (!accessCheck.allowed && accessCheck.error) return accessCheck.error
 
     // Auto-bind guruId
-    let guruId = body.guruId
+    let guruId = bodyGuruId
     if (!guruId && accessCheck.guru) guruId = accessCheck.guru.id
 
-    // Validate dueDate is in the future for new tugas
-    if (body.dueDate && new Date(body.dueDate) < new Date()) {
-      return NextResponse.json(
-        { error: "Tenggat waktu tugas harus di masa depan" },
-        { status: 400 },
-      )
-    }
+    // Note: tugasCreateSchema already enforces dueDate > now via .refine()
 
     const tugas = await db.tugas.create({
       data: {
         tahunAjaranId,
         semesterId,
-        mapelId: body.mapelId,
-        kelasId: body.kelasId,
+        mapelId,
+        kelasId,
         guruId,
-        materiId: body.materiId || null,
-        title: body.title,
-        description: body.description || null,
-        type: body.type || "INDIVIDU",
-        fileUrl: body.fileUrl || null,
-        maxScore: body.maxScore || 100,
-        dueDate: new Date(body.dueDate),
-        isPublished: body.isPublished !== false,
+        materiId: materiId || null,
+        title,
+        description: description || null,
+        type,
+        fileUrl: fileUrl || null,
+        maxScore,
+        dueDate,
+        isPublished,
         createdById: session.user.id,
       },
       include: {
@@ -151,7 +151,7 @@ export async function POST(req: NextRequest) {
     // V6: Auto-notify all wali in kelas about new tugas
     if (tugas.isPublished) {
       const santriList = await db.santri.findMany({
-        where: { kelasId: body.kelasId, status: "AKTIF", deletedAt: null },
+        where: { kelasId, status: "AKTIF", deletedAt: null },
         select: { id: true },
       })
       for (const s of santriList) {

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 import { validateGuruAccess } from "@/lib/auth/guru-access"
+import { validateBody } from "@/lib/validation/helpers"
+import { materiUpdateSchema } from "@/lib/validation/akademik-detail"
 
 interface Params {
   params: Promise<{ id: string }>
@@ -35,32 +37,36 @@ export async function PUT(req: NextRequest, { params }: Params) {
   const session = guard.session
   try {
     const { id } = await params
-    const body = await req.json()
+    // ── Validate body with Zod ─────────────────────────────────────
+    const body = await validateBody(req, materiUpdateSchema)
+    if (!body.ok) return body.error
+    const data = body.data
+
     const existing = await db.materi.findUnique({ where: { id, deletedAt: null } })
     if (!existing) return NextResponse.json({ error: "Materi tidak ditemukan" }, { status: 404 })
 
     // V2 security: validate GURU has teaching access to this kelas+mapel
     const accessCheck = await validateGuruAccess(session, {
-      kelasId: body.kelasId ?? existing.kelasId,
-      mapelId: body.mapelId ?? existing.mapelId,
-      guruId: body.guruId ?? existing.guruId,
+      kelasId: data.kelasId !== undefined ? (data.kelasId ?? undefined) : existing.kelasId ?? undefined,
+      mapelId: data.mapelId ?? existing.mapelId,
+      guruId: data.guruId !== undefined ? (data.guruId ?? undefined) : existing.guruId ?? undefined,
     }, req)
     if (!accessCheck.allowed && accessCheck.error) return accessCheck.error
 
     const materi = await db.materi.update({
       where: { id },
       data: {
-        title: body.title ?? existing.title,
-        description: body.description ?? existing.description,
-        type: body.type ?? existing.type,
-        fileUrl: body.fileUrl !== undefined ? body.fileUrl : existing.fileUrl,
-        externalUrl: body.externalUrl !== undefined ? body.externalUrl : existing.externalUrl,
-        pertemuan: body.pertemuan !== undefined ? body.pertemuan : existing.pertemuan,
-        sortOrder: body.sortOrder ?? existing.sortOrder,
-        isPublished: body.isPublished ?? existing.isPublished,
-        mapelId: body.mapelId ?? existing.mapelId,
-        kelasId: body.kelasId !== undefined ? body.kelasId : existing.kelasId,
-        guruId: body.guruId !== undefined ? body.guruId : existing.guruId,
+        title: data.title ?? existing.title,
+        description: data.description ?? existing.description,
+        type: data.type ?? existing.type,
+        fileUrl: data.fileUrl !== undefined ? data.fileUrl : existing.fileUrl,
+        externalUrl: data.externalUrl !== undefined ? data.externalUrl : existing.externalUrl,
+        pertemuan: data.pertemuan !== undefined ? data.pertemuan : existing.pertemuan,
+        sortOrder: data.sortOrder ?? existing.sortOrder,
+        isPublished: data.isPublished ?? existing.isPublished,
+        mapelId: data.mapelId ?? existing.mapelId,
+        kelasId: data.kelasId !== undefined ? data.kelasId : existing.kelasId,
+        guruId: data.guruId !== undefined ? data.guruId : existing.guruId,
       },
       include: { mapel: { select: { name: true } } },
     })

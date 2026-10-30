@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 import { notifikasiNilaiUpdated } from "@/lib/notifikasi/helper"
+import { validateBody } from "@/lib/validation/helpers"
+import { nilaiCreateSchema } from "@/lib/validation/akademik-detail"
 
 export async function GET(req: NextRequest) {
   const guard = await requireApiPermission("nilai:read", req)
@@ -61,13 +63,18 @@ export async function POST(req: NextRequest) {
   if (guard.error) return guard.error
   const session = guard.session
   try {
-    const body = await req.json()
-    if (!body.santriId || !body.kelasId || !body.mapelId || !body.type || body.score === undefined) {
-      return NextResponse.json({ error: "Santri, Kelas, Mapel, Jenis Nilai, dan Skor wajib diisi" }, { status: 400 })
-    }
+    // ── Validate body with Zod ─────────────────────────────────────
+    const body = await validateBody(req, nilaiCreateSchema)
+    if (!body.ok) return body.error
+    const {
+      santriId, kelasId: bodyKelasId, mapelId, guruId: bodyGuruId,
+      kompetensiId: bodyKompetensiId, type, score,
+      tahunAjaranId: bodyTA, semesterId: bodySem,
+      notes, assessmentDate,
+    } = body.data
 
-    let tahunAjaranId = body.tahunAjaranId
-    let semesterId = body.semesterId
+    let tahunAjaranId: string | null | undefined = bodyTA
+    let semesterId: string | null | undefined = bodySem
     if (!tahunAjaranId) {
       const ta = await db.tahunAjaran.findFirst({ where: { isActive: true } })
       tahunAjaranId = ta?.id ?? null
@@ -82,9 +89,9 @@ export async function POST(req: NextRequest) {
 
     // V2 #6: Validate kompetensiId if provided (must belong to same mapel)
     let kompetensiId: string | null = null
-    if (body.kompetensiId) {
+    if (bodyKompetensiId) {
       const komp = await db.kompetensi.findFirst({
-        where: { id: body.kompetensiId, mapelId: body.mapelId, isActive: true },
+        where: { id: bodyKompetensiId, mapelId, isActive: true },
       })
       if (!komp) {
         return NextResponse.json({
@@ -95,47 +102,52 @@ export async function POST(req: NextRequest) {
     }
 
     const existing = await db.nilai.findFirst({
-      where: { santriId: body.santriId, mapelId: body.mapelId, type: body.type, semesterId, tahunAjaranId },
+      where: { santriId, mapelId, type, semesterId, tahunAjaranId },
     })
     let nilai
     if (existing) {
       nilai = await db.nilai.update({
         where: { id: existing.id },
         data: {
-          score: Number(body.score),
-          notes: body.notes || null,
-          guruId: body.guruId || existing.guruId,
+          score,
+          notes: notes || null,
+          guruId: bodyGuruId || existing.guruId,
           kompetensiId, // V2 #6: update kompetensi link
-          assessmentDate: body.assessmentDate ? new Date(body.assessmentDate) : new Date(),
+          assessmentDate: assessmentDate ?? new Date(),
         },
         include: { santri: true, mapel: true, kompetensi: { select: { code: true, name: true } } },
       })
       await logAudit(session, "UPDATE", "NILAI", nilai.id, {
-        santri: nilai.santri.name, mapel: nilai.mapel.name, type: body.type, score: body.score,
+        santri: nilai.santri.name, mapel: nilai.mapel.name, type, score,
       }, req)
     } else {
+      // Fetch kelasId from santri record if not provided
+      const kelasId = bodyKelasId
+      if (!kelasId) {
+        return NextResponse.json({ error: "Kelas wajib diisi untuk nilai baru" }, { status: 400 })
+      }
       nilai = await db.nilai.create({
         data: {
           tahunAjaranId,
           semesterId,
-          santriId: body.santriId,
-          kelasId: body.kelasId,
-          mapelId: body.mapelId,
-          guruId: body.guruId || null,
+          santriId,
+          kelasId,
+          mapelId,
+          guruId: bodyGuruId || null,
           kompetensiId, // V2 #6: link to kompetensi
-          type: body.type,
-          score: Number(body.score),
-          notes: body.notes || null,
-          assessmentDate: body.assessmentDate ? new Date(body.assessmentDate) : new Date(),
+          type,
+          score,
+          notes: notes || null,
+          assessmentDate: assessmentDate ?? new Date(),
         },
         include: { santri: true, mapel: true, kompetensi: { select: { code: true, name: true } } },
       })
       await logAudit(session, "CREATE", "NILAI", nilai.id, {
-        santri: nilai.santri.name, mapel: nilai.mapel.name, type: body.type, score: body.score,
+        santri: nilai.santri.name, mapel: nilai.mapel.name, type, score,
       }, req)
     }
     // V6: Auto-notify wali about nilai update
-    await notifikasiNilaiUpdated(body.santriId, nilai.mapel?.name || "", Number(body.score), nilai.id)
+    await notifikasiNilaiUpdated(santriId, nilai.mapel?.name || "", score, nilai.id)
 
     return NextResponse.json({ data: nilai })
   } catch (error) {

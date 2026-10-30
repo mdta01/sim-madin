@@ -12,7 +12,6 @@ import {
   tagihanStatusSchema,
   transaksiKasTypeSchema,
   transaksiKasCategorySchema,
-  honorGuruStatusSchema,
   rupiahSchema,
   idSchema,
   isoDateSchema,
@@ -25,6 +24,26 @@ import {
 // TAGIHAN
 // ============================================================================
 
+/**
+ * Honor Guru lifecycle status — matches Prisma model HonorGuru.status.
+ * DRAFT → DISETUJUI → DIBAYARKAN (or DITOLAK at any point).
+ *
+ * NOTE: also accepts legacy "PENDING" for backward-compat with old clients.
+ */
+const honorGuruStatusInputSchema = z.enum([
+  "DRAFT",
+  "DISETUJUI",
+  "DIBAYARKAN",
+  "DITOLAK",
+  "PENDING",
+])
+
+/**
+ * Jenis Tagihan category — matches Prisma JenisTagihan.category.
+ * RUTIN = bulanan (syahriyah), INSIDENTAL = sesekali (seragam, ujian).
+ */
+const jenisTagihanCategorySchema = z.enum(["RUTIN", "INSIDENTAL"])
+
 export const tagihanCreateSchema = z.object({
   santriId: idSchema,
   kelasId: idSchema.optional(),
@@ -33,6 +52,9 @@ export const tagihanCreateSchema = z.object({
   amount: rupiahSchema,
   description: shortText(200).optional(),
   dueDate: isoDateSchema.optional(),
+  status: tagihanStatusSchema.optional(),
+  // Trigger bulk creation for a kelas/santri list instead of single santri.
+  bulk: z.boolean().optional(),
   // Optional: create for bulk santri
   santriIds: z.array(idSchema).optional(),
 })
@@ -64,7 +86,8 @@ export const pembayaranCreateSchema = z.object({
   amount: rupiahSchema,
   paymentMethod: paymentMethodSchema,
   paymentDate: isoDateSchema.optional(),
-  notes: longText(500),
+  note: longText(500),
+  status: paymentStatusSchema.optional(),
   // Optional: file upload URL (bukti transfer)
   proofUrl: z.string().url("URL bukti pembayaran tidak valid").optional(),
 })
@@ -74,7 +97,7 @@ export const pembayaranUpdateSchema = z.object({
   amount: rupiahSchema.optional(),
   paymentMethod: paymentMethodSchema.optional(),
   paymentDate: isoDateSchema.optional(),
-  notes: longText(500),
+  note: longText(500),
   status: paymentStatusSchema.optional(),
   // For verification: which kas account receives this payment
   kasId: idSchema.optional(),
@@ -164,28 +187,31 @@ export type TransaksiKasUpdateInput = z.infer<typeof transaksiKasUpdateSchema>
 export const honorGuruCreateSchema = z.object({
   guruId: idSchema,
   tahunAjaranId: idSchema.optional(),
-  periode: shortText(50), // e.g. "Oktober 2025"
+  semesterId: idSchema.optional(), // defaults to active semester if not provided
+  periode: shortText(50), // e.g. "2025-10"
+  periodeLabel: shortText(100), // e.g. "Oktober 2025"
   // Breakdown
   honorMengajar: z.number().min(0).default(0),
   insentif: z.number().min(0).default(0),
   tunjangan: z.number().min(0).default(0),
   potongan: z.number().min(0).default(0),
   // Optional
-  description: longText(500),
+  catatan: longText(500),
   paymentDate: isoDateSchema.optional(),
-  status: honorGuruStatusSchema.optional(),
+  status: honorGuruStatusInputSchema.optional(),
 })
 export type HonorGuruCreateInput = z.infer<typeof honorGuruCreateSchema>
 
 export const honorGuruUpdateSchema = z.object({
   periode: shortText(50).optional(),
+  periodeLabel: shortText(100).optional(),
   honorMengajar: z.number().min(0).optional(),
   insentif: z.number().min(0).optional(),
   tunjangan: z.number().min(0).optional(),
   potongan: z.number().min(0).optional(),
-  description: longText(500),
+  catatan: longText(500),
   paymentDate: isoDateSchema.optional().nullable(),
-  status: honorGuruStatusSchema.optional(),
+  status: honorGuruStatusInputSchema.optional(),
   // When status → DIBAYARKAN, kasId is required (for auto-create TransaksiKas)
   kasId: idSchema.optional(),
 })
@@ -207,6 +233,7 @@ export const jenisTagihanCreateSchema = z.object({
   name: nonEmptyString.max(100),
   description: longText(500),
   defaultAmount: rupiahSchema,
+  category: jenisTagihanCategorySchema.optional(),
   isActive: z.boolean().default(true),
 })
 export type JenisTagihanCreateInput = z.infer<typeof jenisTagihanCreateSchema>
@@ -216,6 +243,7 @@ export const jenisTagihanUpdateSchema = z.object({
   name: nonEmptyString.max(100).optional(),
   description: longText(500),
   defaultAmount: rupiahSchema.optional(),
+  category: jenisTagihanCategorySchema.optional(),
   isActive: z.boolean().optional(),
 })
 export type JenisTagihanUpdateInput = z.infer<typeof jenisTagihanUpdateSchema>

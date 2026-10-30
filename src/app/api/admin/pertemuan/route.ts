@@ -3,6 +3,8 @@ import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 import { validateGuruAccess } from "@/lib/auth/guru-access"
 import { markOverduePertemuanCompletedSafe } from "@/lib/pertemuan/auto-complete"
+import { validateBody } from "@/lib/validation/helpers"
+import { pertemuanCreateSchema } from "@/lib/validation/akademik-detail"
 
 /**
  * GET /api/admin/pertemuan
@@ -80,16 +82,17 @@ export async function POST(req: NextRequest) {
   if (guard.error) return guard.error
   const session = guard.session
   try {
-    const body = await req.json()
-    if (!body.kelasId || !body.mapelId || !body.date || !body.pertemuanKe) {
-      return NextResponse.json(
-        { error: "Kelas, Mapel, Tanggal, dan Pertemuan ke- wajib diisi" },
-        { status: 400 },
-      )
-    }
+    // ── Validate body with Zod ─────────────────────────────────────
+    const body = await validateBody(req, pertemuanCreateSchema)
+    if (!body.ok) return body.error
+    const {
+      kelasId, mapelId, date, pertemuanKe, guruId: bodyGuruId,
+      tahunAjaranId: bodyTA, semesterId: bodySem,
+      topic, description, isCompleted,
+    } = body.data
 
-    let tahunAjaranId = body.tahunAjaranId
-    let semesterId = body.semesterId
+    let tahunAjaranId: string | null | undefined = bodyTA
+    let semesterId: string | null | undefined = bodySem
     if (!tahunAjaranId) {
       const ta = await db.tahunAjaran.findFirst({ where: { isActive: true } })
       tahunAjaranId = ta?.id ?? null
@@ -105,44 +108,44 @@ export async function POST(req: NextRequest) {
     // Verify uniqueness: 1 kelas+mapel+pertemuanKe per TA+Semester
     const existing = await db.pertemuan.findFirst({
       where: {
-        kelasId: body.kelasId,
-        mapelId: body.mapelId,
-        pertemuanKe: Number(body.pertemuanKe),
+        kelasId,
+        mapelId,
+        pertemuanKe,
         tahunAjaranId,
         semesterId,
       },
     })
     if (existing) {
       return NextResponse.json(
-        { error: `Pertemuan ke-${body.pertemuanKe} untuk mapel ini sudah ada` },
+        { error: `Pertemuan ke-${pertemuanKe} untuk mapel ini sudah ada` },
         { status: 400 },
       )
     }
 
     // V2 security: validate GURU has teaching access to this kelas+mapel
     const accessCheck = await validateGuruAccess(session, {
-      kelasId: body.kelasId,
-      mapelId: body.mapelId,
-      guruId: body.guruId,
+      kelasId,
+      mapelId,
+      guruId: bodyGuruId,
     }, req)
     if (!accessCheck.allowed && accessCheck.error) return accessCheck.error
 
     // Auto-bind guruId
-    let guruId = body.guruId
+    let guruId = bodyGuruId
     if (!guruId && accessCheck.guru) guruId = accessCheck.guru.id
 
     const pertemuan = await db.pertemuan.create({
       data: {
         tahunAjaranId,
         semesterId,
-        kelasId: body.kelasId,
-        mapelId: body.mapelId,
+        kelasId,
+        mapelId,
         guruId,
-        pertemuanKe: Number(body.pertemuanKe),
-        date: new Date(body.date),
-        topic: body.topic || null,
-        description: body.description || null,
-        isCompleted: body.isCompleted || false,
+        pertemuanKe,
+        date,
+        topic: topic || null,
+        description: description || null,
+        isCompleted,
       },
       include: {
         mapel: { select: { name: true } },

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateBody } from "@/lib/validation/helpers"
+import { honorGuruUpdateSchema } from "@/lib/validation/keuangan"
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -10,26 +12,29 @@ export async function PUT(req: NextRequest, { params }: Params) {
   const session = guard.session
   try {
     const { id } = await params
-    const body = await req.json()
+    const body = await validateBody(req, honorGuruUpdateSchema)
+    if (!body.ok) return body.error
+    const data = body.data
+
     const existing = await db.honorGuru.findUnique({ where: { id } })
     if (!existing) return NextResponse.json({ error: "Honor tidak ditemukan" }, { status: 404 })
 
-    const honorMengajar = Number(body.honorMengajar ?? existing.honorMengajar) || 0
-    const insentif = Number(body.insentif ?? existing.insentif) || 0
-    const tunjangan = Number(body.tunjangan ?? existing.tunjangan) || 0
-    const potongan = Number(body.potongan ?? existing.potongan) || 0
+    const honorMengajar = data.honorMengajar ?? existing.honorMengajar
+    const insentif = data.insentif ?? existing.insentif
+    const tunjangan = data.tunjangan ?? existing.tunjangan
+    const potongan = data.potongan ?? existing.potongan
     const totalHonor = honorMengajar + insentif + tunjangan - potongan
 
     const updateData: any = {
       honorMengajar, insentif, tunjangan, potongan, totalHonor,
-      catatan: body.catatan ?? existing.catatan,
-      status: body.status ?? existing.status,
+      catatan: data.catatan ?? existing.catatan,
+      status: data.status ?? existing.status,
     }
 
     // If status changes to DIBAYARKAN, set paidAt + create TransaksiKas
-    if (body.status === "DIBAYARKAN" && existing.status !== "DIBAYARKAN") {
+    if (data.status === "DIBAYARKAN" && existing.status !== "DIBAYARKAN") {
       updateData.paidAt = new Date()
-      updateData.kasId = body.kasId || existing.kasId
+      updateData.kasId = data.kasId || existing.kasId
 
       if (updateData.kasId) {
         await db.$transaction(async (tx) => {

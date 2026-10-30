@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateBody } from "@/lib/validation/helpers"
+import { pengumpulanTugasGradeSchema } from "@/lib/validation/akademik-detail"
 
 interface Params {
   params: Promise<{ id: string }>
@@ -9,7 +11,8 @@ interface Params {
 /**
  * PUT /api/admin/pengumpulan/[id]
  * Grade a submission (or update status/feedback).
- * Body: { score?, feedback?, status? }
+ * Body (validated by pengumpulanTugasGradeSchema):
+ *   { score?, feedback?, status? }
  *
  * Side effect: if score is set, status becomes "GRADED" and we recompute the
  * aggregated Nilai (type=TUGAS) by averaging ALL graded submissions for this
@@ -25,7 +28,10 @@ export async function PUT(req: NextRequest, { params }: Params) {
   const session = guard.session
   try {
     const { id } = await params
-    const body = await req.json()
+    // ── Validate body with Zod ─────────────────────────────────────
+    const body = await validateBody(req, pengumpulanTugasGradeSchema)
+    if (!body.ok) return body.error
+    const { score, feedback, status: bodyStatus } = body.data
 
     const existing = await db.pengumpulanTugas.findUnique({
       where: { id },
@@ -33,13 +39,9 @@ export async function PUT(req: NextRequest, { params }: Params) {
     })
     if (!existing) return NextResponse.json({ error: "Pengumpulan tidak ditemukan" }, { status: 404 })
 
-    // Validate score range
-    if (body.score !== undefined && body.score !== null && body.score !== "") {
-      const scoreNum = Number(body.score)
-      if (Number.isNaN(scoreNum)) {
-        return NextResponse.json({ error: "Skor harus angka" }, { status: 400 })
-      }
-      if (scoreNum < 0 || (existing.tugas.maxScore && scoreNum > existing.tugas.maxScore)) {
+    // Validate score range against tugas.maxScore (dynamic check — not in schema)
+    if (score !== undefined && score !== null) {
+      if (existing.tugas.maxScore && score > existing.tugas.maxScore) {
         return NextResponse.json(
           { error: `Skor harus antara 0 dan ${existing.tugas.maxScore}` },
           { status: 400 },
@@ -48,14 +50,14 @@ export async function PUT(req: NextRequest, { params }: Params) {
     }
 
     const updateData: any = {}
-    if (body.score !== undefined && body.score !== null && body.score !== "") {
-      updateData.score = Number(body.score)
+    if (score !== undefined && score !== null) {
+      updateData.score = score
       updateData.status = "GRADED"
       updateData.gradedAt = new Date()
       updateData.gradedById = session.user.id
     }
-    if (body.feedback !== undefined) updateData.feedback = body.feedback
-    if (body.status) updateData.status = body.status
+    if (feedback !== undefined) updateData.feedback = feedback
+    if (bodyStatus) updateData.status = bodyStatus
 
     const updated = await db.pengumpulanTugas.update({
       where: { id },
@@ -67,7 +69,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     })
 
     // If graded, recompute aggregated Nilai type=TUGAS as AVERAGE of all graded submissions
-    if (body.score !== undefined && body.score !== null && body.score !== "" && updated.tugas) {
+    if (score !== undefined && score !== null && updated.tugas) {
       const ta = await db.tahunAjaran.findFirst({ where: { isActive: true } })
       const sem = await db.semester.findFirst({ where: { isActive: true } })
       if (ta && sem) {
@@ -144,7 +146,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     await logAudit(session, "UPDATE", "PENGUMPULAN", id, {
       santri: updated.santri.name,
       tugas: updated.tugas.title,
-      score: body.score,
+      score,
       status: updateData.status,
     }, req)
 

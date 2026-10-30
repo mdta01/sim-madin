@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import jwt from "jsonwebtoken"
 import { hashPIN, validatePIN } from "@/lib/wali/auth"
+import { validateBody } from "@/lib/validation/helpers"
+import { waliSetPinSchema } from "@/lib/validation/wali"
+import jwt from "jsonwebtoken"
 
 const JWT_SECRET =
   process.env.NEXTAUTH_SECRET ||
@@ -17,12 +19,12 @@ const JWT_SECRET =
  */
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
-    const { verifyToken, pin } = body
-
-    if (!verifyToken || !pin) {
-      return NextResponse.json({ error: "Token verifikasi dan PIN wajib diisi" }, { status: 400 })
-    }
+    // ── Validate body with Zod ────────────────────────────────────────────
+    // Schema validates `verifyToken` is non-empty and `pin` is 6 numeric digits.
+    // Defense-in-depth: validatePIN() also rejects weak PINs (sequential/repeated).
+    const body = await validateBody(req, waliSetPinSchema)
+    if (!body.ok) return body.error
+    const { verifyToken, pin } = body.data
 
     // Verify token
     let decoded: any
@@ -36,7 +38,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Token tidak valid untuk set-pin" }, { status: 400 })
     }
 
-    // Validate PIN
+    // Validate PIN strength (sequential/repeated patterns)
     const pinValidation = validatePIN(pin)
     if (!pinValidation.valid) {
       return NextResponse.json({ error: pinValidation.error }, { status: 400 })

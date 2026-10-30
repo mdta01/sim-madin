@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiAuth, logAudit } from "@/lib/auth/guards"
+import { validateBody } from "@/lib/validation/helpers"
+import { jenisTagihanUpdateSchema } from "@/lib/validation/keuangan"
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const guard = await requireApiAuth(req)
@@ -12,9 +14,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
   try {
     const { id } = await params
-    const body = await req.json()
-    const updated = await db.jenisTagihan.update({ where: { id }, data: body })
-    await logAudit(session, "UPDATE", "JENIS_TAGIHAN", id, { changes: Object.keys(body) }, req)
+    const body = await validateBody(req, jenisTagihanUpdateSchema)
+    if (!body.ok) return body.error
+    const data = body.data
+
+    const updated = await db.jenisTagihan.update({ where: { id }, data })
+    await logAudit(session, "UPDATE", "JENIS_TAGIHAN", id, { changes: Object.keys(data) }, req)
     return NextResponse.json({ data: updated })
   } catch (error) {
     console.error("[jenis-tagihan update] error:", error)

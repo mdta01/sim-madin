@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateBody } from "@/lib/validation/helpers"
+import { pembayaranCreateSchema } from "@/lib/validation/keuangan"
 
 export async function GET(req: NextRequest) {
   const guard = await requireApiPermission("pembayaran:read", req)
@@ -45,10 +47,9 @@ export async function POST(req: NextRequest) {
   if (guard.error) return guard.error
   const session = guard.session
   try {
-    const body = await req.json()
-    if (!body.santriId || !body.amount || !body.paymentMethod) {
-      return NextResponse.json({ error: "Santri, Nominal, dan Metode wajib diisi" }, { status: 400 })
-    }
+    const body = await validateBody(req, pembayaranCreateSchema)
+    if (!body.ok) return body.error
+    const { santriId, tagihanId, amount, paymentMethod, paymentDate, note, status, proofUrl } = body.data
 
     const ta = await db.tahunAjaran.findFirst({ where: { isActive: true } })
 
@@ -59,23 +60,23 @@ export async function POST(req: NextRequest) {
       data: {
         invoiceNo,
         tahunAjaranId: ta?.id,
-        tagihanId: body.tagihanId || null,
-        santriId: body.santriId,
-        amount: Number(body.amount),
-        paymentMethod: body.paymentMethod,
-        paymentDate: body.paymentDate ? new Date(body.paymentDate) : new Date(),
-        status: body.status || "VERIFIED",
-        note: body.note || null,
-        proofUrl: body.proofUrl || null,
+        tagihanId: tagihanId || null,
+        santriId,
+        amount,
+        paymentMethod,
+        paymentDate: paymentDate ?? new Date(),
+        status: status || "VERIFIED",
+        note: note || null,
+        proofUrl: proofUrl || null,
         recordedById: session.user.id,
       },
       include: { santri: true, tagihan: { include: { jenisTagihan: true } } },
     })
 
-    if (body.tagihanId) {
-      const tagihan = await db.tagihan.findUnique({ where: { id: body.tagihanId } })
+    if (tagihanId) {
+      const tagihan = await db.tagihan.findUnique({ where: { id: tagihanId } })
       if (tagihan) {
-        const newPaidAmount = tagihan.paidAmount + Number(body.amount)
+        const newPaidAmount = tagihan.paidAmount + amount
         const newStatus = newPaidAmount >= tagihan.amount ? "LUNAS" : "CICIL"
         await db.tagihan.update({
           where: { id: tagihan.id },

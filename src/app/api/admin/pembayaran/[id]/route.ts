@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateBody } from "@/lib/validation/helpers"
+import { pembayaranUpdateSchema } from "@/lib/validation/keuangan"
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const guard = await requireApiPermission("pembayaran:update", req)
@@ -8,13 +10,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const session = guard.session
   try {
     const { id } = await params
-    const body = await req.json()
+    const body = await validateBody(req, pembayaranUpdateSchema)
+    if (!body.ok) return body.error
+    const data = body.data
+
     const updated = await db.payment.update({
       where: { id },
-      data: body,
+      data: {
+        ...data,
+        // isoDateSchema already transforms to Date — pass through directly.
+        paymentDate: data.paymentDate ?? undefined,
+      },
       include: { santri: true, tagihan: { include: { jenisTagihan: true } } },
     })
-    await logAudit(session, "UPDATE", "PEMBAYARAN", id, { changes: body }, req)
+    await logAudit(session, "UPDATE", "PEMBAYARAN", id, { changes: data }, req)
     return NextResponse.json({ data: updated })
   } catch (error) {
     console.error("[pembayaran update] error:", error)

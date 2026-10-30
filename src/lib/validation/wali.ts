@@ -92,11 +92,18 @@ export type WaliOtpVerifyInput = z.infer<typeof waliOtpVerifySchema>
 // SET PIN — POST /api/wali/set-pin
 // ============================================================================
 
+/**
+ * Set PIN baru setelah OTP verifikasi berhasil.
+ *
+ * Body yang diterima route adalah { verifyToken, pin } — `verifyToken` adalah
+ * JWT 10-menit yang di-return oleh /api/wali/verify-otp.
+ *
+ * PIN format: 6 digit angka. Cek PIN lemah (sequential/repeated) tetap
+ * dilakukan oleh validatePIN() di route — Zod hanya memvalidasi format.
+ */
 export const waliSetPinSchema = z.object({
-  phone: whatsappInputSchema,
-  otp: z.string().length(6).regex(/^\d{6}$/),
+  verifyToken: z.string().min(1, "Token verifikasi wajib diisi"),
   pin: z.string().length(6, "PIN harus 6 digit").regex(/^\d{6}$/, "PIN hanya boleh angka"),
-  activationToken: z.string().min(1, "Token aktivasi wajib diisi"),
 })
 export type WaliSetPinInput = z.infer<typeof waliSetPinSchema>
 

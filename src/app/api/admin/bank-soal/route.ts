@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 import { validateGuruAccess } from "@/lib/auth/guru-access"
+import { validateBody } from "@/lib/validation/helpers"
+import { bankSoalCreateSchema } from "@/lib/validation/akademik-detail"
 
 /**
  * GET /api/admin/bank-soal
@@ -60,12 +62,16 @@ export async function POST(req: NextRequest) {
   if (guard.error) return guard.error
   const session = guard.session
   try {
-    const body = await req.json()
-    if (!body.code || !body.question || !body.type || !body.mapelId) {
-      return NextResponse.json({ error: "Kode, Pertanyaan, Tipe, dan Mapel wajib diisi" }, { status: 400 })
-    }
+    // ── Validate body with Zod ─────────────────────────────────────
+    const body = await validateBody(req, bankSoalCreateSchema)
+    if (!body.ok) return body.error
+    const {
+      mapelId, code, type, question, options, correctAnswer, answerKey,
+      bobot, difficulty, kompetensiId, tags, isActive, tahunAjaranId: bodyTA,
+      guruId: bodyGuruId,
+    } = body.data
 
-    let tahunAjaranId = body.tahunAjaranId
+    let tahunAjaranId: string | null | undefined = bodyTA
     if (!tahunAjaranId) {
       const ta = await db.tahunAjaran.findFirst({ where: { isActive: true } })
       tahunAjaranId = ta?.id ?? null
@@ -75,39 +81,34 @@ export async function POST(req: NextRequest) {
     }
 
     // V2 security: validate GURU has teaching access to this mapel
-    const accessCheck = await validateGuruAccess(session, { mapelId: body.mapelId }, req)
+    const accessCheck = await validateGuruAccess(session, { mapelId }, req)
     if (!accessCheck.allowed && accessCheck.error) return accessCheck.error
 
-    const existing = await db.bankSoal.findFirst({ where: { code: body.code } })
+    const existing = await db.bankSoal.findFirst({ where: { code } })
     if (existing) return NextResponse.json({ error: "Kode soal sudah ada" }, { status: 400 })
 
-    // Validate options for PG type
-    let optionsJson = body.options
-    if (body.type === "PG") {
-      if (typeof body.options === "object") {
-        optionsJson = JSON.stringify(body.options)
-      }
-      if (!optionsJson || JSON.parse(optionsJson).length < 2) {
-        return NextResponse.json({ error: "Soal PG wajib punya minimal 2 opsi jawaban" }, { status: 400 })
-      }
+    // Serialize options array → JSON string for Prisma storage (PG type)
+    let optionsJson: string | null = null
+    if (type === "PG" && options && options.length > 0) {
+      optionsJson = JSON.stringify(options)
     }
 
     const soal = await db.bankSoal.create({
       data: {
-        mapelId: body.mapelId,
+        mapelId,
         tahunAjaranId,
-        guruId: accessCheck.guru?.id || body.guruId || null,
-        code: body.code,
-        type: body.type,
-        question: body.question,
-        options: optionsJson || null,
-        correctAnswer: body.correctAnswer || null,
-        answerKey: body.answerKey || null,
-        bobot: body.bobot || 1,
-        difficulty: body.difficulty || "SEDANG",
-        kompetensiId: body.kompetensiId || null,
-        tags: body.tags || null,
-        isActive: body.isActive !== false,
+        guruId: accessCheck.guru?.id || bodyGuruId || null,
+        code,
+        type,
+        question,
+        options: optionsJson,
+        correctAnswer: correctAnswer || null,
+        answerKey: answerKey || null,
+        bobot: bobot ?? 1,
+        difficulty: difficulty ?? "SEDANG",
+        kompetensiId: kompetensiId || null,
+        tags: tags && tags.length > 0 ? tags.join(",") : null,
+        isActive,
       },
       include: { mapel: { select: { name: true } } },
     })
