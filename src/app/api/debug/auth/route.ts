@@ -44,3 +44,23 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json(debug, { status: 200 })
 }
+
+
+// Add DB connection test
+export async function POST(req: NextRequest) {
+  try {
+    const { db } = await import("@/lib/db")
+    const userCount = await db.user.count()
+    return NextResponse.json({
+      dbConnection: "OK",
+      userCount,
+      databaseUrlPrefix: process.env.DATABASE_URL?.slice(0, 40),
+    })
+  } catch (e: any) {
+    return NextResponse.json({
+      dbConnection: "FAILED",
+      error: e.message,
+      errorCode: e.code,
+    }, { status: 500 })
+  }
+}
