@@ -20,6 +20,7 @@ import { Ionicons } from "@expo/vector-icons"
 
 // Import dari shared package
 import {
+import { subscribeToTable, subscribeToNotifikasi } from "../vendor/mobile-shared/src/realtime"
   MobileApiClient, normalizeWhatsApp, formatPhoneDisplay,
   saveWaliSession, loadWaliSession, clearWaliSession,
   formatRupiah, formatDate, STATUS_STYLES, DAYS,
@@ -1808,8 +1809,7 @@ export default function App() {
     let unsubNotif: (() => void) | null = null
 
     // Dynamic import agar tidak crash jika realtime module belum tersedia
-    import("../vendor/mobile-shared/src/realtime")
-      .then(async ({ subscribeToNotifikasi }) => {
+    try {
         unsubNotif = await subscribeToNotifikasi(savedWali.id, (newNotif: any) => {
           // Show local notification via React Native
           if (typeof Alert !== "undefined") {

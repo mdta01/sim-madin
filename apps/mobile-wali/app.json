@@ -34,6 +34,7 @@
         "projectId": "6ce05bbb-6c64-4377-a4b2-1d024531ec29"
       }
     },
-    "owner": "madinmu01s-team"
+    "owner": "madinmu01s-team",
+    "hermesEnabled": true
   }
 }

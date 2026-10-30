@@ -29,6 +29,7 @@
         "projectId": "5ae82a4f-894a-4201-8d4b-1aa5a50b9792"
       }
     },
-    "owner": "madinmu01s-team"
+    "owner": "madinmu01s-team",
+    "hermesEnabled": true
   }
 }

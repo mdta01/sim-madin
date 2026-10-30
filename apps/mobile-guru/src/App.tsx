@@ -16,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons"
 import { createClient, SupabaseClient } from "@supabase/supabase-js"
 import * as SecureStore from "expo-secure-store"
 import { formatRupiah, formatDate, STATUS_STYLES, DAYS, NILAI_TYPES } from "../vendor/mobile-shared/src"
+import { subscribeToTable, subscribeToNotifikasi } from "../vendor/mobile-shared/src/realtime"
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "https://sim-madin.vercel.app"
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "https://ooglxextkliuhpequwme.supabase.co"
@@ -1914,8 +1915,7 @@ export default function App() {
     if (!isLoggedIn) return
     let cancelled = false
     const unsubs: Array<() => void> = []
-    import("../vendor/mobile-shared/src/realtime")
-      .then(async ({ subscribeToTable }) => {
+    try {
         for (const table of ["Tugas", "PengumpulanTugas"] as const) {
           try {
             const unsub = await subscribeToTable(table, () => {
@@ -1925,8 +1925,7 @@ export default function App() {
             else { unsubs.push(unsub) }
           } catch {}
         }
-      })
-      .catch(() => {})
+      } catch(e) { /* realtime optional */ }
     return () => {
       cancelled = true
       unsubs.forEach(u => { try { u() } catch {} })
