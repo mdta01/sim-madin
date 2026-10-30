@@ -287,12 +287,16 @@
 ---
 
 ### V12 — Sistem Terintegrasi Penuh
-**Estimasi:** 3-5 hari
+**Estimasi:** 3-5 hari → Realisasi: 1 hari (30 Okt 2025) — ✅ DONE
 **Tujuan:** Hubungkan semua modul yang sudah ada jadi satu siklus utuh.
 
-- [ ] Siklus Santri: PPDB → Data → Kelas → Jadwal → Pembelajaran → Absensi → Nilai → Perkembangan → Ujian → Rapor → Kenaikan Kelas → Kelulusan → Alumni
-- [ ] Siklus Keuangan: Santri → Jenis Tagihan → Tagihan → Pembayaran → Verifikasi → Kas → Laporan → Monitoring
-- [ ] Siklus Guru: Data → Penugasan → Jadwal → Absensi Guru → Mengajar → Absensi Santri → Nilai → Catatan → Honor
+- [x] **Siklus Santri**: PPDB → Data → Kelas → Jadwal → Pembelajaran → Absensi → Nilai → Perkembangan → Ujian → Rapor → Kenaikan Kelas → Kelulusan → Alumni — visualisasi 11 step via `/api/admin/siklus/overview` + UI card grid
+- [x] **Siklus Keuangan**: Santri → Jenis Tagihan → Tagihan → Pembayaran → Verifikasi → Kas → Pemasukan/Pengeluaran → Laporan → Monitoring — visualisasi 9 step + bulk action `auto-tagihan` + integrasi `payment-verify → TransaksiKas PEMASUKAN`
+- [x] **Siklus Guru**: Data → Penugasan → Jadwal → Absensi Guru → Mengajar → Absensi Santri → Nilai → Catatan → Honor — visualisasi 5 step
+- [x] **Bulk Action Kenaikan Kelas** — auto-detect next class via `sortOrder+1`, fallback ke LULUS + create Alumni record bila kelas terakhir. Dry-run preview + skip existing alumni
+- [x] **Bulk Action Auto-Tagihan** — generate tagihan untuk semua santri aktif per jenis/bulan/tahun. Skip duplicate by description matching. Override amount/dueDate optional
+- [x] **Integrasi V6 Notifikasi** — auto-trigger notifikasi wali saat: tagihan baru dibuat (auto-tagihan), santri naik kelas, santri LULUS. Best-effort pattern
+- [x] **Sanity test** — `scripts/test-siklus-v12.ts` verifikasi 23 Prisma models + 11 live DB checks
 
 ---
 
@@ -351,7 +355,7 @@ Sisanya bisa follow-up sesuai kebutuhan madrasah.
 | V3 — Ujian & Rapor | ✅ Done LENGKAP | 20 Des 2025 | 29 Okt 2025 (ujian online + kartu selesai) |
 | V4 — Perkembangan Santri | 📋 Planned | 15 Jan 2026 | - |
 | V5 — Keuangan Lanjutan | 📋 Planned | 10 Feb 2026 | - |
-| V6-V14 | 📋 Long-term | Q1-Q2 2026 | - |
+| V6-V14 | 📋 Long-term | Q1-Q2 2026 | V12 ✅ Done 30 Okt 2025 |
 
 ---
 

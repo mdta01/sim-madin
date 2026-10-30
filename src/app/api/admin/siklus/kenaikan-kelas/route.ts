@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { createNotifikasi, getWaliIdFromSantri } from "@/lib/notifikasi/helper"
 
 /**
  * POST /api/admin/siklus/kenaikan-kelas
@@ -113,6 +114,26 @@ export async function POST(req: NextRequest) {
             },
           })
           updated.push({ ...u, action: "NAIK_KELAS", kelasBaru: r.kelasBaru })
+
+          // V12 → V6 integration: notify wali that santri has been promoted.
+          // Best-effort — failures are logged but do not break the bulk operation.
+          try {
+            const waliId = await getWaliIdFromSantri(r.santriId)
+            if (waliId) {
+              await createNotifikasi({
+                waliId,
+                santriId: r.santriId,
+                type: "KENAIKAN_KELAS",
+                title: "Kenaikan Kelas",
+                message: `Ananda ${r.name} telah naik ke kelas ${r.kelasBaru}.`,
+                priority: "NORMAL",
+                entityType: "KENAIKAN_KELAS",
+                entityId: r.santriId,
+              })
+            }
+          } catch (e) {
+            console.warn(`[kenaikan-kelas] notifikasi gagal untuk santri ${r.santriId}:`, e)
+          }
         } else if (r.action === "LULUS") {
           // Create Alumni record + update santri status
           const ta = await tx.tahunAjaran.findFirst({ where: { isActive: true } })
@@ -134,6 +155,25 @@ export async function POST(req: NextRequest) {
             data: { status: "LULUS" },
           })
           updated.push({ ...u, action: "LULUS" })
+
+          // V12 → V6 integration: notify wali about graduation.
+          try {
+            const waliId = await getWaliIdFromSantri(r.santriId)
+            if (waliId) {
+              await createNotifikasi({
+                waliId,
+                santriId: r.santriId,
+                type: "KELULUSAN",
+                title: "Selamat Kelulusan",
+                message: `Ananda ${r.name} telah dinyatakan LULUS. Selamat kepada keluarga.`,
+                priority: "TINGGI",
+                entityType: "KELULUSAN",
+                entityId: r.santriId,
+              })
+            }
+          } catch (e) {
+            console.warn(`[kenaikan-kelas] notifikasi lulus gagal untuk santri ${r.santriId}:`, e)
+          }
         }
       }
     })

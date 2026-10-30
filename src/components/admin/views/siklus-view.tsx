@@ -38,33 +38,65 @@ const SIKLUS_GURU_STEPS = [
   "Data Guru", "Penugasan", "Absensi Santri", "Nilai", "Honor",
 ]
 
-const DEFAULT_INTEGRATIONS = [
-  "Payment → Kas",
-  "Honor → Kas",
-  "Kenaikan Kelas",
-  "Auto-Tagihan",
-  "Notifikasi",
-]
-
-type StepStatus = "OK" | "KOSONG" | "MANUAL"
+type StepStatus = "OK" | "KOSONG" | "MANUAL" | "PENDING" | "AVAILABLE" | "ACTIVE"
 
 interface SiklusStep {
   name: string
   count?: number
   status?: StepStatus
+  pending?: number
+}
+
+interface IntegrationInfo {
+  description: string
+  endpoint: string
+  status: string
 }
 
 interface SiklusOverview {
   siklusSantri?: SiklusStep[]
   siklusKeuangan?: SiklusStep[]
   siklusGuru?: SiklusStep[]
-  integrations?: string[]
+  integrations?: Record<string, IntegrationInfo>
+  activePeriod?: { tahunAjaran: string; semester: string } | null
+}
+
+// Fallback integrations shown when API does not return them
+const DEFAULT_INTEGRATIONS: Record<string, IntegrationInfo> = {
+  paymentToKas: {
+    description: "Pembayaran → Verifikasi → Kas (auto TransaksiKas)",
+    endpoint: "/api/admin/siklus/payment-verify/[id]",
+    status: "ACTIVE",
+  },
+  honorToKas: {
+    description: "Honor Guru → Dibayar → Kas (auto TransaksiKas PENGELUARAN)",
+    endpoint: "/api/admin/honor-guru/[id] (PUT status=DIBAYARKAN)",
+    status: "ACTIVE",
+  },
+  kenaikanKelas: {
+    description: "Kenaikan Kelas → Update kelas / Alumni (LULUS)",
+    endpoint: "/api/admin/siklus/kenaikan-kelas",
+    status: "ACTIVE",
+  },
+  autoTagihan: {
+    description: "Auto-generate Tagihan untuk semua santri",
+    endpoint: "/api/admin/siklus/auto-tagihan",
+    status: "ACTIVE",
+  },
+  notifikasiTriggers: {
+    description: "Auto-notifikasi: Absensi ALFA, Nilai updated, Rapor published, Tugas baru, Pengumuman",
+    endpoint: "/lib/notifikasi/helper.ts (7 trigger functions)",
+    status: "ACTIVE",
+  },
 }
 
 const STATUS_BADGE: Record<StepStatus, { label: string; className: string }> = {
   OK: { label: "OK", className: "bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-400" },
   KOSONG: { label: "KOSONG", className: "bg-red-100 text-red-700 hover:bg-red-100 dark:bg-red-950/60 dark:text-red-400" },
   MANUAL: { label: "MANUAL", className: "bg-amber-100 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-400" },
+  PENDING: { label: "PENDING", className: "bg-amber-100 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-400" },
+  AVAILABLE: { label: "TERSEDIA", className: "bg-blue-100 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-400" },
+  ACTIVE: { label: "AKTIF", className: "bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-400" },
 }
 
 const MONTHS = [
@@ -153,9 +185,10 @@ export function SiklusView() {
   const santriSteps = normalizeSteps(SIKLUS_SANTRI_STEPS, overview.siklusSantri)
   const keuanganSteps = normalizeSteps(SIKLUS_KEUANGAN_STEPS, overview.siklusKeuangan)
   const guruSteps = normalizeSteps(SIKLUS_GURU_STEPS, overview.siklusGuru)
-  const integrations = overview.integrations && overview.integrations.length > 0
-    ? overview.integrations
-    : DEFAULT_INTEGRATIONS
+  const integrations: Record<string, IntegrationInfo> =
+    overview.integrations && Object.keys(overview.integrations).length > 0
+      ? overview.integrations
+      : DEFAULT_INTEGRATIONS
 
   return (
     <div className="space-y-6">
@@ -226,18 +259,26 @@ export function SiklusView() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {integrations.map((name) => (
+            {Object.entries(integrations).map(([key, info]) => (
               <div
-                key={name}
-                className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2.5"
+                key={key}
+                className="flex flex-col gap-1.5 rounded-lg border bg-muted/30 px-3 py-2.5"
               >
-                <div className="flex items-center gap-2 min-w-0">
-                  <CircleDot className="h-4 w-4 text-emerald-600 shrink-0" />
-                  <span className="text-sm font-medium truncate">{name}</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <CircleDot className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <span className="text-sm font-medium truncate">{key}</span>
+                  </div>
+                  <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-400 shrink-0">
+                    {info.status || "ACTIVE"}
+                  </Badge>
                 </div>
-                <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-400 shrink-0">
-                  ACTIVE
-                </Badge>
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  {info.description}
+                </p>
+                <p className="text-[10px] font-mono text-muted-foreground/70 truncate" title={info.endpoint}>
+                  {info.endpoint}
+                </p>
               </div>
             ))}
           </div>
@@ -362,15 +403,17 @@ function KenaikanKelasDialog({
     try {
       const res = await apiPost("/api/admin/siklus/kenaikan-kelas", { kelasId, dryRun })
       if (dryRun) {
+        // API returns { preview, kelas, nextKelas, totalSantri, results }
         setPreview(res)
         toast({
           title: "Preview berhasil",
-          description: `Diproses ${res?.processed ?? res?.count ?? 0} santri (dry run)`,
+          description: `${res?.totalSantri ?? 0} santri akan diproses dari kelas ${res?.kelas ?? ""}`,
         })
       } else {
+        // API returns { success, kelas, nextKelas, totalProcessed, naikKelas, lulus, results }
         toast({
           title: "Berhasil",
-          description: `Kenaikan kelas dieksekusi untuk ${res?.processed ?? res?.count ?? 0} santri`,
+          description: `${res?.totalProcessed ?? 0} santri diproses: ${res?.naikKelas ?? 0} naik kelas, ${res?.lulus ?? 0} lulus`,
         })
         onOpenChange(false)
         onSuccess()
@@ -503,8 +546,8 @@ function AutoTagihanDialog({
       const body: any = {
         jenisTagihanId,
         dryRun,
-        month,
-        year,
+        bulan: month,   // API expects `bulan` (not `month`)
+        tahun: year,     // API expects `tahun` (not `year`)
       }
       if (amount !== "" && amount !== null) body.amount = Number(amount)
       const res = await apiPost("/api/admin/siklus/auto-tagihan", body)
@@ -512,12 +555,12 @@ function AutoTagihanDialog({
         setPreview(res)
         toast({
           title: "Preview berhasil",
-          description: `Akan dibuat ${res?.processed ?? res?.count ?? 0} tagihan (dry run)`,
+          description: `Akan dibuat ${res?.created ?? 0} tagihan, ${res?.skipped ?? 0} dilewati (dry run)`,
         })
       } else {
         toast({
           title: "Berhasil",
-          description: `${res?.processed ?? res?.count ?? 0} tagihan berhasil dibuat`,
+          description: `${res?.created ?? 0} tagihan berhasil dibuat, ${res?.skipped ?? 0} dilewati`,
         })
         onOpenChange(false)
         onSuccess()
@@ -638,14 +681,34 @@ function AutoTagihanDialog({
 // ============================================================================
 function PreviewResult({ title, data, icon }: { title: string; data: any; icon: React.ReactNode }) {
   const items: { label: string; value: string }[] = []
+
+  // Common fields across siklus APIs
+  if (typeof data?.totalProcessed === "number") items.push({ label: "Total Diproses", value: String(data.totalProcessed) })
+  if (typeof data?.totalSantri === "number") items.push({ label: "Total Santri", value: String(data.totalSantri) })
+  if (typeof data?.created === "number") items.push({ label: "Dibuat", value: String(data.created) })
+  if (typeof data?.skipped === "number") items.push({ label: "Dilewati", value: String(data.skipped) })
+  if (typeof data?.naikKelas === "number") items.push({ label: "Naik Kelas", value: String(data.naikKelas) })
+  if (typeof data?.lulus === "number") items.push({ label: "Lulus", value: String(data.lulus) })
+  if (typeof data?.amount === "number") items.push({ label: "Nominal", value: formatRupiah(Number(data.amount)) })
   if (typeof data?.processed === "number") items.push({ label: "Diproses", value: String(data.processed) })
   if (typeof data?.count === "number") items.push({ label: "Jumlah", value: String(data.count) })
-  if (typeof data?.skipped === "number") items.push({ label: "Dilewati", value: String(data.skipped) })
   if (typeof data?.totalAmount === "number") items.push({ label: "Total Nominal", value: formatRupiah(data.totalAmount) })
-  if (Array.isArray(data?.samples) && data.samples.length > 0) {
-    items.push({ label: "Contoh", value: data.samples.slice(0, 3).map((s: any) =>
-      typeof s === "string" ? s : (s.name || s.label || JSON.stringify(s))
-    ).join(", ") })
+
+  // String metadata
+  if (typeof data?.kelas === "string") items.push({ label: "Kelas", value: String(data.kelas) })
+  if (typeof data?.nextKelas === "string") items.push({ label: "Kelas Tujuan", value: String(data.nextKelas) })
+  if (typeof data?.jenisTagihan === "string") items.push({ label: "Jenis Tagihan", value: String(data.jenisTagihan) })
+  if (typeof data?.periode === "string") items.push({ label: "Periode", value: String(data.periode) })
+
+  // Sample entries (preview mode)
+  const samples = data?.results || data?.createdData || data?.skippedData || data?.samples
+  if (Array.isArray(samples) && samples.length > 0) {
+    items.push({
+      label: "Contoh",
+      value: samples.slice(0, 5).map((s: any) =>
+        typeof s === "string" ? s : (s.name || s.label || s.action || JSON.stringify(s))
+      ).join(", "),
+    })
   }
   if (data?.message) items.push({ label: "Pesan", value: String(data.message) })
 

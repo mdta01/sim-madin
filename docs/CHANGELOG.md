@@ -6,6 +6,55 @@ Format: `[STATUS]` di awal tiap item — ✅ done / ⚠️ partial / ❌ not sta
 
 ---
 
+## Versi 12.0 — Sistem Terintegrasi Penuh (DONE: 30 Okt 2025)
+
+> **Status**: ✅ DONE — Tiga siklus utama (Santri, Keuangan, Guru) terhubung penuh dengan endpoint bulk-action + integrasi notifikasi V6 otomatis.
+
+### ✅ Done — Core Items
+
+#### API Endpoints (4 baru di `/api/admin/siklus/`)
+- **`GET /overview`** — Ringkasan status ketiga siklus (santri, keuangan, guru) + status integrasi antar-modul + periode aktif
+- **`POST /auto-tagihan`** — Bulk-generate tagihan untuk semua santri aktif (Siklus Keuangan). Mendukung `dryRun`, override `amount`/`dueDate`, filter `kelasId`. Skip otomatis bila tagihan sudah ada
+- **`PUT /payment-verify/[id]`** — Verifikasi pembayaran + auto-create `TransaksiKas PEMASUKAN` + update saldo kas + update status tagihan (LUNAS/CICIL) dalam satu transaction
+- **`POST /kenaikan-kelas`** — Bulk promote santri ke kelas berikutnya (sortOrder+1) atau ubah ke `LULUS` + create `Alumni` record bila kelas terakhir. Mendukung `dryRun`, `santriIds[]`, `skipLulus`
+
+#### UI View (`/components/admin/views/siklus-view.tsx`)
+- 3 workflow visualisasi horizontal: **Siklus Santri** (11 step), **Siklus Keuangan** (9 step), **Siklus Guru** (5 step) — masing-masing dengan count + badge status (OK / KOSONG / MANUAL / PENDING / AVAILABLE / ACTIVE)
+- **Status Integrasi** — card grid menampilkan 5 koneksi antar-modul aktif (Payment→Kas, Honor→Kas, Kenaikan Kelas, Auto-Tagihan, Notifikasi Triggers) dengan deskripsi + endpoint
+- **Aksi Massal** — 2 dialog dengan dry-run preview:
+  - **Kenaikan Kelas** — pilih kelas → preview santri yang akan naik/lulus → execute
+  - **Auto-Generate Tagihan** — pilih jenis tagihan + bulan/tahun + nominal → preview → generate
+- Menu sidebar "Siklus Terintegrasi" sudah aktif di group Utama
+
+#### Integrasi V6 Notifikasi (cross-version)
+- **Auto-Tagihan** → trigger `notifikasiTagihanDue` ke wali untuk setiap tagihan baru yang dibuat
+- **Kenaikan Kelas** → trigger notifikasi `KENAIKAN_KELAS` (priority NORMAL) saat santri naik kelas
+- **Kenaikan Kelas** → trigger notifikasi `KELULUSAN` (priority TINGGI) saat santri dinyatakan LULUS
+- Best-effort pattern: kegagalan notifikasi tidak membatalkan bulk operation (logged via `console.warn`)
+
+#### Sanity Test
+- `scripts/test-siklus-v12.ts` — Verifikasi 23 Prisma models yang dipakai siklus endpoints + 11 live DB checks (counts, relationships, dry-run simulation). Auto-fallback ke schema-shape check bila DB unreachable
+
+#### Bug Fixes (post-audit dari prior session)
+- ❌ **Bug fix #1**: Type mismatch — API return `integrations` sebagai object `{key: {description, endpoint, status}}`, UI expect `string[]`. UI sekarang handle object dengan benar + fallback ke `DEFAULT_INTEGRATIONS`
+- ❌ **Bug fix #2**: Field name mismatch — UI Auto-Tagihan kirim `{month, year}` tapi API expect `{bulan, tahun}`. Akibatnya bulan/tahun selalu pakai default. Fixed
+- ❌ **Bug fix #3**: Response shape mismatch — UI baca `res.processed/count/totalAmount/samples` tapi API return `created/skipped/createdData/totalProcessed/naikKelas/lulus`. `PreviewResult` sekarang baca semua field yang relevan
+- ❌ **Bug fix #4**: `STATUS_BADGE` tidak ada entry untuk `PENDING`/`AVAILABLE`/`ACTIVE` → ditambahkan
+
+### 📊 Statistik V12
+- **Endpoint API**: 4 endpoint V12 baru (done)
+- **File baru**: 1 UI view (~745 lines), 1 sanity test script (~190 lines)
+- **Trigger notifikasi V6 baru**: 3 (KENAIKAN_KELAS, KELULUSAN, tagihan baru via auto-tagihan)
+- **Build**: ✅ 0 TypeScript errors, 0 ESLint errors
+
+### 💡 Catatan Implementasi
+1. **`siklusSantri[].status = "MANUAL"`** untuk step Kenaikan Kelas karena butuh input manual admin (tidak ada auto-detect dari nilai/rapor)
+2. **Auto-Tagihan skip duplicate** by description matching (santri + jenis + TA + description) — aman untuk re-run
+3. **Kenaikan-Kelas** mendeteksi kelas berikutnya via `sortOrder + 1`; bila tidak ada → anggap kelas terakhir → LULUS
+4. **Best-effort notifikasi** — semua trigger dibungkus try/catch agar DB error pada notifikasi tidak rollback transaction utama
+
+---
+
 ## Versi 3.0 — Ujian & Rapor Terintegrasi (PARTIAL: 29 Okt 2025)
 
 > **Status**: ⚠️ PARTIAL DONE — Core items selesai, **Ujian Online + Kartu Ujian PENDING** (akan dikerjakan kemudian setelah V4 stabil).

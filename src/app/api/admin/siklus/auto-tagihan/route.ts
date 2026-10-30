@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { notifikasiTagihanDue } from "@/lib/notifikasi/helper"
 
 /**
  * POST /api/admin/siklus/auto-tagihan
@@ -97,6 +98,14 @@ export async function POST(req: NextRequest) {
         },
       })
       created.push({ tagihanId: tagihan.id, santriId: santri.id, name: santri.name, amount })
+
+      // V12 → V6 integration: notify wali about the new tagihan due date.
+      // Best-effort — failures are logged but do not break the bulk operation.
+      try {
+        await notifikasiTagihanDue(santri.id, jenisTagihan.name, dueDate, tagihan.id)
+      } catch (e) {
+        console.warn(`[auto-tagihan] notifikasi gagal untuk santri ${santri.id}:`, e)
+      }
     }
 
     await logAudit(session, "BULK_CREATE", "TAGIHAN", undefined, {
