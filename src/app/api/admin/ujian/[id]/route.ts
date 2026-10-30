@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 import { validateGuruAccess } from "@/lib/auth/guru-access"
+import { validateBody } from "@/lib/validation/helpers"
+import { ujianUpdateSchema } from "@/lib/validation/akademik-detail"
 
 interface Params {
   params: Promise<{ id: string }>
@@ -62,44 +64,40 @@ export async function PUT(req: NextRequest, { params }: Params) {
   const session = guard.session
   try {
     const { id } = await params
-    const body = await req.json()
+    const body = await validateBody(req, ujianUpdateSchema)
+    if (!body.ok) return body.error
+    const {
+      title, type, mapelId, kelasId, guruId, description, startTime,
+      endTime, durationMnt, ruang, pengawas, isPublished, maxScore, passingScore,
+    } = body.data
     const existing = await db.ujian.findUnique({ where: { id, deletedAt: null } })
     if (!existing) return NextResponse.json({ error: "Ujian tidak ditemukan" }, { status: 404 })
 
     const accessCheck = await validateGuruAccess(session, {
-      kelasId: body.kelasId ?? existing.kelasId,
-      mapelId: body.mapelId ?? existing.mapelId,
-      guruId: body.guruId ?? existing.guruId,
+      kelasId: kelasId ?? existing.kelasId,
+      mapelId: mapelId ?? existing.mapelId,
+      guruId: guruId ?? existing.guruId,
     }, req)
     if (!accessCheck.allowed && accessCheck.error) return accessCheck.error
-
-    // Validate time range if both provided
-    if (body.startTime && body.endTime) {
-      const st = new Date(body.startTime)
-      const et = new Date(body.endTime)
-      if (et <= st) {
-        return NextResponse.json({ error: "Waktu selesai harus setelah waktu mulai" }, { status: 400 })
-      }
-    }
 
     const ujian = await db.ujian.update({
       where: { id },
       data: {
-        title: body.title ?? existing.title,
-        type: body.type ?? existing.type,
-        description: body.description ?? existing.description,
-        startTime: body.startTime ? new Date(body.startTime) : existing.startTime,
-        endTime: body.endTime ? new Date(body.endTime) : existing.endTime,
-        durationMnt: body.durationMnt ?? existing.durationMnt,
-        ruang: body.ruang ?? existing.ruang,
-        pengawas: body.pengawas ?? existing.pengawas,
-        isPublished: body.isPublished ?? existing.isPublished,
+        title: title ?? existing.title,
+        type: type ?? existing.type,
+        description: description ?? existing.description,
+        startTime: startTime ?? existing.startTime,
+        endTime: endTime ?? existing.endTime,
+        durationMnt: durationMnt ?? existing.durationMnt,
+        ruang: ruang !== undefined ? ruang : existing.ruang,
+        pengawas: pengawas !== undefined ? pengawas : existing.pengawas,
+        isPublished: isPublished ?? existing.isPublished,
         // V3: ujian SELALU offline. No isOnline field.
-        maxScore: body.maxScore ?? existing.maxScore,
-        passingScore: body.passingScore !== undefined ? body.passingScore : existing.passingScore,
-        mapelId: body.mapelId ?? existing.mapelId,
-        kelasId: body.kelasId ?? existing.kelasId,
-        guruId: body.guruId !== undefined ? body.guruId : existing.guruId,
+        maxScore: maxScore ?? existing.maxScore,
+        passingScore: passingScore !== undefined ? passingScore : existing.passingScore,
+        mapelId: mapelId ?? existing.mapelId,
+        kelasId: kelasId ?? existing.kelasId,
+        guruId: guruId !== undefined ? guruId : existing.guruId,
       },
       include: { mapel: { select: { name: true } }, kelas: { select: { name: true } } },
     })

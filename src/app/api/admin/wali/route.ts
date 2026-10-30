@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateBody } from "@/lib/validation/helpers"
+import { waliCreateSchema } from "@/lib/validation/wali"
 
 export async function GET(req: NextRequest) {
   const guard = await requireApiPermission("wali:read", req)
@@ -34,20 +36,18 @@ export async function POST(req: NextRequest) {
   const session = guard.session
 
   try {
-    const body = await req.json()
-    if (!body.name || !body.phone) {
-      return NextResponse.json({ error: "Nama dan No. HP wajib diisi" }, { status: 400 })
-    }
+    const body = await validateBody(req, waliCreateSchema)
+    if (!body.ok) return body.error
+    const { name, phone, email, nik, occupation, address, relationship } = body.data
     const wali = await db.wali.create({
       data: {
-        name: body.name,
-        phone: body.phone,
-        email: body.email || null,
-        nik: body.nik || null,
-        occupation: body.occupation || null,
-        address: body.address || null,
-        relationship: body.relationship || "AYAH",
-        userId: body.userId || null,
+        name,
+        phone,
+        email: email || null,
+        nik: nik || null,
+        occupation: occupation || null,
+        address: address || null,
+        relationship: relationship || "WALI",
       },
       include: { _count: { select: { santri: true } } },
     })

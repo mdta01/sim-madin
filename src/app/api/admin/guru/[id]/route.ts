@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateBody } from "@/lib/validation/helpers"
+import { guruUpdateSchema } from "@/lib/validation/akademik"
 
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -9,16 +11,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const session = guard.session
   try {
     const { id } = await params
-    const body = await req.json()
+    const body = await validateBody(req, guruUpdateSchema)
+    if (!body.ok) return body.error
+    // Schema's isoDateSchema already transforms birthDate/joinDate to Date,
+    // so no manual new Date(...) conversion needed here.
     const updated = await db.guru.update({
       where: { id },
-      data: {
-        ...body,
-        birthDate: body.birthDate ? new Date(body.birthDate) : undefined,
-        joinDate: body.joinDate ? new Date(body.joinDate) : undefined,
-      },
+      data: body.data,
     })
-    await logAudit(session, "UPDATE", "GURU", id, { changes: body }, req)
+    await logAudit(session, "UPDATE", "GURU", id, { changes: body.data }, req)
     return NextResponse.json({ data: updated })
   } catch (error) {
     console.error("[guru update] error:", error)

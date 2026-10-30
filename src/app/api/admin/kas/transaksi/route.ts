@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateBody } from "@/lib/validation/helpers"
+import { transaksiKasCreateSchema } from "@/lib/validation/keuangan"
 
 /**
  * GET /api/admin/kas/transaksi
@@ -63,12 +65,14 @@ export async function POST(req: NextRequest) {
   if (guard.error) return guard.error
   const session = guard.session
   try {
-    const body = await req.json()
-    if (!body.kasId || !body.type || !body.category || !body.amount || !body.description) {
-      return NextResponse.json({ error: "Kas, Tipe, Kategori, Nominal, dan Deskripsi wajib diisi" }, { status: 400 })
-    }
+    const body = await validateBody(req, transaksiKasCreateSchema)
+    if (!body.ok) return body.error
+    const {
+      kasId, tahunAjaranId: bodyTA, type, category, amount, description,
+      reference, paymentId, honorGuruId, transaksiDate,
+    } = body.data
 
-    let tahunAjaranId = body.tahunAjaranId
+    let tahunAjaranId: string | null | undefined = bodyTA
     if (!tahunAjaranId) {
       const ta = await db.tahunAjaran.findFirst({ where: { isActive: true } })
       tahunAjaranId = ta?.id ?? null
@@ -78,26 +82,26 @@ export async function POST(req: NextRequest) {
       // Create transaksi
       const t = await tx.transaksiKas.create({
         data: {
-          kasId: body.kasId,
+          kasId,
           tahunAjaranId,
-          type: body.type,
-          category: body.category,
-          amount: Number(body.amount),
-          description: body.description,
-          reference: body.reference || null,
-          paymentId: body.paymentId || null,
-          honorGuruId: body.honorGuruId || null,
-          transaksiDate: body.transaksiDate ? new Date(body.transaksiDate) : new Date(),
+          type,
+          category,
+          amount,
+          description,
+          reference: reference || null,
+          paymentId: paymentId || null,
+          honorGuruId: honorGuruId || null,
+          transaksiDate: transaksiDate ?? new Date(),
           recordedById: session.user.id,
         },
       })
 
       // Update kas balance
-      const kas = await tx.kas.findUnique({ where: { id: body.kasId } })
+      const kas = await tx.kas.findUnique({ where: { id: kasId } })
       if (kas) {
-        const adjustment = body.type === "PEMASUKAN" ? Number(body.amount) : -Number(body.amount)
+        const adjustment = type === "PEMASUKAN" ? amount : -amount
         await tx.kas.update({
-          where: { id: body.kasId },
+          where: { id: kasId },
           data: { balance: kas.balance + adjustment },
         })
       }

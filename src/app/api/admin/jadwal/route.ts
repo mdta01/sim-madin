@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateBody } from "@/lib/validation/helpers"
+import { jadwalCreateSchema } from "@/lib/validation/akademik-detail"
 
 export async function GET(req: NextRequest) {
   const guard = await requireApiPermission("jadwal:read", req)
@@ -48,13 +50,12 @@ export async function POST(req: NextRequest) {
   if (guard.error) return guard.error
   const session = guard.session
   try {
-    const body = await req.json()
-    if (!body.kelasId || !body.mapelId || !body.guruId || !body.dayOfWeek || !body.startTime || !body.endTime) {
-      return NextResponse.json({ error: "Kelas, Mapel, Guru, Hari, Jam mulai & selesai wajib diisi" }, { status: 400 })
-    }
+    const body = await validateBody(req, jadwalCreateSchema)
+    if (!body.ok) return body.error
+    const { kelasId, mapelId, guruId, dayOfWeek, startTime, endTime, tahunAjaranId: bodyTA, semesterId: bodySem } = body.data
 
-    let ta = body.tahunAjaranId
-    let sem = body.semesterId
+    let ta = bodyTA
+    let sem = bodySem
     if (!ta) {
       const taObj = await db.tahunAjaran.findFirst({ where: { isActive: true } })
       ta = taObj?.id
@@ -68,8 +69,8 @@ export async function POST(req: NextRequest) {
     // Check for duplicate jadwal (same kelas, mapel, day, time, TA, semester)
     const existing = await db.jadwal.findFirst({
       where: {
-        kelasId: body.kelasId, mapelId: body.mapelId,
-        dayOfWeek: Number(body.dayOfWeek), startTime: body.startTime,
+        kelasId, mapelId,
+        dayOfWeek, startTime,
         tahunAjaranId: ta, semesterId: sem,
       },
     })
@@ -81,12 +82,12 @@ export async function POST(req: NextRequest) {
       data: {
         tahunAjaranId: ta,
         semesterId: sem,
-        kelasId: body.kelasId,
-        mapelId: body.mapelId,
-        guruId: body.guruId,
-        dayOfWeek: Number(body.dayOfWeek),
-        startTime: body.startTime,
-        endTime: body.endTime,
+        kelasId,
+        mapelId,
+        guruId,
+        dayOfWeek,
+        startTime,
+        endTime,
       },
       include: { kelas: true, mapel: true, guru: { select: { name: true } } },
     })

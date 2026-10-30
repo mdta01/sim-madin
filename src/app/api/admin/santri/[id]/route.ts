@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateBody } from "@/lib/validation/helpers"
+import { santriUpdateSchema } from "@/lib/validation/santri"
 
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -10,18 +12,21 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   try {
     const { id } = await params
-    const body = await req.json()
+    const body = await validateBody(req, santriUpdateSchema)
+    if (!body.ok) return body.error
+    const data = body.data
+
     const updated = await db.santri.update({
       where: { id },
       data: {
-        ...body,
-        birthDate: body.birthDate ? new Date(body.birthDate) : undefined,
-        entryDate: body.entryDate ? new Date(body.entryDate) : undefined,
+        ...data,
+        birthDate: data.birthDate ?? undefined,
+        entryDate: data.entryDate ?? undefined,
       },
       include: { kelas: true, wali: true },
     })
 
-    await logAudit(session, "UPDATE", "SANTRI", id, { changes: body }, req)
+    await logAudit(session, "UPDATE", "SANTRI", id, { changes: data }, req)
     return NextResponse.json({ data: updated })
   } catch (error) {
     console.error("[santri update] error:", error)

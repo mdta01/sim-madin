@@ -3,6 +3,8 @@ import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 import { validateGuruAccess } from "@/lib/auth/guru-access"
 import { notifikasiUjianTomorrow, getWaliIdFromSantri } from "@/lib/notifikasi/helper"
+import { validateBody } from "@/lib/validation/helpers"
+import { ujianCreateSchema } from "@/lib/validation/akademik-detail"
 
 /**
  * GET /api/admin/ujian
@@ -85,13 +87,16 @@ export async function POST(req: NextRequest) {
   if (guard.error) return guard.error
   const session = guard.session
   try {
-    const body = await req.json()
-    if (!body.title || !body.type || !body.mapelId || !body.kelasId || !body.startTime || !body.endTime) {
-      return NextResponse.json({ error: "Judul, Tipe, Mapel, Kelas, Waktu mulai & selesai wajib diisi" }, { status: 400 })
-    }
+    const body = await validateBody(req, ujianCreateSchema)
+    if (!body.ok) return body.error
+    const {
+      title, type, mapelId, kelasId, guruId: bodyGuruId, tahunAjaranId: bodyTA,
+      semesterId: bodySem, description, startTime, endTime, durationMnt,
+      ruang, pengawas, isPublished, maxScore, passingScore,
+    } = body.data
 
-    let tahunAjaranId = body.tahunAjaranId
-    let semesterId = body.semesterId
+    let tahunAjaranId: string | null | undefined = bodyTA
+    let semesterId: string | null | undefined = bodySem
     if (!tahunAjaranId) {
       const ta = await db.tahunAjaran.findFirst({ where: { isActive: true } })
       tahunAjaranId = ta?.id ?? null
@@ -106,41 +111,34 @@ export async function POST(req: NextRequest) {
 
     // V2 security: validate GURU has teaching access
     const accessCheck = await validateGuruAccess(session, {
-      kelasId: body.kelasId,
-      mapelId: body.mapelId,
-      guruId: body.guruId,
+      kelasId,
+      mapelId,
+      guruId: bodyGuruId,
     }, req)
     if (!accessCheck.allowed && accessCheck.error) return accessCheck.error
 
-    let guruId = body.guruId
+    let guruId = bodyGuruId
     if (!guruId && accessCheck.guru) guruId = accessCheck.guru.id
-
-    // Validate endTime > startTime
-    const startTime = new Date(body.startTime)
-    const endTime = new Date(body.endTime)
-    if (endTime <= startTime) {
-      return NextResponse.json({ error: "Waktu selesai harus setelah waktu mulai" }, { status: 400 })
-    }
 
     const ujian = await db.ujian.create({
       data: {
         tahunAjaranId,
         semesterId,
-        mapelId: body.mapelId,
-        kelasId: body.kelasId,
+        mapelId,
+        kelasId,
         guruId,
-        title: body.title,
-        type: body.type,
-        description: body.description || null,
+        title,
+        type,
+        description: description || null,
         startTime,
         endTime,
-        durationMnt: body.durationMnt || 90,
-        ruang: body.ruang || null,
-        pengawas: body.pengawas || null,
-        isPublished: body.isPublished || false,
+        durationMnt,
+        ruang: ruang || null,
+        pengawas: pengawas || null,
+        isPublished,
         // V3: ujian SELALU offline (manual input). Online exam = future V3.5.
-        maxScore: body.maxScore || 100,
-        passingScore: body.passingScore || null,
+        maxScore,
+        passingScore: passingScore || null,
       },
       include: {
         mapel: { select: { name: true } },
@@ -157,7 +155,7 @@ export async function POST(req: NextRequest) {
     // Best-effort — failures do not roll back the ujian creation.
     try {
       const santriList = await db.santri.findMany({
-        where: { kelasId: body.kelasId, status: "AKTIF", deletedAt: null },
+        where: { kelasId, status: "AKTIF", deletedAt: null },
         select: { id: true },
       })
       const mapelName = ujian.mapel?.name || "mapel"
@@ -170,7 +168,7 @@ export async function POST(req: NextRequest) {
         ),
       )
     } catch (e) {
-      console.warn(`[ujian create] notifikasi gagal untuk kelas ${body.kelasId}:`, e)
+      console.warn(`[ujian create] notifikasi gagal untuk kelas ${kelasId}:`, e)
     }
 
     return NextResponse.json({ data: ujian })

@@ -1,6 +1,34 @@
 import { NextRequest, NextResponse } from "next/server"
+import { z } from "zod"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateBody } from "@/lib/validation/helpers"
+import { mapelCreateSchema } from "@/lib/validation/akademik"
+
+// mapelCreateSchema belum mencakup `category` (wajib di Prisma), `durationMnt`,
+// dan `sortOrder` (punya default Prisma). Kita extend di sini agar client
+// tetap bisa mengirim field-field tersebut dengan validasi Zod yang konsisten.
+// TODO: pindahkan extend ini ke src/lib/validation/akademik.ts agar reusable.
+const routeMapelCreateSchema = mapelCreateSchema.extend({
+  code: z
+    .string()
+    .trim()
+    .min(1, "Kode wajib diisi")
+    .max(20, "Kode maksimal 20 karakter")
+    .regex(/^[A-Z0-9-]+$/, "Kode hanya boleh huruf besar, angka, dan tanda hubung"),
+  category: z
+    .string()
+    .trim()
+    .min(1, "Kategori wajib diisi")
+    .max(50, "Kategori maksimal 50 karakter"),
+  durationMnt: z
+    .number()
+    .int()
+    .min(1, "Durasi minimal 1 menit")
+    .max(300, "Durasi maksimal 300 menit")
+    .optional(),
+  sortOrder: z.number().int().min(0).optional(),
+})
 
 export async function GET(req: NextRequest) {
   const guard = await requireApiPermission("mapel:read", req)
@@ -30,23 +58,22 @@ export async function POST(req: NextRequest) {
   if (guard.error) return guard.error
   const session = guard.session
   try {
-    const body = await req.json()
-    if (!body.code || !body.name || !body.category) {
-      return NextResponse.json({ error: "Kode, Nama, dan Kategori wajib diisi" }, { status: 400 })
-    }
-    const existing = await db.mataPelajaran.findFirst({ where: { code: body.code } })
+    const body = await validateBody(req, routeMapelCreateSchema)
+    if (!body.ok) return body.error
+    const { code, name, category, description, kkm, durationMnt, sortOrder, isActive } = body.data
+    const existing = await db.mataPelajaran.findFirst({ where: { code } })
     if (existing) return NextResponse.json({ error: "Kode mapel sudah terdaftar" }, { status: 400 })
 
     const mapel = await db.mataPelajaran.create({
       data: {
-        code: body.code,
-        name: body.name,
-        category: body.category,
-        description: body.description || null,
-        kkm: body.kkm || 70,
-        durationMnt: body.durationMnt || 60,
-        sortOrder: body.sortOrder || 0,
-        isActive: body.isActive !== false,
+        code,
+        name,
+        category,
+        description: description || null,
+        kkm,
+        durationMnt: durationMnt ?? undefined,
+        sortOrder: sortOrder ?? undefined,
+        isActive,
       },
     })
     await logAudit(session, "CREATE", "MAPEL", mapel.id, { code: mapel.code, name: mapel.name }, req)

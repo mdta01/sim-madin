@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateBody } from "@/lib/validation/helpers"
+import { kasCreateSchema } from "@/lib/validation/keuangan"
 
 export async function GET(req: NextRequest) {
   const guard = await requireApiPermission("kas:read", req)
@@ -27,23 +29,22 @@ export async function POST(req: NextRequest) {
   if (guard.error) return guard.error
   const session = guard.session
   try {
-    const body = await req.json()
-    if (!body.code || !body.name || !body.type) {
-      return NextResponse.json({ error: "Kode, Nama, dan Tipe wajib diisi" }, { status: 400 })
-    }
+    const body = await validateBody(req, kasCreateSchema)
+    if (!body.ok) return body.error
+    const { code, name, accountNumber, bankName, type, balance, isActive } = body.data
 
-    const existing = await db.kas.findFirst({ where: { code: body.code } })
+    const existing = await db.kas.findFirst({ where: { code } })
     if (existing) return NextResponse.json({ error: "Kode kas sudah ada" }, { status: 400 })
 
     const kas = await db.kas.create({
       data: {
-        code: body.code,
-        name: body.name,
-        accountNumber: body.accountNumber || null,
-        bankName: body.bankName || null,
-        type: body.type,
-        balance: body.balance || 0,
-        isActive: body.isActive !== false,
+        code,
+        name,
+        accountNumber: accountNumber || null,
+        bankName: bankName || null,
+        type,
+        balance,
+        isActive,
       },
     })
     await logAudit(session, "CREATE", "KAS", kas.id, { code: kas.code, name: kas.name }, req)

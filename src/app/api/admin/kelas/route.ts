@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateBody } from "@/lib/validation/helpers"
+import { kelasCreateSchema } from "@/lib/validation/akademik"
 
 export async function GET(req: NextRequest) {
   const guard = await requireApiPermission("kelas:read", req)
@@ -33,23 +35,22 @@ export async function POST(req: NextRequest) {
   if (guard.error) return guard.error
   const session = guard.session
   try {
-    const body = await req.json()
-    if (!body.code || !body.name || !body.level) {
-      return NextResponse.json({ error: "Kode, Nama, dan Level kelas wajib diisi" }, { status: 400 })
-    }
-    const existing = await db.kelas.findFirst({ where: { code: body.code } })
+    const body = await validateBody(req, kelasCreateSchema)
+    if (!body.ok) return body.error
+    const { code, name, level, description, capacity, sortOrder, isActive, waliKelasId } = body.data
+    const existing = await db.kelas.findFirst({ where: { code } })
     if (existing) return NextResponse.json({ error: "Kode kelas sudah terdaftar" }, { status: 400 })
 
     const kelas = await db.kelas.create({
       data: {
-        code: body.code,
-        name: body.name,
-        level: body.level,
-        description: body.description || null,
-        capacity: body.capacity || 30,
-        sortOrder: body.sortOrder || 0,
-        isActive: body.isActive !== false,
-        waliKelasId: body.waliKelasId || null,
+        code,
+        name,
+        level,
+        description: description || null,
+        capacity,
+        sortOrder,
+        isActive,
+        waliKelasId: waliKelasId || null,
       },
       include: { waliKelas: { select: { name: true } } },
     })

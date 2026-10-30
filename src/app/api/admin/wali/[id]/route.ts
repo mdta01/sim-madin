@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateBody } from "@/lib/validation/helpers"
+import { waliUpdateSchema } from "@/lib/validation/wali"
 
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -9,9 +11,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const session = guard.session
   try {
     const { id } = await params
-    const body = await req.json()
-    const updated = await db.wali.update({ where: { id }, data: body, include: { _count: { select: { santri: true } } } })
-    await logAudit(session, "UPDATE", "WALI", id, { changes: body }, req)
+    const body = await validateBody(req, waliUpdateSchema)
+    if (!body.ok) return body.error
+    const updated = await db.wali.update({ where: { id }, data: body.data, include: { _count: { select: { santri: true } } } })
+    await logAudit(session, "UPDATE", "WALI", id, { changes: body.data }, req)
     return NextResponse.json({ data: updated })
   } catch (error) {
     console.error("[wali update] error:", error)

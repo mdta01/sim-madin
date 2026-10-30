@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateBody } from "@/lib/validation/helpers"
+import { guruCreateSchema } from "@/lib/validation/akademik"
 
 export async function GET(req: NextRequest) {
   const guard = await requireApiPermission("guru:read", req)
@@ -34,26 +36,23 @@ export async function POST(req: NextRequest) {
   if (guard.error) return guard.error
   const session = guard.session
   try {
-    const body = await req.json()
-    if (!body.name || !body.gender) {
-      return NextResponse.json({ error: "Nama dan Jenis Kelamin wajib diisi" }, { status: 400 })
-    }
+    const body = await validateBody(req, guruCreateSchema)
+    if (!body.ok) return body.error
+    const { name, gender, nip, nuptk, phone, email, address, birthPlace, birthDate, specialization, joinDate, status } = body.data
     const guru = await db.guru.create({
       data: {
-        name: body.name,
-        gender: body.gender,
-        nip: body.nip || null,
-        nuptk: body.nuptk || null,
-        phone: body.phone || null,
-        email: body.email || null,
-        address: body.address || null,
-        birthPlace: body.birthPlace || null,
-        birthDate: body.birthDate ? new Date(body.birthDate) : null,
-        specialization: body.specialization || null,
-        joinDate: body.joinDate ? new Date(body.joinDate) : new Date(),
-        status: body.status || "AKTIF",
-        photoUrl: body.photoUrl || null,
-        userId: body.userId || null,
+        name,
+        gender,
+        nip: nip || null,
+        nuptk: nuptk || null,
+        phone: phone || null,
+        email: email || null,
+        address: address || null,
+        birthPlace: birthPlace || null,
+        birthDate: birthDate || null,
+        specialization: specialization || null,
+        joinDate: joinDate || new Date(),
+        status: status || "AKTIF",
       },
     })
     await logAudit(session, "CREATE", "GURU", guru.id, { name: guru.name }, req)

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
+import { validateBody } from "@/lib/validation/helpers"
+import { kelasUpdateSchema } from "@/lib/validation/akademik"
 
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -9,13 +11,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const session = guard.session
   try {
     const { id } = await params
-    const body = await req.json()
+    const body = await validateBody(req, kelasUpdateSchema)
+    if (!body.ok) return body.error
     const updated = await db.kelas.update({
       where: { id },
-      data: body,
+      data: body.data,
       include: { waliKelas: { select: { name: true } } },
     })
-    await logAudit(session, "UPDATE", "KELAS", id, { changes: body }, req)
+    await logAudit(session, "UPDATE", "KELAS", id, { changes: body.data }, req)
     return NextResponse.json({ data: updated })
   } catch (error) {
     console.error("[kelas update] error:", error)

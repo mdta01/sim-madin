@@ -3,6 +3,8 @@ import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 import { generateNIS, isNISTaken, isValidNISFormat, normalizeWhatsApp } from "@/lib/wali/helpers"
 import { generateOTP, generateActivationToken } from "@/lib/wali/helpers"
+import { validateBody, validateQuery } from "@/lib/validation/helpers"
+import { santriCreateSchema, santriUpdateSchema, santriQuerySchema, type SantriCreateInput, type SantriQuery } from "@/lib/validation/santri"
 
 export async function GET(req: NextRequest) {
   const guard = await requireApiPermission("santri:read", req)
@@ -10,16 +12,10 @@ export async function GET(req: NextRequest) {
   const session = guard.session
 
   try {
-    const { searchParams } = new URL(req.url)
-    const search = searchParams.get("search") || ""
-    const kelasId = searchParams.get("kelasId")
-    const status = searchParams.get("status")
-    const gender = searchParams.get("gender")
-
-    // ── Server-side pagination ─────────────────────────────────────────────
-    // Default page=1, limit=50. Max 200 to prevent abuse.
-    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10))
-    const limit = Math.min(200, Math.max(1, parseInt(searchParams.get("limit") || "50", 10)))
+    // ── Validate query params with Zod ─────────────────────────────────────
+    const query = await validateQuery(req, santriQuerySchema)
+    if (!query.ok) return query.error
+    const { search, kelasId, status, gender, page, limit } = query.data
     const skip = (page - 1) * limit
 
     const where: any = { deletedAt: null }
@@ -81,29 +77,22 @@ export async function POST(req: NextRequest) {
   const session = guard.session
 
   try {
-    const body = await req.json()
+    // ── Validate body with Zod ─────────────────────────────────────
+    const body = await validateBody(req, santriCreateSchema)
+    if (!body.ok) return body.error
     const {
       nis, nisn, name, gender, birthPlace, birthDate, address, phone,
       waliId, kelasId, tahunAjaranId, entryDate, status, photoUrl,
       // New wali fields (untuk auto-create wali)
       waliName, waliPhone, waliRelationship,
-    } = body
-
-    if (!name || !gender) {
-      return NextResponse.json({
-      ...({} as any), error: "Nama dan Jenis Kelamin wajib diisi" }, { status: 400 })
-    }
+    } = body.data
 
     // === AUTO-GENERATE NIS jika tidak diisi manual ===
     let finalNIS = nis
     if (!finalNIS) {
       finalNIS = await generateNIS()
     } else {
-      // Validate format kalau diisi manual
-      if (!isValidNISFormat(finalNIS)) {
-        return NextResponse.json({
-      ...({} as any), error: "Format NIS tidak valid (harus 8 digit angka)" }, { status: 400 })
-      }
+      // Zod already validated format (6-12 digits); check uniqueness here.
       if (await isNISTaken(finalNIS)) {
         return NextResponse.json({
       ...({} as any), error: "NIS sudah terdaftar" }, { status: 400 })
@@ -175,7 +164,7 @@ export async function POST(req: NextRequest) {
     }
 
     // === AUTO-SET tahunAjaranId dari active TA jika tidak diisi ===
-    let finalTahunAjaranId = tahunAjaranId
+    let finalTahunAjaranId: string | null | undefined = tahunAjaranId
     if (!finalTahunAjaranId) {
       const activeTA = await db.tahunAjaran.findFirst({ where: { isActive: true } })
       finalTahunAjaranId = activeTA?.id || null

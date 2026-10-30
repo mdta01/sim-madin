@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
+import { z } from "zod"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 import { notifikasiAbsensiAlfa } from "@/lib/notifikasi/helper"
+import { sanitizeZodError } from "@/lib/validation/helpers"
+import { absensiCreateSchema, absensiBulkCreateSchema } from "@/lib/validation/akademik-detail"
 
 export async function GET(req: NextRequest) {
   const guard = await requireApiPermission("absensi:read", req)
@@ -60,12 +63,32 @@ export async function POST(req: NextRequest) {
   if (guard.error) return guard.error
   const session = guard.session
   try {
-    const body = await req.json()
-    if (body.entries && Array.isArray(body.entries)) {
+    // ── Peek body to dispatch single vs bulk ────────────────────────────
+    let raw: unknown
+    try {
+      raw = await req.json()
+    } catch {
+      return NextResponse.json({ error: "Body request bukan JSON valid" }, { status: 400 })
+    }
+    const isBulk =
+      typeof raw === "object" && raw !== null && Array.isArray((raw as any).entries)
+
+    const schema = isBulk ? absensiBulkCreateSchema : absensiCreateSchema
+    const parsed = schema.safeParse(raw)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Validasi input gagal", issues: sanitizeZodError(parsed.error) },
+        { status: 400 },
+      )
+    }
+    const data = parsed.data
+
+    if (isBulk) {
+      const body = data as z.infer<typeof absensiBulkCreateSchema>
       const ta = await db.tahunAjaran.findFirst({ where: { isActive: true } })
       if (!ta) return NextResponse.json({ error: "Tidak ada tahun ajaran aktif" }, { status: 400 })
 
-      const date = body.date ? new Date(body.date) : new Date()
+      const date = body.date ?? new Date()
       const dStart = new Date(date.getFullYear(), date.getMonth(), date.getDate())
       const dEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59)
 
@@ -109,13 +132,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ data: results, count: results.length })
     }
 
-    if (!body.santriId || !body.kelasId || !body.status) {
-      return NextResponse.json({ error: "Santri, Kelas, dan Status wajib diisi" }, { status: 400 })
-    }
+    // ── Single-entry path ────────────────────────────────────────────────
+    const body = data as z.infer<typeof absensiCreateSchema>
     const ta = await db.tahunAjaran.findFirst({ where: { isActive: true } })
     if (!ta) return NextResponse.json({ error: "Tidak ada tahun ajaran aktif" }, { status: 400 })
 
-    const date = body.date ? new Date(body.date) : new Date()
+    const date = body.date ?? new Date()
     const absensi = await db.absensi.create({
       data: {
         tahunAjaranId: ta.id,
