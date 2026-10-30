@@ -1,3 +1,13 @@
 packages:
-  - "apps/*"
+  # NOTE: 'apps/*' is intentionally NOT listed here.
+  #
+  # The 4 mobile apps (apps/mobile-*) are independent Expo projects that each
+  # ship their own package-lock.json and don't reference other workspace
+  # members via the `workspace:*` protocol. Declaring them as workspace
+  # members causes EAS Build's `bun install` to detect them as part of a
+  # bun workspace and install ROOT dependencies (Next.js, Radix UI, etc.)
+  # instead of the mobile app dependencies (expo, react-native, ...).
+  # That in turn makes `expo` binary missing and the build fails in PREBUILD.
+  #
+  # Only the shared packages remain as workspace members.
   - "packages/*"
