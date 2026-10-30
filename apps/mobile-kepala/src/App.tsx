@@ -15,7 +15,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { Ionicons } from "@expo/vector-icons"
 import { createClient } from "@supabase/supabase-js"
 import * as SecureStore from "expo-secure-store"
-import { formatRupiah, formatDate } from "../../../packages/mobile-shared/src"
+import { formatRupiah, formatDate } from "../vendor/mobile-shared/src"
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "https://sim-madin.vercel.app"
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "https://ooglxextkliuhpequwme.supabase.co"
@@ -286,9 +286,9 @@ function MonitorListScreen({ navigation, title, endpoint, renderItem }: { naviga
       ) : (
         <FlatList
           data={data}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => renderItem(item)}
-          ListEmptyComponent={() => <View style={styles.emptyCard}><Text style={styles.emptyText}>Tidak ada data</Text></View>}
+          keyExtractor={(item: any) => item.id}
+          renderItem={({ item }: { item: any }): React.ReactElement => <>{renderItem(item)}</> as React.ReactElement}
+          ListEmptyComponent={<View style={styles.emptyCard}><Text style={styles.emptyText}>Tidak ada data</Text></View>}
           contentContainerStyle={{ padding: 16 }}
         />
       )}

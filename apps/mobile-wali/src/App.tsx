@@ -23,7 +23,7 @@ import {
   MobileApiClient, normalizeWhatsApp, formatPhoneDisplay,
   saveWaliSession, loadWaliSession, clearWaliSession,
   formatRupiah, formatDate, STATUS_STYLES, DAYS,
-} from "../../../packages/mobile-shared/src"
+} from "../vendor/mobile-shared/src"
 
 // ============================================================================
 // CONFIG

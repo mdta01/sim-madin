@@ -19,10 +19,10 @@ interface BuildJob {
 }
 
 const BUILDS: BuildJob[] = [
-  { app: "mobile-wali",      buildId: "7885dc1b-afc9-4f2d-91b2-1f5edc560cb6", projectSlug: "sim-madin-wali" },
-  { app: "mobile-bendahara", buildId: "d29199fc-cf18-4136-a6da-5a270590bf7c", projectSlug: "sim-madin-bendahara" },
-  { app: "mobile-guru",      buildId: "595ee289-026f-479b-87a2-e7e54e33632a", projectSlug: "sim-madin-guru" },
-  { app: "mobile-kepala",    buildId: "351ec308-5d17-4f3c-993f-bf73b5f8f2d0", projectSlug: "sim-madin-kepala" },
+  { app: "mobile-wali",      buildId: "c8399d80-a284-4693-b3ca-8409323a6d26", projectSlug: "sim-madin-wali" },
+  { app: "mobile-bendahara", buildId: "90e05c0a-f071-4594-83ec-b83eb77aca11", projectSlug: "sim-madin-bendahara" },
+  { app: "mobile-guru",      buildId: "9c1773dd-640d-48e6-9d38-95aa52c69869", projectSlug: "sim-madin-guru" },
+  { app: "mobile-kepala",    buildId: "ad347af0-8e6b-417b-8be0-dc28ea251373", projectSlug: "sim-madin-kepala" },
 ]
 
 interface BuildStatus {

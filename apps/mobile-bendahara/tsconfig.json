@@ -12,8 +12,8 @@
   },
   "include": [
     "src/**/*",
-    "../../packages/mobile-shared/src/**/*",
-    "../../packages/shared/src/**/*",
+    "vendor/mobile-shared/src/**/*",
+    "vendor/shared/src/**/*",
     "../../apps/mobile-types/rn-shims.d.ts"
   ]
 }

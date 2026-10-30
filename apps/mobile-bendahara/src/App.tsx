@@ -15,7 +15,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { Ionicons } from "@expo/vector-icons"
 import { createClient } from "@supabase/supabase-js"
 import * as SecureStore from "expo-secure-store"
-import { formatRupiah, formatDate, STATUS_STYLES, PAYMENT_METHODS } from "../../../packages/mobile-shared/src"
+import { formatRupiah, formatDate, STATUS_STYLES, PAYMENT_METHODS } from "../vendor/mobile-shared/src"
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "https://sim-madin.vercel.app"
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "https://ooglxextkliuhpequwme.supabase.co"
