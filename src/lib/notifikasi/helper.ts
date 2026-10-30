@@ -27,6 +27,8 @@ interface CreateNotifikasiParams {
 
 /**
  * Create a notification for a wali. Best-effort — failures don't break the caller.
+ * Also triggers FCM push notification if configured.
+ * Supabase Realtime will auto-notify subscribed mobile apps via WebSocket.
  */
 export async function createNotifikasi(params: CreateNotifikasiParams): Promise<void> {
   try {
@@ -43,6 +45,26 @@ export async function createNotifikasi(params: CreateNotifikasiParams): Promise<
         entityId: params.entityId || null,
       },
     })
+
+    // Trigger FCM push notification (best-effort, async — don't block caller)
+    // Mobile apps with Supabase Realtime subscription will also auto-receive
+    // via postgres_changes WebSocket (no FCM needed for foreground apps).
+    // FCM is for background/inactive app push.
+    import("./fcm")
+      .then(({ sendPushToWali }) =>
+        sendPushToWali(
+          params.waliId!,
+          params.title,
+          params.message,
+          {
+            type: params.type,
+            santriId: params.santriId || "",
+            entityId: params.entityId || "",
+            entityType: params.entityType || "",
+          },
+        ),
+      )
+      .catch(() => {}) // silent fail — don't break caller
   } catch (e) {
     console.warn("[notifikasi] create failed:", e)
   }

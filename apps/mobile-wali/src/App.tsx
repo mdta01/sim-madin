@@ -1799,6 +1799,33 @@ export default function App() {
     init()
   }, [])
 
+  // ── Realtime: subscribe ke Supabase Realtime untuk notifikasi instant ──
+  // Saat admin input nilai/absensi/tagihan, wali terima notifikasi langsung
+  // tanpa perlu refresh — via WebSocket (Supabase Realtime).
+  useEffect(() => {
+    if (!savedWali) return
+
+    let unsubNotif: (() => void) | null = null
+
+    // Dynamic import agar tidak crash jika realtime module belum tersedia
+    import("./vendor/mobile-shared/src/realtime")
+      .then(async ({ subscribeToNotifikasi }) => {
+        unsubNotif = await subscribeToNotifikasi(savedWali.id, (newNotif: any) => {
+          // Show local notification via React Native
+          if (typeof Alert !== "undefined") {
+            Alert.alert(newNotif.title || "Notifikasi", newNotif.message || "")
+          }
+        })
+      })
+      .catch(() => {
+        // Realtime optional — app tetap jalan tanpa realtime
+      })
+
+    return () => {
+      if (unsubNotif) unsubNotif()
+    }
+  }, [savedWali])
+
   if (!isReady) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: Colors.primary }}>

@@ -11,6 +11,7 @@
 export * from "../../shared/src/constants"
 export * from "../../shared/src/types"
 export * from "../../shared/src/utils"
+export * from "./realtime"
 
 // ============================================================================
 // MOBILE AUTH — Supabase Auth + Wali JWT

@@ -1884,6 +1884,9 @@ const Stack = createNativeStackNavigator<RootStackParamList>()
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [checking, setChecking] = useState(true)
+  // Realtime refresh tick — bumped whenever a subscribed table changes.
+  // Passed down so list screens can re-fetch on Tugas/PengumpulanTugas events.
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     async function checkSession() {
@@ -1901,6 +1904,34 @@ export default function App() {
     }
     checkSession()
   }, [])
+
+  // ============================================================================
+  // Supabase Realtime subscriptions (OPTIONAL — fails silently if unavailable)
+  // - PengumpulanTugas INSERT : santri submit tugas → refresh pengumpulan list
+  // - Tugas            UPDATE  : tugas dipublish / diubah → refresh list tugas
+  // ============================================================================
+  useEffect(() => {
+    if (!isLoggedIn) return
+    let cancelled = false
+    const unsubs: Array<() => void> = []
+    import("../vendor/mobile-shared/src/realtime")
+      .then(async ({ subscribeToTable }) => {
+        for (const table of ["Tugas", "PengumpulanTugas"] as const) {
+          try {
+            const unsub = await subscribeToTable(table, () => {
+              setRefreshKey(k => k + 1)
+            })
+            if (cancelled) { try { unsub() } catch {} }
+            else { unsubs.push(unsub) }
+          } catch {}
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+      unsubs.forEach(u => { try { u() } catch {} })
+    }
+  }, [isLoggedIn])
 
   if (checking) {
     return (

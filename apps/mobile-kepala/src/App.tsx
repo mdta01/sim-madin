@@ -587,6 +587,9 @@ const Stack = createNativeStackNavigator()
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [checking, setChecking] = useState(true)
+  // Realtime refresh tick — bumped whenever a subscribed table changes.
+  // Drives dashboard stats refresh on Santri/Guru/Payment events.
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     async function check() {
@@ -600,6 +603,35 @@ export default function App() {
     }
     check()
   }, [])
+
+  // ============================================================================
+  // Supabase Realtime subscriptions (OPTIONAL — fails silently if unavailable)
+  // - Santri   INSERT/UPDATE : data santri berubah → refresh dashboard stats
+  // - Guru     INSERT/UPDATE : data guru berubah  → refresh dashboard stats
+  // - Payment  INSERT/UPDATE : pembayaran baru    → refresh keuangan stats
+  // ============================================================================
+  useEffect(() => {
+    if (!isLoggedIn) return
+    let cancelled = false
+    const unsubs: Array<() => void> = []
+    import("../vendor/mobile-shared/src/realtime")
+      .then(async ({ subscribeToTable }) => {
+        for (const table of ["Santri", "Guru", "Payment"] as const) {
+          try {
+            const unsub = await subscribeToTable(table, () => {
+              setRefreshKey(k => k + 1)
+            })
+            if (cancelled) { try { unsub() } catch {} }
+            else { unsubs.push(unsub) }
+          } catch {}
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+      unsubs.forEach(u => { try { u() } catch {} })
+    }
+  }, [isLoggedIn])
 
   if (checking) {
     return <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: Colors.primary }}><ActivityIndicator size="large" color={Colors.white} /></View>

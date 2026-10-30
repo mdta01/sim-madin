@@ -1212,6 +1212,9 @@ const Stack = createNativeStackNavigator()
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [checking, setChecking] = useState(true)
+  // Realtime refresh tick — bumped whenever a subscribed table changes.
+  // Passed to DashboardScreen so it can re-fetch on Payment/Tagihan events.
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     async function check() {
@@ -1225,6 +1228,34 @@ export default function App() {
     }
     check()
   }, [])
+
+  // ============================================================================
+  // Supabase Realtime subscriptions (OPTIONAL — fails silently if unavailable)
+  // - Payment INSERT  : new pembayaran recorded → refresh dashboard
+  // - Tagihan  UPDATE : status BELUM_BAYAR → LUNAS → refresh tunggakan/tagihan
+  // ============================================================================
+  useEffect(() => {
+    if (!isLoggedIn) return
+    let cancelled = false
+    const unsubs: Array<() => void> = []
+    import("../vendor/mobile-shared/src/realtime")
+      .then(async ({ subscribeToTable }) => {
+        for (const table of ["Payment", "Tagihan"] as const) {
+          try {
+            const unsub = await subscribeToTable(table, () => {
+              setRefreshKey(k => k + 1)
+            })
+            if (cancelled) { try { unsub() } catch {} }
+            else { unsubs.push(unsub) }
+          } catch {}
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+      unsubs.forEach(u => { try { u() } catch {} })
+    }
+  }, [isLoggedIn])
 
   if (checking) {
     return <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: Colors.primary }}><ActivityIndicator size="large" color={Colors.white} /></View>
