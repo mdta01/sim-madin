@@ -4,11 +4,29 @@
     "slug": "sim-madin-bendahara",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "splash": { "resizeMode": "contain", "backgroundColor": "#7c3aed" },
-    "ios": { "supportsTablet": true, "bundleIdentifier": "id.madrasah.madin.bendahara" },
-    "android": { "adaptiveIcon": { "backgroundColor": "#7c3aed" }, "package": "id.madrasah.madin.bendahara" },
-    "scheme": "simadinbendahara"
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#7c3aed"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "id.madrasah.madin.bendahara"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#7c3aed"
+      },
+      "package": "id.madrasah.madin.bendahara"
+    },
+    "scheme": "simadinbendahara",
+    "extra": {
+      "eas": {
+        "projectId": "637e36c8-921a-4230-a2f9-36298cefe058"
+      }
+    }
   }
 }

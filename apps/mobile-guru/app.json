@@ -4,12 +4,29 @@
     "slug": "sim-madin-guru",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "splash": { "resizeMode": "contain", "backgroundColor": "#ea580c" },
-    "ios": { "supportsTablet": true, "bundleIdentifier": "id.madrasah.madin.guru" },
-    "android": { "adaptiveIcon": { "backgroundColor": "#ea580c" }, "package": "id.madrasah.madin.guru" },
-    "plugins": ["expo-router"],
-    "scheme": "simadinguru"
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#ea580c"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "id.madrasah.madin.guru"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ea580c"
+      },
+      "package": "id.madrasah.madin.guru"
+    },
+    "scheme": "simadinguru",
+    "extra": {
+      "eas": {
+        "projectId": "c1793ef8-86aa-4b5e-a4c7-024201be43e1"
+      }
+    }
   }
 }

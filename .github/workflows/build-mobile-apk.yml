@@ -1,0 +1,238 @@
+# ============================================================================
+# Build APK for SIM MADIN mobile apps via Expo EAS Build (GitHub Actions)
+# ============================================================================
+# Trigger: manual (workflow_dispatch) — pick which app(s) to build.
+#
+# Required GitHub Secret:
+#   EXPO_TOKEN  — Personal access token from https://expo.dev/accounts/[you]/settings/access-tokens
+#                 Used by `eas` CLI to authenticate to Expo's build cloud.
+#
+# Outputs:
+#   - Build artifacts are uploaded to Expo's cloud (link printed in the run log).
+#   - Direct APK download URL is printed at the end of each job.
+#   - Build artifacts are also attached to the GitHub Actions run summary as
+#     `apk-download-urls.txt` for easy sharing.
+#
+# Cost: Free tier on Expo = 30 iOS builds + 30 Android builds per month.
+#       This workflow uses Android builds only.
+# ============================================================================
+name: Build Mobile APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: "App to build"
+        required: true
+        type: choice
+        default: mobile-wali
+        options:
+          - mobile-bendahara
+          - mobile-guru
+          - mobile-kepala
+          - mobile-wali
+          - all
+      profile:
+        description: "Build profile (preview = APK, production = AAB for Play Store)"
+        required: true
+        type: choice
+        default: preview
+        options:
+          - preview
+          - production
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/mobile-*/**"
+      - ".github/workflows/build-mobile-apk.yml"
+    # Don't auto-run on every push; only when mobile code changes.
+    # Comment out the lines below to disable auto-build on push.
+
+# Cancel any in-progress build for the same ref to save Expo minutes
+concurrency:
+  group: mobile-apk-${{ github.ref }}-${{ inputs.app || 'all' }}
+  cancel-in-progress: true
+
+jobs:
+  # --------------------------------------------------------------------------
+  # Resolve which apps to build — single-app dispatch expands to a 1-element
+  # matrix; "all" expands to all 4 apps.
+  # --------------------------------------------------------------------------
+  resolve-apps:
+    name: Resolve target apps
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.expand.outputs.apps }}
+    steps:
+      - id: expand
+        run: |
+          INPUT="${{ inputs.app || 'all' }}"
+          if [ "$INPUT" = "all" ]; then
+            echo 'apps=["mobile-bendahara","mobile-guru","mobile-kepala","mobile-wali"]' >> "$GITHUB_OUTPUT"
+          else
+            echo "apps=[\"$INPUT\"]" >> "$GITHUB_OUTPUT"
+          fi
+
+  # --------------------------------------------------------------------------
+  # Build one APK per app in the matrix
+  # --------------------------------------------------------------------------
+  build:
+    name: Build APK — ${{ matrix.app }}
+    needs: resolve-apps
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.resolve-apps.outputs.apps) }}
+    defaults:
+      run:
+        working-directory: apps/${{ matrix.app }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Setup Expo CLI
+        uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install app dependencies
+        working-directory: apps/${{ matrix.app }}
+        run: |
+          # Each mobile app is an independent Expo project. We install its
+          # dependencies locally (EAS Build itself runs in Expo's cloud,
+          # but eas CLI needs node_modules present locally for config discovery).
+          if [ -f package.json ]; then
+            npm install --legacy-peer-deps
+          fi
+
+      - name: Show config
+        working-directory: apps/${{ matrix.app }}
+        run: |
+          echo "=== app.json ==="
+          cat app.json
+          echo ""
+          echo "=== eas.json ==="
+          cat eas.json
+          echo ""
+
+      - name: EAS build (Android APK)
+        working-directory: apps/${{ matrix.app }}
+        env:
+          # Non-interactive flags so CI doesn't hang on prompts
+          EAS_NO_VCS: "1"
+        run: |
+          set -euo pipefail
+          PROFILE="${{ inputs.profile || 'preview' }}"
+
+          echo "::group::EAS Build Output"
+          # Run build; --non-interactive prevents prompts. Auto-submit=false keeps
+          # APK in Expo cloud (no Play Store submit). Build URL captured below.
+          eas build \
+            --platform android \
+            --profile "$PROFILE" \
+            --non-interactive \
+            --no-wait
+          echo "::endgroup::"
+
+          # Get the latest build for this project + profile
+          BUILD_JSON=$(eas build:list \
+            --platform android \
+            --build-profile "$PROFILE" \
+            --json \
+            --limit 1 \
+            --non-interactive)
+
+          echo "::group::Build metadata"
+          echo "$BUILD_JSON" | jq .
+          echo "::endgroup::"
+
+          # Extract the shareable build URL & (when ready) the artifact URL
+          BUILD_ID=$(echo "$BUILD_JSON" | jq -r '.[0].id')
+          BUILD_URL=$(echo "$BUILD_JSON" | jq -r '.[0].shareUrl')
+          ARTIFACT_URL=$(echo "$JSON_JSON" 2>/dev/null | jq -r '.[0].artifacts.buildUrl // empty' || echo "")
+
+          {
+            echo "## 📱 APK Build — ${{ matrix.app }}"
+            echo ""
+            echo "- **App**: \`${{ matrix.app }}\`"
+            echo "- **Profile**: \`$PROFILE\`"
+            echo "- **Build ID**: \`$BUILD_ID\`"
+            echo "- **Status page**: $BUILD_URL"
+            if [ -n "$ARTIFACT_URL" ]; then
+              echo "- **Direct APK download**: $ARTIFACT_URL"
+            else
+              echo "- Direct APK URL will appear on the status page once the build finishes (~5-15 min)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Persist for the upload step
+          {
+            echo "BUILD_ID=$BUILD_ID"
+            echo "BUILD_URL=$BUILD_URL"
+            echo "ARTIFACT_URL=$ARTIFACT_URL"
+          } >> "$GITHUB_ENV"
+
+      - name: Wait for build to finish & capture APK URL
+        working-directory: apps/${{ matrix.app }}
+        run: |
+          set -euo pipefail
+          # Wait up to 30 minutes for the build to complete
+          echo "::group::Waiting for build $BUILD_ID to finish (up to 30 min)"
+          eas build:wait "$BUILD_ID" --platform android --non-interactive || true
+          echo "::endgroup::"
+
+          # Re-fetch the build record to get the final artifact URL
+          BUILD_JSON=$(eas build:view "$BUILD_ID" --json)
+          ARTIFACT_URL=$(echo "$BUILD_JSON" | jq -r '.artifacts.buildUrl // empty')
+
+          if [ -z "$ARTIFACT_URL" ]; then
+            echo "⚠️  Build finished but no APK URL found. Check status page: $BUILD_URL"
+            exit 1
+          fi
+
+          echo "✅ APK ready: $ARTIFACT_URL"
+          echo "ARTIFACT_URL=$ARTIFACT_URL" >> "$GITHUB_ENV"
+
+          {
+            echo "## ✅ APK Ready — ${{ matrix.app }}"
+            echo ""
+            echo "Direct download:"
+            echo ""
+            echo "  👉 $ARTIFACT_URL"
+            echo ""
+            echo "Status page: $BUILD_URL"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save APK URL to artifact
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/build-urls"
+          {
+            echo "# APK Download URLs — ${{ matrix.app }}"
+            echo ""
+            echo "- **Build ID**: ${BUILD_ID:-N/A}"
+            echo "- **Status page**: ${BUILD_URL:-N/A}"
+            echo "- **Direct APK**: ${ARTIFACT_URL:-pending — see status page}"
+            echo "- **Run**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } > "$RUNNER_TEMP/build-urls/${{ matrix.app }}.md"
+
+      - name: Upload URL artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-urls-${{ matrix.app }}
+          path: ${{ runner.temp }}/build-urls/
+          retention-days: 30
