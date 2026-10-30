@@ -8,7 +8,7 @@ import React, { useState, useEffect, useCallback } from "react"
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, SafeAreaView, StatusBar, ScrollView, Alert,
-  FlatList, Modal, Picker, Linking,
+  FlatList, Modal, Linking,
 } from "react-native"
 import { NavigationContainer } from "@react-navigation/native"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
@@ -2062,4 +2062,7 @@ const styles = StyleSheet.create({
   modalCloseText: { fontSize: 14, color: Colors.textMuted, fontWeight: "600" },
   modalOpenBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, backgroundColor: Colors.primary },
   modalOpenText: { fontSize: 14, color: Colors.white, fontWeight: "600" },
+  // Status badge (used across multiple screens: guru list, pengumuman, tugas, perkembangan, ujian, nilai)
+  statusBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: "transparent" },
+  statusText: { fontSize: 10, fontWeight: "700", letterSpacing: 0.3 },
 })

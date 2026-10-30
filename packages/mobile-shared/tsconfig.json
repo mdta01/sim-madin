@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2020", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true
+  },
+  "include": [
+    "src/**/*",
+    "../../packages/shared/src/**/*",
+    "../../apps/mobile-types/rn-shims.d.ts"
+  ]
+}
