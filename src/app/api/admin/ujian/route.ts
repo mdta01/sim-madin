@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 import { validateGuruAccess } from "@/lib/auth/guru-access"
+import { notifikasiUjianTomorrow, getWaliIdFromSantri } from "@/lib/notifikasi/helper"
 
 /**
  * GET /api/admin/ujian
@@ -149,6 +150,29 @@ export async function POST(req: NextRequest) {
     await logAudit(session, "CREATE", "UJIAN", ujian.id, {
       title: ujian.title, type: ujian.type, mapel: ujian.mapel?.name, kelas: ujian.kelas?.name,
     }, req)
+
+    // V6 → V3 integration: notify wali of every santri in this kelas that
+    // an ujian is scheduled. If startTime is tomorrow, the notification
+    // reads "Besok terdapat ujian ..."; otherwise it reads "Ujian dijadwalkan".
+    // Best-effort — failures do not roll back the ujian creation.
+    try {
+      const santriList = await db.santri.findMany({
+        where: { kelasId: body.kelasId, status: "AKTIF", deletedAt: null },
+        select: { id: true },
+      })
+      const mapelName = ujian.mapel?.name || "mapel"
+      // Fire notifications in parallel; we don't `await` each individually
+      // to avoid blocking the response — Promise.all is fine since each
+      // helper has its own try/catch internally.
+      await Promise.all(
+        santriList.map((s) =>
+          notifikasiUjianTomorrow(s.id, ujian.title, mapelName, ujian.id),
+        ),
+      )
+    } catch (e) {
+      console.warn(`[ujian create] notifikasi gagal untuk kelas ${body.kelasId}:`, e)
+    }
+
     return NextResponse.json({ data: ujian })
   } catch (error) {
     console.error("[ujian create] error:", error)

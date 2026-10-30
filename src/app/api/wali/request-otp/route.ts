@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { normalizeWhatsApp, generateOTP, generateActivationToken } from "@/lib/wali/helpers"
 import { canRequestOTP, incrementOTPRequest } from "@/lib/wali/auth"
+import { rateLimit, getClientIP, rateLimitHeaders, RATE_LIMITS } from "@/lib/auth/rate-limit"
 
 /**
  * POST /api/wali/request-otp
@@ -12,9 +13,22 @@ import { canRequestOTP, incrementOTPRequest } from "@/lib/wali/auth"
  *
  * Catatan: OTP akan dikirim via WhatsApp di production.
  * Untuk development, OTP juga di-return di response untuk testing.
+ *
+ * Rate limit: 3 requests per 5 minutes per IP (RATE_LIMITS.otp)
+ * — prevents OTP-spam abuse (each OTP triggers a WhatsApp send which costs $$)
  */
 export async function POST(req: NextRequest) {
   try {
+    // ── Rate limit check ─────────────────────────────────────────────
+    const ip = getClientIP(req)
+    const rl = rateLimit(ip, "/api/wali/request-otp", RATE_LIMITS.otp)
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Terlalu banyak request OTP. Coba lagi nanti." },
+        { status: 429, headers: rateLimitHeaders(rl) },
+      )
+    }
+
     const body = await req.json()
     const { phone, type } = body
 

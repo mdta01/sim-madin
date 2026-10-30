@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect, useRef, useMemo } from "react"
 import { useSupabaseSession } from "@/hooks/use-supabase-session"
 import { useAdminStore } from "@/stores/admin-store"
 import { MENU_ITEMS, ROLE_LABELS } from "@/lib/constants"
@@ -17,12 +18,30 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+  CommandList,
+  CommandInput,
+} from "@/components/ui/command"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import { apiGet } from "@/lib/api-client"
 import { ThemeToggle } from "./theme-toggle"
 
 interface HeaderProps {
   onMenuClick: () => void
 }
 
+/**
+ * Admin header — page title, quick search (Cmd/Ctrl+K), notification badge
+ * with real unread count, user dropdown menu.
+ */
 export function Header({ onMenuClick }: HeaderProps) {
   const currentView = useAdminStore((s) => s.currentView)
   const setView = useAdminStore((s) => s.setView)
@@ -30,6 +49,71 @@ export function Header({ onMenuClick }: HeaderProps) {
   const Icon = (Icons as any)[menuItem?.icon || "LayoutDashboard"] || Icons.Circle
   const { user, signOut } = useSupabaseSession()
   const primaryRole = user?.user_metadata?.role as string || user?.email
+
+  // ── Quick-search command palette (Cmd/Ctrl+K) ────────────────────────────
+  const [searchOpen, setSearchOpen] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
+  // Keyboard shortcut: Cmd/Ctrl+K opens command palette
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault()
+        setSearchOpen((open) => !open)
+      }
+    }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [])
+
+  const menuItems = useMemo(
+    () =>
+      MENU_ITEMS.map((m) => ({
+        id: m.id,
+        label: m.label,
+        description: m.description || "",
+        icon: m.icon,
+        group: m.group,
+      })),
+    [],
+  )
+
+  const handleSearchSelect = (id: string) => {
+    setView(id as any)
+    setSearchOpen(false)
+  }
+
+  // ── Real notification badge count ────────────────────────────────────────
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  useEffect(() => {
+    let isMounted = true
+    let interval: NodeJS.Timeout | null = null
+
+    const fetchUnread = async () => {
+      try {
+        // Endpoint already exists: GET /api/admin/notifikasi?isRead=false
+        const res = await apiGet<{ data: any[]; pagination?: any }>(
+          "/api/admin/notifikasi?isRead=false&limit=1",
+        ).catch(() => null)
+        if (!isMounted || !res) return
+        // Use total from pagination, fallback to data length
+        const total = res.pagination?.total ?? (res.data?.length ?? 0)
+        setUnreadCount(Math.min(99, total)) // cap at 99+ to avoid overflow
+      } catch {
+        // silent fail — header shouldn't break if endpoint is down
+      }
+    }
+
+    fetchUnread()
+    // Poll every 60 seconds for new notifications
+    interval = setInterval(fetchUnread, 60_000)
+
+    return () => {
+      isMounted = false
+      if (interval) clearInterval(interval)
+    }
+  }, [])
 
   const handleLogout = async () => {
     await signOut()
@@ -72,14 +156,85 @@ export function Header({ onMenuClick }: HeaderProps) {
 
       <div className="flex-1" />
 
+      {/* Quick-search trigger (click opens command palette) */}
       <div className="hidden md:block relative w-64">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Cari cepat..." className="pl-9 h-9 bg-muted/40" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+        <Input
+          ref={searchInputRef}
+          placeholder="Cari cepat... (Ctrl+K)"
+          className="pl-9 h-9 bg-muted/40 cursor-pointer"
+          readOnly
+          onClick={() => setSearchOpen(true)}
+          aria-label="Buka pencarian cepat"
+        />
       </div>
 
-      <Button variant="ghost" size="icon" className="h-9 w-9 relative">
+      {/* Command palette — Popover wraps Command for keyboard-driven navigation */}
+      <Popover open={searchOpen} onOpenChange={setSearchOpen}>
+        <PopoverTrigger asChild>
+          <span className="hidden" aria-hidden /> {/* invisible trigger — we control via state */}
+        </PopoverTrigger>
+        <PopoverContent
+          sideOffset={8}
+          align="end"
+          className="w-[400px] p-0"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
+          <Command shouldFilter={true}>
+            <CommandInput placeholder="Cari menu atau halaman..." autoFocus />
+            <CommandList className="max-h-[300px]">
+              <CommandEmpty>Tidak ada hasil.</CommandEmpty>
+              {["main", "akademik", "pembelajaran", "keuangan", "sistem"].map((groupId) => {
+                const items = menuItems.filter((m) => m.group === groupId)
+                if (items.length === 0) return null
+                const groupLabel =
+                  groupId === "main" ? "Utama"
+                  : groupId === "akademik" ? "Akademik"
+                  : groupId === "pembelajaran" ? "Pembelajaran"
+                  : groupId === "keuangan" ? "Keuangan"
+                  : "Sistem"
+                return (
+                  <CommandGroup key={groupId} heading={groupLabel}>
+                    {items.map((item) => {
+                      const ItemIcon = (Icons as any)[item.icon] || Icons.Circle
+                      return (
+                        <CommandItem
+                          key={item.id}
+                          value={`${item.label} ${item.description}`}
+                          onSelect={() => handleSearchSelect(item.id)}
+                        >
+                          <ItemIcon className="h-4 w-4 mr-2 text-muted-foreground" />
+                          <div className="flex flex-col">
+                            <span className="text-sm">{item.label}</span>
+                            {item.description && (
+                              <span className="text-[11px] text-muted-foreground">{item.description}</span>
+                            )}
+                          </div>
+                        </CommandItem>
+                      )
+                    })}
+                  </CommandGroup>
+                )
+              })}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+
+      {/* Notification bell — clicking navigates to notifikasi view */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-9 w-9 relative"
+        onClick={() => setView("notifikasi" as any)}
+        aria-label={`Notifikasi${unreadCount > 0 ? ` (${unreadCount} belum dibaca)` : ""}`}
+      >
         <Bell className="h-4 w-4" />
-        <Badge className="absolute -top-0.5 -right-0.5 h-4 min-w-4 px-1 text-[10px] p-0 flex items-center justify-center">3</Badge>
+        {unreadCount > 0 && (
+          <Badge className="absolute -top-0.5 -right-0.5 h-4 min-w-4 px-1 text-[10px] p-0 flex items-center justify-center bg-red-500 text-white hover:bg-red-500">
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </Badge>
+        )}
       </Button>
 
       {/* User dropdown */}

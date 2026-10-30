@@ -16,6 +16,12 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get("status")
     const gender = searchParams.get("gender")
 
+    // ── Server-side pagination ─────────────────────────────────────────────
+    // Default page=1, limit=50. Max 200 to prevent abuse.
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10))
+    const limit = Math.min(200, Math.max(1, parseInt(searchParams.get("limit") || "50", 10)))
+    const skip = (page - 1) * limit
+
     const where: any = { deletedAt: null }
     if (search) {
       where.OR = [
@@ -28,22 +34,40 @@ export async function GET(req: NextRequest) {
     if (status) where.status = status
     if (gender) where.gender = gender
 
-    const santri = await db.santri.findMany({
-      where,
-      include: {
-        kelas: { select: { id: true, name: true, code: true } },
-        wali: { select: { id: true, name: true, phone: true, activationStatus: true } },
-        waliLinks: {
-          include: {
-            wali: { select: { id: true, name: true, phone: true, activationStatus: true } },
+    // Run count + paged query in parallel for efficiency
+    const [santri, totalCount] = await Promise.all([
+      db.santri.findMany({
+        where,
+        include: {
+          kelas: { select: { id: true, name: true, code: true } },
+          wali: { select: { id: true, name: true, phone: true, activationStatus: true } },
+          waliLinks: {
+            include: {
+              wali: { select: { id: true, name: true, phone: true, activationStatus: true } },
+            },
           },
         },
-      },
-      orderBy: { name: "asc" },
-    })
+        orderBy: { name: "asc" },
+        skip,
+        take: limit,
+      }),
+      db.santri.count({ where }),
+    ])
+
+    const totalPages = Math.ceil(totalCount / limit)
 
     return NextResponse.json({
-      ...({} as any), data: santri, total: santri.length })
+      ...({} as any),
+      data: santri,
+      pagination: {
+        page,
+        limit,
+        total: totalCount,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
+    })
   } catch (error) {
     console.error("[santri list] error:", error)
     return NextResponse.json({
@@ -220,14 +244,24 @@ export async function POST(req: NextRequest) {
         },
       })
 
+      // Security: never leak OTP code or activation token to the client in
+      // production. In dev, return them so admins can preview the activation
+      // URL; in prod, the wali receives the OTP via WhatsApp service (TODO)
+      // and the token is only usable through the /activate page (which looks
+      // up the token server-side).
+      const isDev = process.env.NODE_ENV !== "production"
       activationInfo = {
         waliId: waliActivation.wali.id,
         waliName: waliActivation.wali.name,
         waliPhone: waliActivation.wali.phone,
+        // Token is safe to return — /activate page validates it server-side.
+        // We just don't return the OTP code (which is the secret credential).
         activationToken: token,
-        otpCode: otp, // ⚠️ Dev only — di production kirim via WhatsApp, jangan return ke client
         activationUrl: `/activate?token=${token}`,
         expiresIn: "24 jam",
+        ...(isDev
+          ? { otpCode: otp, _devOnly: true }
+          : { otpSentVia: "whatsapp" }),
       }
     }
 

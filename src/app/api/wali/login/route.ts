@@ -5,6 +5,7 @@ import {
   verifyPIN, isWaliLocked, recordFailedLogin, resetFailedLogin,
   signWaliToken, getWaliSantriList, type WaliSession,
 } from "@/lib/wali/auth"
+import { rateLimit, getClientIP, rateLimitHeaders, RATE_LIMITS } from "@/lib/auth/rate-limit"
 
 /**
  * POST /api/wali/login
@@ -12,9 +13,22 @@ import {
  *
  * Body: { phone, pin }
  * Return: { token, wali, santriList }
+ *
+ * Rate limit: 5 attempts per minute per IP (RATE_LIMITS.login)
+ * — blocks brute-force PIN guessing even before per-account lockout kicks in.
  */
 export async function POST(req: NextRequest) {
   try {
+    // ── Rate limit check (before any DB call) ─────────────────────────────
+    const ip = getClientIP(req)
+    const rl = rateLimit(ip, "/api/wali/login", RATE_LIMITS.login)
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Terlalu banyak percobaan login. Coba lagi nanti." },
+        { status: 429, headers: rateLimitHeaders(rl) },
+      )
+    }
+
     const body = await req.json()
     const { phone, pin } = body
 
