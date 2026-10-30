@@ -1808,18 +1808,18 @@ export default function App() {
 
     let unsubNotif: (() => void) | null = null
 
-    // Dynamic import agar tidak crash jika realtime module belum tersedia
-    try {
+    // Realtime: subscribe ke Supabase Realtime untuk notifikasi instant
+    ;(async () => {
+      try {
         unsubNotif = await subscribeToNotifikasi(savedWali.id, (newNotif: any) => {
-          // Show local notification via React Native
           if (typeof Alert !== "undefined") {
             Alert.alert(newNotif.title || "Notifikasi", newNotif.message || "")
           }
         })
-      })
-      .catch(() => {
+      } catch (e) {
         // Realtime optional — app tetap jalan tanpa realtime
-      })
+      }
+    })()
 
     return () => {
       if (unsubNotif) unsubNotif()

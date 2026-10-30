@@ -1239,7 +1239,8 @@ export default function App() {
     if (!isLoggedIn) return
     let cancelled = false
     const unsubs: Array<() => void> = []
-    try {
+    ;(async () => {
+      try {
         for (const table of ["Payment", "Tagihan"] as const) {
           try {
             const unsub = await subscribeToTable(table, () => {
@@ -1250,6 +1251,7 @@ export default function App() {
           } catch {}
         }
       } catch(e) { /* realtime optional */ }
+    })()
     return () => {
       cancelled = true
       unsubs.forEach(u => { try { u() } catch {} })
