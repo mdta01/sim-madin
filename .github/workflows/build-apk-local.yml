@@ -1,0 +1,113 @@
+# ============================================================================
+# Build APK locally on GitHub Actions runner (NO EAS Build quota needed!)
+# ============================================================================
+# This workflow builds the APK directly on the GitHub Actions ubuntu runner
+# using `expo prebuild` + `./gradlew assembleRelease`.
+#
+# No EAS Build cloud credits consumed — completely free, unlimited builds.
+#
+# Trigger: manual (workflow_dispatch) — pick which app to build.
+# Output: APK file uploaded as GitHub Actions artifact (downloadable).
+# ============================================================================
+name: Build APK (Local)
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: "App to build"
+        required: true
+        type: choice
+        default: mobile-wali
+        options:
+          - mobile-wali
+          - mobile-bendahara
+          - mobile-guru
+          - mobile-kepala
+          - all
+
+jobs:
+  build:
+    name: Build APK — ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ github.event.inputs.app == 'all' && fromJson('["mobile-wali","mobile-bendahara","mobile-guru","mobile-kepala"]') || fromJson(format('["{0}"]', github.event.inputs.app)) }}
+
+    defaults:
+      run:
+        working-directory: apps/${{ matrix.app }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platforms;android-35
+            build-tools;35.0.0
+            ndk;27.1.12297006
+
+      - name: Install app dependencies
+        run: |
+          npm install --legacy-peer-deps --no-audit --no-fund
+
+      - name: Install Expo CLI
+        run: |
+          npm install -g expo-cli@latest
+          npx expo --version
+
+      - name: Generate native Android project
+        run: |
+          npx expo prebuild --platform android --no-install --clean
+
+      - name: Build APK with Gradle
+        working-directory: apps/${{ matrix.app }}/android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleRelease -x lint --no-daemon --stacktrace
+
+      - name: Find APK
+        id: find-apk
+        working-directory: apps/${{ matrix.app }}
+        run: |
+          APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" -type f | head -1)
+          if [ -z "$APK_PATH" ]; then
+            echo "❌ No APK found!"
+            exit 1
+          fi
+          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+          echo "✅ Found APK: $APK_PATH"
+          ls -lh "$APK_PATH"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.app }}-apk
+          path: apps/${{ matrix.app }}/${{ steps.find-apk.outputs.apk_path }}
+          retention-days: 30
+          compression-level: 0
+
+      - name: Summary
+        run: |
+          echo "## 📱 APK Built — ${{ matrix.app }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Download the APK from the Artifacts section above." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **App**: \`${{ matrix.app }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build**: Release APK (signed with debug key)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Install**: Allow unknown sources on Android → install APK" >> $GITHUB_STEP_SUMMARY
