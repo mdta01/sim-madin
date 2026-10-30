@@ -1,13 +1,8 @@
 # ============================================================================
 # Build APK locally on GitHub Actions runner (NO EAS Build quota needed!)
 # ============================================================================
-# This workflow builds the APK directly on the GitHub Actions ubuntu runner
-# using `expo prebuild` + `./gradlew assembleRelease`.
-#
+# Uses pre-installed Android SDK on ubuntu-latest runner.
 # No EAS Build cloud credits consumed — completely free, unlimited builds.
-#
-# Trigger: manual (workflow_dispatch) — pick which app to build.
-# Output: APK file uploaded as GitHub Actions artifact (downloadable).
 # ============================================================================
 name: Build APK (Local)
 
@@ -30,14 +25,11 @@ jobs:
   build:
     name: Build APK — ${{ matrix.app }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         app: ${{ github.event.inputs.app == 'all' && fromJson('["mobile-wali","mobile-bendahara","mobile-guru","mobile-kepala"]') || fromJson(format('["{0}"]', github.event.inputs.app)) }}
-
-    defaults:
-      run:
-        working-directory: apps/${{ matrix.app }}
 
     steps:
       - name: Checkout
@@ -54,18 +46,22 @@ jobs:
           distribution: "temurin"
           java-version: "17"
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          accept-android-sdk-licenses: true
-
-      - name: Install Android SDK packages
+      - name: Accept Android SDK licenses & install packages
         run: |
+          # ubuntu-latest already has Android SDK at /usr/local/lib/android/sdk
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export ANDROID_SDK_ROOT=$ANDROID_HOME
+          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
+          # Accept all licenses
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.1.12297006" > /dev/null 2>&1 || true
-          echo "✓ Android SDK packages installed"
+          # Install required SDK packages (only if not already installed)
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" 2>&1 || true
+          # NDK is already pre-installed on ubuntu-latest
+          echo "✓ Android SDK ready"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
 
       - name: Install app dependencies
+        working-directory: apps/${{ matrix.app }}
         run: |
           npm install --legacy-peer-deps --no-audit --no-fund
 
@@ -75,6 +71,7 @@ jobs:
           npx expo --version
 
       - name: Generate native Android project
+        working-directory: apps/${{ matrix.app }}
         run: |
           npx expo prebuild --platform android --no-install --clean
 
