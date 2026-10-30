@@ -7,7 +7,7 @@
     "icon": "./assets/icon.png",
     "scheme": "simmadinwali",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "resizeMode": "contain",
       "backgroundColor": "#059669"
