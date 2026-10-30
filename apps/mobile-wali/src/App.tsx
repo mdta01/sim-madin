@@ -20,11 +20,11 @@ import { Ionicons } from "@expo/vector-icons"
 
 // Import dari shared package
 import {
-import { subscribeToTable, subscribeToNotifikasi } from "../vendor/mobile-shared/src/realtime"
   MobileApiClient, normalizeWhatsApp, formatPhoneDisplay,
   saveWaliSession, loadWaliSession, clearWaliSession,
   formatRupiah, formatDate, STATUS_STYLES, DAYS,
 } from "../vendor/mobile-shared/src"
+import { subscribeToTable, subscribeToNotifikasi } from "../vendor/mobile-shared/src/realtime"
 
 // ============================================================================
 // CONFIG
