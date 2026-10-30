@@ -5,9 +5,11 @@ import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api-client"
 import { useAdminStore } from "@/stores/admin-store"
 import { PageHeader } from "@/components/admin/shared/page-header"
 import { DataTableToolbar } from "@/components/admin/shared/data-table-toolbar"
-import { LoadingState, ErrorState, EmptyState } from "@/components/admin/shared/states"
+import { ErrorState, EmptyState } from "@/components/admin/shared/states"
 import { StatusBadge } from "@/components/admin/shared/status-badge"
 import { Breadcrumb } from "@/components/admin/shared/breadcrumb"
+import { useConfirmDialog } from "../shared/confirm-dialog"
+import { TableSkeleton, ListSkeleton } from "../shared/skeletons"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -41,6 +43,7 @@ function SantriList() {
   const [editing, setEditing] = useState<any | null>(null)
   const { toast } = useToast()
   const selectEntity = useAdminStore((s) => s.selectEntity)
+  const { confirm, ConfirmDialogComponent } = useConfirmDialog()
 
   const load = useCallback(async () => {
     try {
@@ -65,14 +68,19 @@ function SantriList() {
 
   useEffect(() => { load() }, [load])
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Yakin ingin menghapus data santri ini? (soft delete)")) return
-    try {
-      await apiDelete(`/api/admin/santri/${id}`)
-      toast({ title: "Berhasil", description: "Santri telah dihapus" })
+  const handleDelete = async (id: string, name: string) => {
+    const ok = await confirm({
+      title: "Hapus santri?",
+      description: `Santri "${name}" akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.`,
+      confirmLabel: "Hapus",
+      variant: "destructive",
+      onConfirm: async () => {
+        await apiDelete(`/api/admin/santri/${id}`)
+      },
+    })
+    if (ok) {
+      toast({ title: "Berhasil", description: "Santri dihapus" })
       load()
-    } catch (e: any) {
-      toast({ title: "Gagal", description: e.message, variant: "destructive" })
     }
   }
 
@@ -117,7 +125,7 @@ function SantriList() {
 
       <Card>
         <CardContent className="p-0">
-          {loading ? <LoadingState /> :
+          {loading ? <TableSkeleton rows={8} cols={6} /> :
             error ? <ErrorState message={error} onRetry={load} /> :
             data.length === 0 ? <EmptyState icon={<GraduationCap className="h-5 w-5" />} title="Belum ada data santri" description="Tambahkan data santri pertama Anda" /> :
             <div className="overflow-x-auto">
@@ -188,7 +196,7 @@ function SantriList() {
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditing(s); setDialogOpen(true) }}>
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(s.id)}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(s.id, s.name)}>
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </div>
@@ -209,6 +217,7 @@ function SantriList() {
         kelasList={kelasList}
         onSuccess={load}
       />
+      {ConfirmDialogComponent}
     </div>
   )
 }
@@ -489,7 +498,7 @@ function SantriDetail({ id }: { id: string }) {
 
   useEffect(() => { load() }, [load])
 
-  if (loading) return <LoadingState className="py-20" />
+  if (loading) return <ListSkeleton items={4} className="py-20" />
   if (error || !data) return <ErrorState message={error || "Data tidak ditemukan"} onRetry={load} />
 
   return (

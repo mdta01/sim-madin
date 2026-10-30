@@ -5,8 +5,10 @@ import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api-client"
 import { useAdminStore } from "@/stores/admin-store"
 import { PageHeader } from "@/components/admin/shared/page-header"
 import { DataTableToolbar } from "@/components/admin/shared/data-table-toolbar"
-import { LoadingState, ErrorState, EmptyState } from "@/components/admin/shared/states"
+import { ErrorState, EmptyState } from "@/components/admin/shared/states"
 import { Breadcrumb } from "@/components/admin/shared/breadcrumb"
+import { useConfirmDialog } from "../shared/confirm-dialog"
+import { TableSkeleton, ListSkeleton } from "../shared/skeletons"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -34,6 +36,7 @@ function WaliList() {
   const [editing, setEditing] = useState<any | null>(null)
   const { toast } = useToast()
   const selectEntity = useAdminStore((s) => s.selectEntity)
+  const { confirm, ConfirmDialogComponent } = useConfirmDialog()
 
   const load = useCallback(async () => {
     try {
@@ -50,14 +53,19 @@ function WaliList() {
 
   useEffect(() => { load() }, [load])
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Yakin ingin menghapus data wali ini?")) return
-    try {
-      await apiDelete(`/api/admin/wali/${id}`)
-      toast({ title: "Berhasil", description: "Wali telah dihapus" })
+  const handleDelete = async (id: string, name: string) => {
+    const ok = await confirm({
+      title: "Hapus wali?",
+      description: `Wali "${name}" akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.`,
+      confirmLabel: "Hapus",
+      variant: "destructive",
+      onConfirm: async () => {
+        await apiDelete(`/api/admin/wali/${id}`)
+      },
+    })
+    if (ok) {
+      toast({ title: "Berhasil", description: "Wali dihapus" })
       load()
-    } catch (e: any) {
-      toast({ title: "Gagal", description: e.message, variant: "destructive" })
     }
   }
 
@@ -80,7 +88,7 @@ function WaliList() {
       />
       <Card>
         <CardContent className="p-0">
-          {loading ? <LoadingState /> :
+          {loading ? <TableSkeleton rows={8} cols={4} /> :
             error ? <ErrorState message={error} onRetry={load} /> :
             data.length === 0 ? <EmptyState icon={<Users className="h-5 w-5" />} title="Belum ada data wali" /> :
             <div className="overflow-x-auto">
@@ -114,7 +122,7 @@ function WaliList() {
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-1">
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditing(w); setDialogOpen(true) }}><Pencil className="h-3.5 w-3.5" /></Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(w.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(w.id, w.name)}><Trash2 className="h-3.5 w-3.5" /></Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -127,6 +135,7 @@ function WaliList() {
       </Card>
 
       <WaliForm open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} onSuccess={load} />
+      {ConfirmDialogComponent}
     </div>
   )
 }
@@ -239,7 +248,7 @@ function WaliDetail({ id }: { id: string }) {
 
   useEffect(() => { load() }, [load])
 
-  if (loading) return <LoadingState className="py-20" />
+  if (loading) return <ListSkeleton items={4} className="py-20" />
   if (error || !data) return <ErrorState message={error || "Data tidak ditemukan"} onRetry={load} />
 
   return (

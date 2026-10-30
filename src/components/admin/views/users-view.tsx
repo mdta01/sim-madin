@@ -5,8 +5,10 @@ import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api-client"
 import { useAdminStore } from "@/stores/admin-store"
 import { PageHeader } from "@/components/admin/shared/page-header"
 import { DataTableToolbar } from "@/components/admin/shared/data-table-toolbar"
-import { LoadingState, ErrorState, EmptyState } from "@/components/admin/shared/states"
+import { ErrorState, EmptyState } from "@/components/admin/shared/states"
 import { Breadcrumb } from "@/components/admin/shared/breadcrumb"
+import { useConfirmDialog } from "../shared/confirm-dialog"
+import { TableSkeleton, ListSkeleton } from "../shared/skeletons"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -39,6 +41,7 @@ function UsersTab({ onGoRoles }: { onGoRoles: () => void }) {
   const [editing, setEditing] = useState<any | null>(null)
   const { toast } = useToast()
   const selectEntity = useAdminStore((s) => s.selectEntity)
+  const { confirm, ConfirmDialogComponent } = useConfirmDialog()
 
   const load = useCallback(async () => {
     try {
@@ -59,14 +62,19 @@ function UsersTab({ onGoRoles }: { onGoRoles: () => void }) {
 
   useEffect(() => { load() }, [load])
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Nonaktifkan user ini? User tidak bisa login tapi data tetap tersimpan.")) return
-    try {
-      await apiDelete(`/api/admin/users/${id}`)
+  const handleDelete = async (id: string, name: string) => {
+    const ok = await confirm({
+      title: "Nonaktifkan user?",
+      description: `User "${name}" akan dinonaktifkan. Data tetap tersimpan tapi user tidak dapat login.`,
+      confirmLabel: "Nonaktifkan",
+      variant: "destructive",
+      onConfirm: async () => {
+        await apiDelete(`/api/admin/users/${id}`)
+      },
+    })
+    if (ok) {
       toast({ title: "Berhasil", description: "User dinonaktifkan" })
       load()
-    } catch (e: any) {
-      toast({ title: "Gagal", description: e.message, variant: "destructive" })
     }
   }
 
@@ -86,7 +94,7 @@ function UsersTab({ onGoRoles }: { onGoRoles: () => void }) {
       <DataTableToolbar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Cari nama, email, username..." />
       <Card>
         <CardContent className="p-0">
-          {loading ? <LoadingState /> :
+          {loading ? <TableSkeleton rows={6} cols={5} /> :
             error ? <ErrorState message={error} onRetry={load} /> :
             data.length === 0 ? <EmptyState icon={<ShieldCheck className="h-5 w-5" />} title="Belum ada user" /> :
             <div className="overflow-x-auto">
@@ -126,7 +134,7 @@ function UsersTab({ onGoRoles }: { onGoRoles: () => void }) {
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-1">
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditing(u); setDialogOpen(true) }}><Pencil className="h-3.5 w-3.5" /></Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(u.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(u.id, u.name)}><Trash2 className="h-3.5 w-3.5" /></Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -139,6 +147,7 @@ function UsersTab({ onGoRoles }: { onGoRoles: () => void }) {
       </Card>
 
       <UserForm open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} roles={roles} onSuccess={load} />
+      {ConfirmDialogComponent}
     </div>
   )
 }
@@ -252,6 +261,7 @@ function RolesTab({ onBack }: { onBack: () => void }) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<any | null>(null)
   const { toast } = useToast()
+  const { confirm, ConfirmDialogComponent } = useConfirmDialog()
 
   const load = useCallback(async () => {
     try {
@@ -269,14 +279,19 @@ function RolesTab({ onBack }: { onBack: () => void }) {
 
   useEffect(() => { load() }, [load])
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Hapus role ini?")) return
-    try {
-      await apiDelete(`/api/admin/roles/${id}`)
+  const handleDelete = async (id: string, name: string) => {
+    const ok = await confirm({
+      title: "Hapus role?",
+      description: `Role "${name}" akan dihapus. User yang memiliki role ini akan kehilangan akses terkait.`,
+      confirmLabel: "Hapus",
+      variant: "destructive",
+      onConfirm: async () => {
+        await apiDelete(`/api/admin/roles/${id}`)
+      },
+    })
+    if (ok) {
       toast({ title: "Berhasil", description: "Role dihapus" })
       load()
-    } catch (e: any) {
-      toast({ title: "Gagal", description: e.message, variant: "destructive" })
     }
   }
 
@@ -293,7 +308,7 @@ function RolesTab({ onBack }: { onBack: () => void }) {
           </>
         }
       />
-      {loading ? <LoadingState /> :
+      {loading ? <ListSkeleton items={4} /> :
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {data.map((r) => (
             <Card key={r.id}>
@@ -308,7 +323,7 @@ function RolesTab({ onBack }: { onBack: () => void }) {
                   </div>
                   <div className="flex gap-1">
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditing(r); setDialogOpen(true) }}><Pencil className="h-3 w-3" /></Button>
-                    {!r.isSystem && <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(r.id)}><Trash2 className="h-3 w-3" /></Button>}
+                    {!r.isSystem && <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(r.id, r.name)}><Trash2 className="h-3 w-3" /></Button>}
                   </div>
                 </div>
               </CardHeader>
@@ -331,6 +346,7 @@ function RolesTab({ onBack }: { onBack: () => void }) {
         </div>
       }
       <RoleForm open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} permissions={permissions} onSuccess={load} />
+      {ConfirmDialogComponent}
     </div>
   )
 }

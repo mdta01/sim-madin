@@ -64,18 +64,23 @@ export async function POST(req: NextRequest) {
     const created: any[] = []
     const skipped: any[] = []
 
-    for (const santri of santriList) {
-      // Check if tagihan already exists for this santri + jenis + description
-      const existing = await db.tagihan.findFirst({
-        where: {
-          santriId: santri.id,
-          jenisTagihanId: body.jenisTagihanId,
-          tahunAjaranId: ta.id,
-          description,
-        },
-      })
+    // ── N+1 fix: fetch ALL existing tagihan matching the criteria in one query,
+    // build a Set for O(1) lookup. Before: 1 findFirst per santri (N queries).
+    // After: 1 findMany total + Set.has() checks in the loop.
+    const existingTagihan = await db.tagihan.findMany({
+      where: {
+        santriId: { in: santriList.map((s) => s.id) },
+        jenisTagihanId: body.jenisTagihanId,
+        tahunAjaranId: ta.id,
+        description,
+      },
+      select: { santriId: true },
+    })
+    const existingSantriIds = new Set(existingTagihan.map((t) => t.santriId))
 
-      if (existing) {
+    for (const santri of santriList) {
+      // O(1) Set lookup instead of O(N) DB query per iteration
+      if (existingSantriIds.has(santri.id)) {
         skipped.push({ santriId: santri.id, name: santri.name, reason: "Tagihan sudah ada" })
         continue
       }

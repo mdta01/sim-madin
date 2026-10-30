@@ -1,52 +1,78 @@
 "use client"
 
+import { lazy, Suspense } from "react"
 import { useAdminStore } from "@/stores/admin-store"
 import { Sidebar } from "./sidebar"
 import { Header } from "./header"
+import { PageSkeleton } from "./shared/skeletons"
+
+/**
+ * ============================================================================
+ * ADMIN LAYOUT — Code-split view loading for performance
+ * ============================================================================
+ *
+ * Why React.lazy + Suspense?
+ *   - Before: all 34 admin views were eagerly imported, meaning the initial
+ *     JS bundle included EVERY view's code (charts, forms, tables, dialogs).
+ *   - After: only the active view's chunk is loaded on-demand. Initial page
+ *     paint drops significantly, and navigation between views is fast (lazy
+ *     chunks are typically <10 KB each, cached after first load).
+ *
+ * Suspense fallback uses PageSkeleton (not just a spinner) so the user sees
+ * a matching layout skeleton — better perceived loading.
+ *
+ * Note: dashboard view stays eager-loaded because it's the default landing
+ * view and we want zero-latency on first paint.
+ * ============================================================================
+ */
+
+// Dashboard — eager-loaded (default landing view, zero-latency expected)
 import { DashboardView } from "./views/dashboard-view"
-import { TahunAjaranView } from "./views/tahun-ajaran-view"
-import { WaliView } from "./views/wali-view"
-import { SantriView } from "./views/santri-view"
-import { GuruView } from "./views/guru-view"
-import { KelasView } from "./views/kelas-view"
-import { MapelView } from "./views/mapel-view"
-import { JadwalView } from "./views/jadwal-view"
-import { AbsensiView } from "./views/absensi-view"
-import { NilaiView } from "./views/nilai-view"
-import { RaporView } from "./views/rapor-view"
-import { TagihanView } from "./views/tagihan-view"
-import { PembayaranView } from "./views/pembayaran-view"
-import { PengumumanView } from "./views/pengumuman-view"
-import { UsersView } from "./views/users-view"
-import { PengaturanView } from "./views/pengaturan-view"
-import { ProfileView } from "./views/profile-view"
-import { AuditLogView } from "./views/audit-log-view"
+
+// All other views — lazy-loaded on demand
+const TahunAjaranView = lazy(() => import("./views/tahun-ajaran-view").then(m => ({ default: m.TahunAjaranView })))
+const WaliView = lazy(() => import("./views/wali-view").then(m => ({ default: m.WaliView })))
+const SantriView = lazy(() => import("./views/santri-view").then(m => ({ default: m.SantriView })))
+const GuruView = lazy(() => import("./views/guru-view").then(m => ({ default: m.GuruView })))
+const KelasView = lazy(() => import("./views/kelas-view").then(m => ({ default: m.KelasView })))
+const MapelView = lazy(() => import("./views/mapel-view").then(m => ({ default: m.MapelView })))
+const JadwalView = lazy(() => import("./views/jadwal-view").then(m => ({ default: m.JadwalView })))
+const AbsensiView = lazy(() => import("./views/absensi-view").then(m => ({ default: m.AbsensiView })))
+const NilaiView = lazy(() => import("./views/nilai-view").then(m => ({ default: m.NilaiView })))
+const RaporView = lazy(() => import("./views/rapor-view").then(m => ({ default: m.RaporView })))
+const TagihanView = lazy(() => import("./views/tagihan-view").then(m => ({ default: m.TagihanView })))
+const PembayaranView = lazy(() => import("./views/pembayaran-view").then(m => ({ default: m.PembayaranView })))
+const PengumumanView = lazy(() => import("./views/pengumuman-view").then(m => ({ default: m.PengumumanView })))
+const UsersView = lazy(() => import("./views/users-view").then(m => ({ default: m.UsersView })))
+const PengaturanView = lazy(() => import("./views/pengaturan-view").then(m => ({ default: m.PengaturanView })))
+const ProfileView = lazy(() => import("./views/profile-view").then(m => ({ default: m.ProfileView })))
+const AuditLogView = lazy(() => import("./views/audit-log-view").then(m => ({ default: m.AuditLogView })))
 // V2 — Akademik & Pembelajaran
-import { MateriView } from "./views/materi-view"
-import { TugasView } from "./views/tugas-view"
-import { PertemuanView } from "./views/pertemuan-view"
-import { KompetensiView } from "./views/kompetensi-view"
+const MateriView = lazy(() => import("./views/materi-view").then(m => ({ default: m.MateriView })))
+const TugasView = lazy(() => import("./views/tugas-view").then(m => ({ default: m.TugasView })))
+const PertemuanView = lazy(() => import("./views/pertemuan-view").then(m => ({ default: m.PertemuanView })))
+const KompetensiView = lazy(() => import("./views/kompetensi-view").then(m => ({ default: m.KompetensiView })))
 // V3 — Ujian & Rapor
-import { BankSoalView } from "./views/bank-soal-view"
-import { UjianView } from "./views/ujian-view"
+const BankSoalView = lazy(() => import("./views/bank-soal-view").then(m => ({ default: m.BankSoalView })))
+const UjianView = lazy(() => import("./views/ujian-view").then(m => ({ default: m.UjianView })))
 // V4 — Perkembangan Santri
-import { PerkembanganView } from "./views/perkembangan-view"
+const PerkembanganView = lazy(() => import("./views/perkembangan-view").then(m => ({ default: m.PerkembanganView })))
 // V5 — Keuangan Lanjutan
-import { KasView } from "./views/kas-view"
-import { HonorGuruView } from "./views/honor-guru-view"
+const KasView = lazy(() => import("./views/kas-view").then(m => ({ default: m.KasView })))
+const HonorGuruView = lazy(() => import("./views/honor-guru-view").then(m => ({ default: m.HonorGuruView })))
 // V6 — Komunikasi & Notifikasi
-import { NotifikasiView } from "./views/notifikasi-view"
-import { ChatView } from "./views/chat-view"
+const NotifikasiView = lazy(() => import("./views/notifikasi-view").then(m => ({ default: m.NotifikasiView })))
+const ChatView = lazy(() => import("./views/chat-view").then(m => ({ default: m.ChatView })))
 // V7 — Administrasi & Dokumen
-import { SuratView } from "./views/surat-view"
+const SuratView = lazy(() => import("./views/surat-view").then(m => ({ default: m.SuratView })))
 // V8 — QR Code & Digitalisasi
-import { QrView } from "./views/qr-view"
+const QrView = lazy(() => import("./views/qr-view").then(m => ({ default: m.QrView })))
 // V10 — Kelulusan & Alumni
-import { AlumniView } from "./views/alumni-view"
+const AlumniView = lazy(() => import("./views/alumni-view").then(m => ({ default: m.AlumniView })))
 // V11 — Dashboard & Analitik
-import { DashboardKepalaView } from "./views/dashboard-kepala-view"
+const DashboardKepalaView = lazy(() => import("./views/dashboard-kepala-view").then(m => ({ default: m.DashboardKepalaView })))
 // V12 — Sistem Terintegrasi Penuh
-import { SiklusView } from "./views/siklus-view"
+const SiklusView = lazy(() => import("./views/siklus-view").then(m => ({ default: m.SiklusView })))
 
 export function AdminLayout() {
   const currentView = useAdminStore((s) => s.currentView)
@@ -118,7 +144,9 @@ export function AdminLayout() {
       <div className="flex-1 flex flex-col min-w-0">
         <Header onMenuClick={toggleSidebar} />
         <main className="flex-1 p-4 sm:p-6 max-w-[1600px] w-full mx-auto">
-          {renderView()}
+          <Suspense fallback={<PageSkeleton />}>
+            {renderView()}
+          </Suspense>
         </main>
         <footer className="border-t mt-auto py-4 px-6 text-center text-xs text-muted-foreground">
           <p>© 2025 SIM MADIN — Sistem Informasi Madrasah Diniyah Terpadu • MVP V1</p>

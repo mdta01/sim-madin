@@ -177,6 +177,10 @@ export async function requireApiAuth(
  *
  * @example
  * await logAudit(session, "CREATE", "SANTRI", santri.id, { name: santri.name })
+ *
+ * Security: sensitive fields in `changes` are automatically redacted
+ * by `redactSensitive()` before being persisted. This prevents accidental
+ * logging of credentials (passwordHash, pinHash, otpCode, tokens, etc.).
  */
 export async function logAudit(
   session: AppSession | null,
@@ -190,6 +194,9 @@ export async function logAudit(
     const ip = req?.headers?.get("x-forwarded-for") || req?.headers?.get("x-real-ip") || undefined
     const userAgent = req?.headers?.get("user-agent") || undefined
 
+    // Redact sensitive fields before serializing to JSON
+    const sanitizedChanges = changes ? redactSensitive(changes) : null
+
     await db.auditLog.create({
       data: {
         userId: session?.user?.id,
@@ -197,7 +204,7 @@ export async function logAudit(
         module,
         entityId,
         entityType: module,
-        changes: changes ? JSON.stringify(changes) : null,
+        changes: sanitizedChanges ? JSON.stringify(sanitizedChanges) : null,
         ip,
         userAgent,
       },
@@ -206,4 +213,71 @@ export async function logAudit(
     // Jangan lempar error audit log agar tidak mengganggu flow utama
     console.error("[audit log] error:", e)
   }
+}
+
+/**
+ * Field names that should NEVER be logged to the audit trail.
+ * Match is case-insensitive (so it catches both `password` and `passwordHash`).
+ *
+ * Add to this list as new sensitive fields are introduced.
+ */
+const SENSITIVE_KEYS = [
+  "password",
+  "passwordhash",
+  "pin",
+  "pinhash",
+  "otp",
+  "otpcode",
+  "otprequestscount",
+  "token",
+  "activationtoken",
+  "accesstoken",
+  "refreshtoken",
+  "session",
+  "secret",
+  "apikey",
+  "privatekey",
+  "credential",
+  "authorization",
+]
+
+/**
+ * Recursively redact sensitive fields in any value (object, array, or primitive).
+ *
+ * Rules:
+ *   - Object keys matching SENSITIVE_KEYS (case-insensitive) → "[REDACTED]"
+ *   - Strings that look like JWT (eyJ...) or long hex/b64 → "[REDACTED]"
+ *   - Nested objects/arrays are traversed recursively
+ *   - Maximum depth of 10 to prevent infinite loops on circular refs
+ */
+function redactSensitive(value: unknown, depth = 0): unknown {
+  if (depth > 10) return "[MAX_DEPTH]"
+  if (value === null || value === undefined) return value
+
+  if (typeof value === "string") {
+    // Detect JWT-like or very long hex/base64 secrets
+    if (value.startsWith("eyJ") && value.length > 30) return "[REDACTED]"
+    if (/^[a-f0-9]{40,}$/i.test(value)) return "[REDACTED]" // SHA-1+ hex
+    if (/^[A-Za-z0-9+/]{40,}={0,2}$/.test(value)) return "[REDACTED]" // base64
+    return value
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((v) => redactSensitive(v, depth + 1))
+  }
+
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>
+    const result: Record<string, unknown> = {}
+    for (const key of Object.keys(obj)) {
+      if (SENSITIVE_KEYS.includes(key.toLowerCase())) {
+        result[key] = "[REDACTED]"
+      } else {
+        result[key] = redactSensitive(obj[key], depth + 1)
+      }
+    }
+    return result
+  }
+
+  return value
 }

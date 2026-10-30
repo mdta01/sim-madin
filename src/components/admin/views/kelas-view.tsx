@@ -5,8 +5,10 @@ import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api-client"
 import { useAdminStore } from "@/stores/admin-store"
 import { PageHeader } from "@/components/admin/shared/page-header"
 import { DataTableToolbar } from "@/components/admin/shared/data-table-toolbar"
-import { LoadingState, ErrorState, EmptyState } from "@/components/admin/shared/states"
+import { ErrorState, EmptyState } from "@/components/admin/shared/states"
 import { Breadcrumb } from "@/components/admin/shared/breadcrumb"
+import { useConfirmDialog } from "../shared/confirm-dialog"
+import { TableSkeleton, ListSkeleton } from "../shared/skeletons"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -36,6 +38,7 @@ function KelasList() {
   const [editing, setEditing] = useState<any | null>(null)
   const { toast } = useToast()
   const selectEntity = useAdminStore((s) => s.selectEntity)
+  const { confirm, ConfirmDialogComponent } = useConfirmDialog()
 
   const load = useCallback(async () => {
     try {
@@ -56,14 +59,19 @@ function KelasList() {
 
   useEffect(() => { load() }, [load])
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Yakin ingin menghapus kelas ini?")) return
-    try {
-      await apiDelete(`/api/admin/kelas/${id}`)
-      toast({ title: "Berhasil", description: "Kelas telah dihapus" })
+  const handleDelete = async (id: string, name: string) => {
+    const ok = await confirm({
+      title: "Hapus kelas?",
+      description: `Kelas "${name}" akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.`,
+      confirmLabel: "Hapus",
+      variant: "destructive",
+      onConfirm: async () => {
+        await apiDelete(`/api/admin/kelas/${id}`)
+      },
+    })
+    if (ok) {
+      toast({ title: "Berhasil", description: "Kelas dihapus" })
       load()
-    } catch (e: any) {
-      toast({ title: "Gagal", description: e.message, variant: "destructive" })
     }
   }
 
@@ -97,7 +105,7 @@ function KelasList() {
       />
       <Card>
         <CardContent className="p-0">
-          {loading ? <LoadingState /> :
+          {loading ? <TableSkeleton rows={6} cols={5} /> :
             error ? <ErrorState message={error} onRetry={load} /> :
             filteredData.length === 0 ? <EmptyState icon={<School className="h-5 w-5" />} title="Belum ada data kelas" /> :
             <div className="overflow-x-auto">
@@ -127,7 +135,7 @@ function KelasList() {
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-1">
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditing(k); setDialogOpen(true) }}><Pencil className="h-3.5 w-3.5" /></Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(k.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(k.id, k.name)}><Trash2 className="h-3.5 w-3.5" /></Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -140,6 +148,7 @@ function KelasList() {
       </Card>
 
       <KelasForm open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} guruList={guruList} onSuccess={load} />
+      {ConfirmDialogComponent}
     </div>
   )
 }
@@ -251,7 +260,7 @@ function KelasDetail({ id }: { id: string }) {
 
   useEffect(() => { load() }, [load])
 
-  if (loading) return <LoadingState className="py-20" />
+  if (loading) return <ListSkeleton items={4} className="py-20" />
   if (error || !data) return <ErrorState message={error || "Data tidak ditemukan"} onRetry={load} />
 
   return (

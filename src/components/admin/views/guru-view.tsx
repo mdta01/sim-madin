@@ -5,9 +5,11 @@ import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api-client"
 import { useAdminStore } from "@/stores/admin-store"
 import { PageHeader } from "@/components/admin/shared/page-header"
 import { DataTableToolbar } from "@/components/admin/shared/data-table-toolbar"
-import { LoadingState, ErrorState, EmptyState } from "@/components/admin/shared/states"
+import { ErrorState, EmptyState } from "@/components/admin/shared/states"
 import { StatusBadge } from "@/components/admin/shared/status-badge"
 import { Breadcrumb } from "@/components/admin/shared/breadcrumb"
+import { useConfirmDialog } from "../shared/confirm-dialog"
+import { TableSkeleton, ListSkeleton } from "../shared/skeletons"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -38,6 +40,7 @@ function GuruList() {
   const [editing, setEditing] = useState<any | null>(null)
   const { toast } = useToast()
   const selectEntity = useAdminStore((s) => s.selectEntity)
+  const { confirm, ConfirmDialogComponent } = useConfirmDialog()
 
   const load = useCallback(async () => {
     try {
@@ -57,14 +60,19 @@ function GuruList() {
 
   useEffect(() => { load() }, [load])
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Yakin ingin menghapus data guru ini?")) return
-    try {
-      await apiDelete(`/api/admin/guru/${id}`)
-      toast({ title: "Berhasil", description: "Guru telah dihapus" })
+  const handleDelete = async (id: string, name: string) => {
+    const ok = await confirm({
+      title: "Hapus guru?",
+      description: `Guru "${name}" akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.`,
+      confirmLabel: "Hapus",
+      variant: "destructive",
+      onConfirm: async () => {
+        await apiDelete(`/api/admin/guru/${id}`)
+      },
+    })
+    if (ok) {
+      toast({ title: "Berhasil", description: "Guru dihapus" })
       load()
-    } catch (e: any) {
-      toast({ title: "Gagal", description: e.message, variant: "destructive" })
     }
   }
 
@@ -94,7 +102,7 @@ function GuruList() {
       />
       <Card>
         <CardContent className="p-0">
-          {loading ? <LoadingState /> :
+          {loading ? <TableSkeleton rows={8} cols={5} /> :
             error ? <ErrorState message={error} onRetry={load} /> :
             data.length === 0 ? <EmptyState icon={<UserCog className="h-5 w-5" />} title="Belum ada data guru" /> :
             <div className="overflow-x-auto">
@@ -134,7 +142,7 @@ function GuruList() {
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-1">
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditing(g); setDialogOpen(true) }}><Pencil className="h-3.5 w-3.5" /></Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(g.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(g.id, g.name)}><Trash2 className="h-3.5 w-3.5" /></Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -147,6 +155,7 @@ function GuruList() {
       </Card>
 
       <GuruForm open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} onSuccess={load} />
+      {ConfirmDialogComponent}
     </div>
   )
 }
@@ -285,7 +294,7 @@ function GuruDetail({ id }: { id: string }) {
 
   useEffect(() => { load() }, [load])
 
-  if (loading) return <LoadingState className="py-20" />
+  if (loading) return <ListSkeleton items={4} className="py-20" />
   if (error || !data) return <ErrorState message={error || "Data tidak ditemukan"} onRetry={load} />
 
   return (
