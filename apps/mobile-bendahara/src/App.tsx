@@ -61,6 +61,7 @@ const Colors = {
   border: "#e2e8f0", danger: "#dc2626", dangerLight: "#fee2e2",
   warning: "#d97706", warningLight: "#fef3c7",
   success: "#059669", successLight: "#d1fae5",
+  info: "#3b82f6", infoLight: "#dbeafe",
   white: "#ffffff",
 }
 
@@ -139,11 +140,11 @@ function DashboardScreen({ onLogout, navigation }: { onLogout: () => void; navig
     { id: "bayar", title: "Input Pembayaran", icon: "cash", color: Colors.success, bg: Colors.successLight, onPress: () => navigation.navigate("PembayaranInput") },
     { id: "tunggakan", title: "Daftar Tunggakan", icon: "warning", color: Colors.danger, bg: Colors.dangerLight, onPress: () => navigation.navigate("TunggakanList") },
     { id: "tagihan", title: "Data Tagihan", icon: "receipt", color: Colors.primary, bg: Colors.primaryLight, onPress: () => navigation.navigate("TagihanList") },
-    { id: "riwayat", title: "Riwayat Pembayaran", icon: "time", color: Colors.info || "#3b82f6", bg: "#dbeafe", onPress: () => navigation.navigate("RiwayatList") },
+    { id: "riwayat", title: "Riwayat Pembayaran", icon: "time", color: Colors.info, bg: Colors.infoLight, onPress: () => navigation.navigate("RiwayatList") },
     { id: "kas", title: "Kas & Rekening", icon: "wallet", color: Colors.primary, bg: Colors.primaryLight, onPress: () => navigation.navigate("KasList") },
     { id: "transaksiKas", title: "Transaksi Kas", icon: "swap-horizontal", color: Colors.success, bg: Colors.successLight, onPress: () => navigation.navigate("TransaksiKas") },
     { id: "honorGuru", title: "Honor Guru", icon: "school", color: Colors.warning, bg: Colors.warningLight, onPress: () => navigation.navigate("HonorGuru") },
-    { id: "laporan", title: "Laporan Keuangan", icon: "document-text", color: Colors.info || "#3b82f6", bg: "#dbeafe", onPress: () => navigation.navigate("Laporan") },
+    { id: "laporan", title: "Laporan Keuangan", icon: "document-text", color: Colors.info, bg: Colors.infoLight, onPress: () => navigation.navigate("Laporan") },
   ]
 
   return (
