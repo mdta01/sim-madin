@@ -1,8 +1,8 @@
 # ============================================================================
 # Build APK locally on GitHub Actions runner (NO EAS Build quota needed!)
 # ============================================================================
+# Builds production APK (NOT development build) with debug signing.
 # Uses pre-installed Android SDK on ubuntu-latest runner.
-# No EAS Build cloud credits consumed — completely free, unlimited builds.
 # ============================================================================
 name: Build APK (Local)
 
@@ -33,30 +33,25 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Setup Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: "temurin"
           java-version: "17"
 
-      - name: Accept Android SDK licenses & install packages
+      - name: Accept Android SDK licenses
         run: |
-          # ubuntu-latest already has Android SDK at /usr/local/lib/android/sdk
           export ANDROID_HOME=/usr/local/lib/android/sdk
           export ANDROID_SDK_ROOT=$ANDROID_HOME
-          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
-          # Accept all licenses
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          # Install required SDK packages (only if not already installed)
           sdkmanager "platforms;android-35" "build-tools;35.0.0" 2>&1 || true
-          # NDK is already pre-installed on ubuntu-latest
           echo "✓ Android SDK ready"
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
 
@@ -75,17 +70,39 @@ jobs:
         run: |
           npx expo prebuild --platform android --no-install --clean
 
-      - name: Build APK with Gradle (Debug — auto-signed, installable on Android 5+)
+      - name: Sign release APK with debug keystore (so it's installable)
+        working-directory: apps/${{ matrix.app }}/android
+        run: |
+          # Patch build.gradle to use debug signing for release build
+          # This makes the APK installable on any device without needing
+          # a production keystore.
+          cat >> app/build.gradle << 'GRADLE_PATCH'
+
+          // === DEBUG SIGNING FOR RELEASE BUILD ===
+          // Makes release APK installable without production keystore
+          android {
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.debug
+                      minifyEnabled false
+                      shrinkResources false
+                  }
+              }
+          }
+          GRADLE_PATCH
+          echo "✓ Patched build.gradle: release uses debug signing"
+
+      - name: Build Release APK (production, no dev launcher)
         working-directory: apps/${{ matrix.app }}/android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleDebug -x lint --no-daemon --stacktrace
+          ./gradlew assembleRelease -x lint --no-daemon --stacktrace
 
       - name: Find APK
         id: find-apk
         working-directory: apps/${{ matrix.app }}
         run: |
-          APK_PATH=$(find android/app/build/outputs/apk/debug -name "*.apk" -type f | head -1)
+          APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" -type f | head -1)
           if [ -z "$APK_PATH" ]; then
             echo "❌ No APK found!"
             exit 1
@@ -95,7 +112,7 @@ jobs:
           ls -lh "$APK_PATH"
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ matrix.app }}-apk
           path: apps/${{ matrix.app }}/${{ steps.find-apk.outputs.apk_path }}
@@ -104,10 +121,11 @@ jobs:
 
       - name: Summary
         run: |
-          echo "## 📱 APK Built — ${{ matrix.app }}" >> $GITHUB_STEP_SUMMARY
+          echo "## 📱 Production APK Built — ${{ matrix.app }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Download the APK from the Artifacts section above." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **App**: \`${{ matrix.app }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Build**: Debug APK (auto-signed with debug key — installable on Android 5+)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Install**: Allow unknown sources on Android → install APK" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build**: Release APK (signed with debug key — installable on Android 5+)" >> $GITHUB_STEP_SUMMARY
+          echo "- **No dev launcher**: App langsung jalan production mode (tidak ada layar 'Development servers')" >> $GITHUB_STEP_SUMMARY
+          echo "- **Install**: Settings → Security → Unknown Sources → Install APK" >> $GITHUB_STEP_SUMMARY
