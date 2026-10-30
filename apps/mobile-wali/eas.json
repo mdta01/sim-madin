@@ -8,13 +8,15 @@
       "developmentClient": true,
       "distribution": "internal",
       "android": {
-        "buildType": "apk",
+        "gradleCommand": ":app:assembleDebug",
         "image": "latest"
       }
     },
     "preview": {
+      "developmentClient": true,
       "distribution": "internal",
       "android": {
+        "gradleCommand": ":app:assembleDebug",
         "buildType": "apk",
         "image": "latest"
       },
