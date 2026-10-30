@@ -19,18 +19,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
-  Command,
+  CommandDialog,
   CommandEmpty,
   CommandGroup,
   CommandItem,
   CommandList,
   CommandInput,
 } from "@/components/ui/command"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
 import { apiGet } from "@/lib/api-client"
 import { ThemeToggle } from "./theme-toggle"
 
@@ -169,57 +164,51 @@ export function Header({ onMenuClick }: HeaderProps) {
         />
       </div>
 
-      {/* Command palette — Popover wraps Command for keyboard-driven navigation */}
-      <Popover open={searchOpen} onOpenChange={setSearchOpen}>
-        <PopoverTrigger asChild>
-          <span className="hidden" aria-hidden /> {/* invisible trigger — we control via state */}
-        </PopoverTrigger>
-        <PopoverContent
-          sideOffset={8}
-          align="end"
-          className="w-[400px] p-0"
-          onOpenAutoFocus={(e) => e.preventDefault()}
-        >
-          <Command shouldFilter={true}>
-            <CommandInput placeholder="Cari menu atau halaman..." autoFocus />
-            <CommandList className="max-h-[300px]">
-              <CommandEmpty>Tidak ada hasil.</CommandEmpty>
-              {["main", "akademik", "pembelajaran", "keuangan", "sistem"].map((groupId) => {
-                const items = menuItems.filter((m) => m.group === groupId)
-                if (items.length === 0) return null
-                const groupLabel =
-                  groupId === "main" ? "Utama"
-                  : groupId === "akademik" ? "Akademik"
-                  : groupId === "pembelajaran" ? "Pembelajaran"
-                  : groupId === "keuangan" ? "Keuangan"
-                  : "Sistem"
-                return (
-                  <CommandGroup key={groupId} heading={groupLabel}>
-                    {items.map((item) => {
-                      const ItemIcon = (Icons as any)[item.icon] || Icons.Circle
-                      return (
-                        <CommandItem
-                          key={item.id}
-                          value={`${item.label} ${item.description}`}
-                          onSelect={() => handleSearchSelect(item.id)}
-                        >
-                          <ItemIcon className="h-4 w-4 mr-2 text-muted-foreground" />
-                          <div className="flex flex-col">
-                            <span className="text-sm">{item.label}</span>
-                            {item.description && (
-                              <span className="text-[11px] text-muted-foreground">{item.description}</span>
-                            )}
-                          </div>
-                        </CommandItem>
-                      )
-                    })}
-                  </CommandGroup>
-                )
-              })}
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
+      {/* Command palette — uses built-in CommandDialog (shadcn/ui pattern).
+          Triggered via Ctrl+K keyboard shortcut OR click on the search input. */}
+      <CommandDialog
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+        title="Cari menu atau halaman"
+        description="Pilih menu untuk navigasi cepat"
+      >
+        <CommandInput placeholder="Ketik nama menu..." autoFocus />
+        <CommandList className="max-h-[300px]">
+          <CommandEmpty>Tidak ada hasil.</CommandEmpty>
+          {["main", "akademik", "pembelajaran", "keuangan", "sistem"].map((groupId) => {
+            const items = menuItems.filter((m) => m.group === groupId)
+            if (items.length === 0) return null
+            const groupLabel =
+              groupId === "main" ? "Utama"
+              : groupId === "akademik" ? "Akademik"
+              : groupId === "pembelajaran" ? "Pembelajaran"
+              : groupId === "keuangan" ? "Keuangan"
+              : "Sistem"
+            return (
+              <CommandGroup key={groupId} heading={groupLabel}>
+                {items.map((item) => {
+                  const ItemIcon = (Icons as any)[item.icon] || Icons.Circle
+                  return (
+                    <CommandItem
+                      key={item.id}
+                      value={`${item.label} ${item.description}`}
+                      onSelect={() => handleSearchSelect(item.id)}
+                    >
+                      <ItemIcon className="h-4 w-4 mr-2 text-muted-foreground" />
+                      <div className="flex flex-col">
+                        <span className="text-sm">{item.label}</span>
+                        {item.description && (
+                          <span className="text-[11px] text-muted-foreground">{item.description}</span>
+                        )}
+                      </div>
+                    </CommandItem>
+                  )
+                })}
+              </CommandGroup>
+            )
+          })}
+        </CommandList>
+      </CommandDialog>
 
       {/* Notification bell — clicking navigates to notifikasi view */}
       <Button

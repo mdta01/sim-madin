@@ -29,6 +29,12 @@ export default function Error({
     console.error("[app/error] Unhandled error:", error)
   }, [error])
 
+  // Defensive access — `error` may be null/undefined during Next.js hydration
+  // recovery, which would itself throw if we access error.message/stack.
+  const errorMsg = error?.message ?? "Unknown error"
+  const errorStack = error?.stack
+  const errorDigest = error?.digest
+
   return (
     <div className="min-h-[60vh] flex items-center justify-center p-6">
       <div className="max-w-md w-full text-center space-y-4">
@@ -47,9 +53,9 @@ export default function Error({
                 Detail error (development only)
               </summary>
               <pre className="mt-2 text-[11px] overflow-auto whitespace-pre-wrap break-all text-red-600 dark:text-red-400">
-                {error.message}
-                {error.stack && `\n\n${error.stack}`}
-                {error.digest && `\n\nDigest: ${error.digest}`}
+                {errorMsg}
+                {errorStack && `\n\n${errorStack}`}
+                {errorDigest && `\n\nDigest: ${errorDigest}`}
               </pre>
             </details>
           )}
