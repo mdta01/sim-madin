@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
     }
 
     await logAudit(session, "CREATE", "PEMBAYARAN", payment.id, {
-      invoiceNo, santri: payment.santri.name, amount: payment.amount, method: payment.paymentMethod,
+      invoiceNo, santri: payment.santri?.name || "-", amount: payment.amount, method: payment.paymentMethod,
     }, req)
     return NextResponse.json({ data: payment })
   } catch (error) {

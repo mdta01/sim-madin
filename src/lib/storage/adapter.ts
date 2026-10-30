@@ -146,7 +146,7 @@ function getLocalStorageAdapter(): StorageAdapter {
  */
 async function getFirebaseStorageAdapter(): Promise<StorageAdapter> {
   try {
-    const admin = await import("firebase-admin")
+    const admin: any = await import("firebase-admin")
     const bucket = admin.storage().bucket()
 
     return {

@@ -2,25 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireApiPermission("mapel:read", req)
-  if (guard.error) return guard.error
-  try {
-    const { id } = await params
-    const mapel = await db.mataPelajaran.findUnique({
-      where: { id },
-      include: {
-        _count: { select: { jadwal: true, nilai: true } },
-        jadwal: { take: 20, include: { kelas: true, guru: { select: { name: true } } }, orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }] },
-      },
-    })
-    if (!mapel) return NextResponse.json({ error: "Mapel tidak ditemukan" }, { status: 404 })
-    return NextResponse.json({ data: mapel })
-  } catch (error) {
-    console.error("[mapel get] error:", error)
-    return NextResponse.json({ error: "Gagal memuat detail mapel" }, { status: 500 })
-  }
-}
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const guard = await requireApiPermission("mapel:update", req)

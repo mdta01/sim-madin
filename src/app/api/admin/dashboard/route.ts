@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
   try {
     const responseData = await withRetry(async () => {
       // Single raw SQL for ALL counts (1 round-trip instead of 10+)
-      const counts = await db.$queryRaw`
+      const counts: any = await db.$queryRaw`
         SELECT
           (SELECT COUNT(*) FROM "Santri" WHERE "deletedAt" IS NULL AND status = 'AKTIF') as "totalSantri",
           (SELECT COUNT(*) FROM "Guru" WHERE "deletedAt" IS NULL AND status = 'AKTIF') as "totalGuru",

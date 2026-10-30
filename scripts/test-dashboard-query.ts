@@ -8,7 +8,7 @@ async function main() {
     console.log("✅ DB OK, users:", count)
 
     // Test raw SQL (the one used in dashboard)
-    const counts = await db.$queryRaw`
+    const counts: any = await db.$queryRaw`
       SELECT
         (SELECT COUNT(*) FROM "Santri" WHERE "deletedAt" IS NULL AND status = 'AKTIF') as "totalSantri",
         (SELECT COUNT(*) FROM "Payment" WHERE status = 'VERIFIED' AND "paymentDate" >= date_trunc('month', CURRENT_DATE)) as "monthIncome"

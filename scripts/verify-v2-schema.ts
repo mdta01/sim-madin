@@ -16,7 +16,7 @@ async function main() {
 
   for (const t of tables) {
     try {
-      // @ts-expect-error - dynamic model access on Prisma Client
+      // @ts-ignore - dynamic model access on Prisma Client
       const count = await (db as any)[t].count()
       console.log(`  ✅ ${t.padEnd(20)} exists — ${count} rows`)
     } catch (e: any) {

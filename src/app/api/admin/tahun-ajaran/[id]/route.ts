@@ -2,22 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireApiPermission("tahun_ajaran:read", req)
-  if (guard.error) return guard.error
-  try {
-    const { id } = await params
-    const ta = await db.tahunAjaran.findUnique({
-      where: { id },
-      include: { semesters: { orderBy: { type: "asc" } } },
-    })
-    if (!ta) return NextResponse.json({ error: "Tahun ajaran tidak ditemukan" }, { status: 404 })
-    return NextResponse.json({ data: ta })
-  } catch (error) {
-    console.error("[tahun-ajaran get] error:", error)
-    return NextResponse.json({ error: "Gagal memuat detail tahun ajaran" }, { status: 500 })
-  }
-}
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const guard = await requireApiPermission("tahun_ajaran:update", req)

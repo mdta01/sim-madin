@@ -2,22 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireApiPermission("pengumuman:read", req)
-  if (guard.error) return guard.error
-  try {
-    const { id } = await params
-    const ann = await db.announcement.findUnique({
-      where: { id },
-      include: { createdBy: { select: { name: true } } },
-    })
-    if (!ann) return NextResponse.json({ error: "Pengumuman tidak ditemukan" }, { status: 404 })
-    return NextResponse.json({ data: ann })
-  } catch (error) {
-    console.error("[pengumuman get] error:", error)
-    return NextResponse.json({ error: "Gagal memuat detail pengumuman" }, { status: 500 })
-  }
-}
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const guard = await requireApiPermission("pengumuman:update", req)

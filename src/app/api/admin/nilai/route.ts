@@ -19,11 +19,11 @@ export async function GET(req: NextRequest) {
     let semesterId = semId
     if (!tahunAjaranId) {
       const ta = await db.tahunAjaran.findFirst({ where: { isActive: true } })
-      tahunAjaranId = ta?.id
+      tahunAjaranId = ta?.id ?? null
     }
     if (!semesterId) {
       const sem = await db.semester.findFirst({ where: { isActive: true } })
-      semesterId = sem?.id
+      semesterId = sem?.id ?? null
     }
 
     const where: any = {}
@@ -70,11 +70,11 @@ export async function POST(req: NextRequest) {
     let semesterId = body.semesterId
     if (!tahunAjaranId) {
       const ta = await db.tahunAjaran.findFirst({ where: { isActive: true } })
-      tahunAjaranId = ta?.id
+      tahunAjaranId = ta?.id ?? null
     }
     if (!semesterId) {
       const sem = await db.semester.findFirst({ where: { isActive: true } })
-      semesterId = sem?.id
+      semesterId = sem?.id ?? null
     }
     if (!tahunAjaranId || !semesterId) {
       return NextResponse.json({ error: "Tahun ajaran/semester aktif tidak ditemukan" }, { status: 400 })

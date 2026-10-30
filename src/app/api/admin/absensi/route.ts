@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     let tahunAjaranId = taId
     if (!tahunAjaranId) {
       const ta = await db.tahunAjaran.findFirst({ where: { isActive: true } })
-      tahunAjaranId = ta?.id
+      tahunAjaranId = ta?.id ?? null
     }
 
     const where: any = {}

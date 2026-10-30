@@ -33,7 +33,7 @@ interface MyProfile {
 }
 
 export function ProfileView() {
-  const [profile, setProfile] = useState<MyProfile | null>(null)
+  const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState("profile")
@@ -50,7 +50,7 @@ export function ProfileView() {
     try {
       setLoading(true)
       setError(null)
-      const res = await apiGet<MyProfile>("/api/admin/me")
+      const res = await apiGet<{ data: MyProfile }>("/api/admin/me")
       setProfile(res.data)
       setForm({
         name: res.data.name,

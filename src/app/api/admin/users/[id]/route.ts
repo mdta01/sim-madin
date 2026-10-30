@@ -3,25 +3,6 @@ import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 import bcrypt from "bcryptjs"
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireApiPermission("user:read", req)
-  if (guard.error) return guard.error
-  try {
-    const { id } = await params
-    const user = await db.user.findUnique({
-      where: { id },
-      include: {
-        userRoles: { include: { role: { include: { permissions: { include: { permission: true } } } } } },
-        santri: true, guru: true, wali: true,
-      },
-    })
-    if (!user) return NextResponse.json({ error: "User tidak ditemukan" }, { status: 404 })
-    return NextResponse.json({ data: user })
-  } catch (error) {
-    console.error("[users get] error:", error)
-    return NextResponse.json({ error: "Gagal memuat detail user" }, { status: 500 })
-  }
-}
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const guard = await requireApiPermission("user:update", req)

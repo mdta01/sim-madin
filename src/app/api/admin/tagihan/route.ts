@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     let tahunAjaranId = taId
     if (!tahunAjaranId) {
       const ta = await db.tahunAjaran.findFirst({ where: { isActive: true } })
-      tahunAjaranId = ta?.id
+      tahunAjaranId = ta?.id ?? null
     }
 
     const where: any = {}
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
         ? await db.santri.findMany({ where: { id: { in: santriIds }, deletedAt: null, status: "AKTIF" } })
         : await db.santri.findMany({ where: { kelasId, deletedAt: null, status: "AKTIF" } })
 
-      const created = []
+      const created: any[] = []
       for (const santri of santriList) {
         const t = await db.tagihan.create({
           data: {

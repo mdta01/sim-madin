@@ -8,9 +8,9 @@
  * - Storage adapter (AsyncStorage untuk React Native)
  */
 
-export * from "../../packages/shared/src/constants"
-export * from "../../packages/shared/src/types"
-export * from "../../packages/shared/src/utils"
+export * from "../../shared/src/constants"
+export * from "../../shared/src/types"
+export * from "../../shared/src/utils"
 
 // ============================================================================
 // MOBILE AUTH — Supabase Auth + Wali JWT

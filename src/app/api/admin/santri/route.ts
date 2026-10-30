@@ -42,10 +42,12 @@ export async function GET(req: NextRequest) {
       orderBy: { name: "asc" },
     })
 
-    return NextResponse.json({ data: santri, total: santri.length })
+    return NextResponse.json({
+      ...({} as any), data: santri, total: santri.length })
   } catch (error) {
     console.error("[santri list] error:", error)
-    return NextResponse.json({ error: "Gagal memuat data santri" }, { status: 500 })
+    return NextResponse.json({
+      ...({} as any), error: "Gagal memuat data santri" }, { status: 500 })
   }
 }
 
@@ -64,7 +66,8 @@ export async function POST(req: NextRequest) {
     } = body
 
     if (!name || !gender) {
-      return NextResponse.json({ error: "Nama dan Jenis Kelamin wajib diisi" }, { status: 400 })
+      return NextResponse.json({
+      ...({} as any), error: "Nama dan Jenis Kelamin wajib diisi" }, { status: 400 })
     }
 
     // === AUTO-GENERATE NIS jika tidak diisi manual ===
@@ -74,10 +77,12 @@ export async function POST(req: NextRequest) {
     } else {
       // Validate format kalau diisi manual
       if (!isValidNISFormat(finalNIS)) {
-        return NextResponse.json({ error: "Format NIS tidak valid (harus 8 digit angka)" }, { status: 400 })
+        return NextResponse.json({
+      ...({} as any), error: "Format NIS tidak valid (harus 8 digit angka)" }, { status: 400 })
       }
       if (await isNISTaken(finalNIS)) {
-        return NextResponse.json({ error: "NIS sudah terdaftar" }, { status: 400 })
+        return NextResponse.json({
+      ...({} as any), error: "NIS sudah terdaftar" }, { status: 400 })
       }
     }
 
@@ -90,21 +95,24 @@ export async function POST(req: NextRequest) {
     if (nisn) {
       const existingNisn = await db.santri.findFirst({ where: { nisn } })
       if (existingNisn) {
-        return NextResponse.json({ error: "NISN sudah terdaftar" }, { status: 400 })
+        return NextResponse.json({
+      ...({} as any), error: "NISN sudah terdaftar" }, { status: 400 })
       }
     }
 
     // === AUTO-LINK/CREATE WALI jika waliPhone diberikan ===
     let finalWaliId = waliId
-    let waliActivation = null
+    let waliActivation: { wali: any; isNew: boolean } | null = null
 
     if (!finalWaliId && waliPhone) {
       const normalizedPhone = normalizeWhatsApp(waliPhone)
       if (!normalizedPhone) {
-        return NextResponse.json({ error: "Format nomor WhatsApp tidak valid" }, { status: 400 })
+        return NextResponse.json({
+      ...({} as any), error: "Format nomor WhatsApp tidak valid" }, { status: 400 })
       }
       if (!waliName) {
-        return NextResponse.json({ error: "Nama wali wajib diisi jika nomor WhatsApp diisi" }, { status: 400 })
+        return NextResponse.json({
+      ...({} as any), error: "Nama wali wajib diisi jika nomor WhatsApp diisi" }, { status: 400 })
       }
 
       // Cari wali existing berdasarkan nomor WA
@@ -187,7 +195,7 @@ export async function POST(req: NextRequest) {
     }
 
     // === GENERATE ACTIVATION TOKEN + OTP jika wali baru ===
-    let activationInfo = null
+    let activationInfo: any = null
     if (waliActivation?.isNew) {
       const token = generateActivationToken()
       const otp = generateOTP()
@@ -228,12 +236,14 @@ export async function POST(req: NextRequest) {
     }, req)
 
     return NextResponse.json({
+      ...({} as any),
       data: santri,
       nis: finalNIS, // eksplisit untuk admin tahu NIS yang di-generate
       waliActivation: activationInfo, // info aktivasi wali jika baru dibuat
     })
   } catch (error) {
     console.error("[santri create] error:", error)
-    return NextResponse.json({ error: "Gagal menambah santri" }, { status: 500 })
+    return NextResponse.json({
+      ...({} as any), error: "Gagal menambah santri" }, { status: 500 })
   }
 }

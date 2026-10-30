@@ -157,7 +157,7 @@ async function main() {
     { code: "SKI", name: "Sejarah Kebudayaan Islam", category: "DINIYAH", kkm: 70, durationMnt: 60 },
     { code: "BAHASA_ARAB", name: "Bahasa Arab", category: "BAHASA", kkm: 70, durationMnt: 60 },
   ]
-  const mapelList: { id: string }[] = []
+  const mapelList: any[] = []
   for (const m of mapelData) {
     const r = await db.mataPelajaran.upsert({ where: { code: m.code }, update: {}, create: { ...m, sortOrder: mapelList.length + 1 } })
     mapelList.push(r)
@@ -171,7 +171,7 @@ async function main() {
     { name: "Ustadzah Siti Khadijah, S.Pd", gender: "P", nip: "199207052013012004", specialization: "Bahasa Arab", phone: "081234500004" },
     { name: "Ustadz Abdullah Hakim, S.Pd.I", gender: "L", nip: "198606182009011005", specialization: "Al-Qur'an", phone: "081234500005" },
   ]
-  const guruList: { id: string }[] = []
+  const guruList: any[] = []
   for (const g of guruData) {
     const r = await db.guru.create({ data: { ...g, joinDate: new Date("2020-07-15"), address: "Jl. Madrasah No. 1", status: "AKTIF" } })
     guruList.push(r)
@@ -183,7 +183,7 @@ async function main() {
     { code: "MDA-2A", name: "Kelas 2 Madrasah Awwaliyah A", level: "MDA-2", capacity: 25, sortOrder: 2, waliKelasId: guruList[1].id },
     { code: "MDA-3A", name: "Kelas 3 Madrasah Awwaliyah A", level: "MDA-3", capacity: 25, sortOrder: 3, waliKelasId: guruList[2].id },
   ]
-  const kelasList: { id: string }[] = []
+  const kelasList: any[] = []
   for (const k of kelasData) {
     const r = await db.kelas.create({ data: k })
     kelasList.push(r)
@@ -201,7 +201,7 @@ async function main() {
     { name: "Ibu Aminah", phone: "6281234511005", relationship: "IBU", email: "aminah.wali@test.com", occupation: "Guru", address: "Jl. Dahlia No. 3" },
     { name: "Bapak Ridwan", phone: null, relationship: "AYAH", email: null, occupation: "Pedagang", address: "Jl. Flamboyan No. 7" }, // wali tanpa WA (PENDING_NO_PHONE)
   ]
-  const waliList: { id: string; phone: string | null }[] = []
+  const waliList: any[] = []
   for (let i = 0; i < waliData.length; i++) {
     const w = waliData[i]
     const activationStatus = w.phone ? (i === 0 || i === 2 ? "ACTIVE" : "PENDING") : "PENDING_NO_PHONE"
@@ -235,7 +235,7 @@ async function main() {
     { name: "Ruqayyah Aulia", gender: "P", waliIdx: 3 },
     { name: "Hamzah Pratama", gender: "L", waliIdx: 4 },
   ]
-  const santriList: { id: string; kelasId: string | null; waliId: string | null }[] = []
+  const santriList: any[] = []
   // NIS auto-generate: format YYNNNNNN (tahun 2 digit + urut 6 digit per tahun)
   let nisSeq = 1
   for (let i = 0; i < santriNames.length; i++) {

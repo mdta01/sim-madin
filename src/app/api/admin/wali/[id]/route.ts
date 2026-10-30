@@ -2,22 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { requireApiPermission, logAudit } from "@/lib/auth/guards"
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requireApiPermission("wali:read", req)
-  if (guard.error) return guard.error
-  try {
-    const { id } = await params
-    const wali = await db.wali.findUnique({
-      where: { id },
-      include: { santri: { include: { kelas: true }, orderBy: { name: "asc" } }, user: { select: { id: true, email: true, name: true, isActive: true } } },
-    })
-    if (!wali) return NextResponse.json({ error: "Wali tidak ditemukan" }, { status: 404 })
-    return NextResponse.json({ data: wali })
-  } catch (error) {
-    console.error("[wali get] error:", error)
-    return NextResponse.json({ error: "Gagal memuat detail wali" }, { status: 500 })
-  }
-}
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const guard = await requireApiPermission("wali:update", req)

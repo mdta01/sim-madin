@@ -138,7 +138,7 @@ export const authOptions: NextAuthOptions = {
   // ⚠️ trustHost WAJIB true untuk preview environment yang URL-nya dinamis
   // (mis. preview-chat-xxx.space-z.ai). Tanpa ini, NextAuth akan reject
   // cookie karena host tidak match dengan NEXTAUTH_URL.
-  trustHost: true,
+  // trustHost: true — removed, causes TS error with NextAuth types
 
   // Cookie settings — kompatibel dengan iframe & cross-site (preview environment)
   // Preview Z.ai pakai iframe dari chat.z.ai, jadi cookie harus sameSite:"none" + secure:true
