@@ -62,3 +62,4 @@ server.log
 !/uploads/.gitkeep
 /.zscripts/dev.pid.netlify/
 .vercel/
+upload/
