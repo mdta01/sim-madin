@@ -38,7 +38,7 @@ model User {
   name          String
   phone         String?
   avatarUrl     String?
-  firebaseUid   String?  @unique // untuk integrasi Supabase Auth / Firebase Auth
+  firebaseUid   String?  @unique // ⚠️ Legacy field name — sekarang menyimpan Supabase Auth UID (rename ke supabaseUid akan break migration existing). Akses via prisma.user.firebaseUid.
   isActive      Boolean  @default(true)
   lastLoginAt   DateTime?
   createdAt     DateTime @default(now())

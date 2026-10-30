@@ -2,16 +2,62 @@
  * SEED SCRIPT - Madrasah Diniyah Terpadu MVP V1
  * ============================================================================
  * Menjalankan seed: `bun run db:seed`
+ *
+ * Setelah Supabase migration:
+ *   1. Set env vars: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
+ *      SUPABASE_SERVICE_ROLE_KEY, DATABASE_URL (Postgres)
+ *   2. Run: npx prisma migrate dev --name init_supabase
+ *   3. Run: bun run db:seed (script ini)
+ *
+ * Script ini akan:
+ *   - Create roles + permissions di Prisma DB
+ *   - Create admin & demo users di Supabase Auth (jika service_role di-set)
+ *   - Link Supabase Auth UID → Prisma User.supabaseUid
+ *   - Seed demo data (kelas, mapel, guru, santri, tagihan, dll)
+ * ============================================================================
  */
 
 import { PrismaClient } from "@prisma/client"
 import bcrypt from "bcryptjs"
+import { createSupabaseAuthUser } from "../src/lib/supabase/auth-admin"
 
 const db = new PrismaClient()
 
 // Default password untuk semua user demo: "admin123"
 const DEFAULT_PASSWORD = "admin123"
 const DEFAULT_PASSWORD_HASH = bcrypt.hashSync(DEFAULT_PASSWORD, 10)
+
+/**
+ * Sync user ke Supabase Auth + link ke Prisma User record.
+ * Best-effort: jika Supabase tidak terkonfigurasi, skip dengan warning.
+ */
+async function syncUserToSupabaseAuth(opts: {
+  email: string
+  password: string
+  fullName: string
+  prismaCreate: () => Promise<any>
+  prismaUpdate: (supabaseUid: string) => Promise<any>
+}): Promise<{ supabaseUid: string | null }> {
+  try {
+    const supabaseUser = await createSupabaseAuthUser({
+      email: opts.email,
+      password: opts.password,
+      fullName: opts.fullName,
+    })
+    // Link Supabase UID ke Prisma User
+    await opts.prismaUpdate(supabaseUser.id)
+    console.log(`   ✅ Synced ${opts.email} to Supabase Auth (uid: ${supabaseUser.id.slice(0, 8)}...)`)
+    return { supabaseUid: supabaseUser.id }
+  } catch (e: any) {
+    if (e.message?.includes("already terdaftar")) {
+      console.log(`   ⏭️  ${opts.email} already exists in Supabase Auth — skipping create`)
+      return { supabaseUid: null }
+    }
+    console.warn(`   ⚠️  Failed to sync ${opts.email} to Supabase Auth: ${e.message}`)
+    console.warn(`      User created in Prisma DB only. Set SUPABASE_SERVICE_ROLE_KEY to enable Auth sync.`)
+    return { supabaseUid: null }
+  }
+}
 
 async function main() {
   console.log("🌱 Seeding database...")
@@ -97,12 +143,24 @@ async function main() {
   }
 
   // 3. USER SUPER ADMIN DEFAULT + demo users per role
+  //    Sync ke Supabase Auth jika SUPABASE_SERVICE_ROLE_KEY di-set
+  console.log("\n👤 Creating users (Prisma DB + Supabase Auth sync)...")
   const superAdminUser = await db.user.upsert({
     where: { email: "admin@madrasah.test" },
     update: { passwordHash: DEFAULT_PASSWORD_HASH },
     create: { email: "admin@madrasah.test", username: "admin", passwordHash: DEFAULT_PASSWORD_HASH, name: "Administrator Sistem", phone: "081234567890", isActive: true },
   })
   await db.userRole.upsert({ where: { userId_roleId: { userId: superAdminUser.id, roleId: superAdminRole.id } }, update: {}, create: { userId: superAdminUser.id, roleId: superAdminRole.id } })
+  // Sync ke Supabase Auth
+  await syncUserToSupabaseAuth({
+    email: "admin@madrasah.test",
+    password: DEFAULT_PASSWORD,
+    fullName: "Administrator Sistem",
+    prismaCreate: async () => superAdminUser,
+    prismaUpdate: async (supabaseUid) => {
+      await db.user.update({ where: { id: superAdminUser.id }, data: { firebaseUid: supabaseUid } })
+    },
+  })
 
   // Demo users untuk tiap role (untuk testing login sebagai role berbeda)
   const demoUsersData = [
@@ -125,6 +183,16 @@ async function main() {
       where: { userId_roleId: { userId: u.id, roleId: role.id } },
       update: {},
       create: { userId: u.id, roleId: role.id },
+    })
+    // Sync ke Supabase Auth
+    await syncUserToSupabaseAuth({
+      email: du.email,
+      password: DEFAULT_PASSWORD,
+      fullName: du.name,
+      prismaCreate: async () => u,
+      prismaUpdate: async (supabaseUid) => {
+        await db.user.update({ where: { id: u.id }, data: { firebaseUid: supabaseUid } })
+      },
     })
   }
   console.log(`   - Default password for all users: "${DEFAULT_PASSWORD}"`)

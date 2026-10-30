@@ -1,32 +1,21 @@
-import { getServerSession } from "next-auth"
 import type { NextRequest } from "next/server"
 import { headers } from "next/headers"
-import { authOptions } from "@/lib/auth/auth-options"
 import { db } from "@/lib/db"
 import { NextResponse } from "next/server"
-import { verifyBearerToken, isFirebaseConfigured } from "@/lib/firebase/admin"
 import { verifySupabaseToken, isSupabaseConfigured } from "@/lib/supabase/admin"
 
 /**
  * Auth Helpers — Server-side
  * ============================================================================
- * Mendukung 3 mode autentikasi (priority order):
+ * Supabase-only authentication (NextAuth & Firebase fallbacks sudah dihapus).
  *
- * 1. Supabase Auth (production) — Bearer token via Authorization header
- *    Mobile apps login via Supabase Auth SDK, kirim access_token ke API.
- *    Server verify via Supabase Admin SDK.
+ * Auth flow:
+ *   - Web admin login via login-overlay.tsx → supabase.auth.signInWithPassword()
+ *   - Mobile apps login via Supabase Auth SDK → dapat access_token
+ *   - Client kirim access_token via Authorization: Bearer <token>
+ *   - Server verify via Supabase Auth REST API (verifySupabaseToken)
  *
- * 2. Firebase Auth (legacy/alternative) — Bearer token via Authorization header
- *    Untuk mobile apps yang pakai Firebase Auth.
- *
- * 3. NextAuth (web admin) — cookie-based, otomatis dikirim browser
- *    Untuk web Super Admin.
- *
- * Auto-detect:
- * - Cek Authorization header dulu (Supabase → Firebase → fallback ke NextAuth)
- * - Fallback ke NextAuth session cookie (web)
- *
- * Helper functions tetap sama untuk caller.
+ * Jika user belum login atau token expired → return null → caller kirim 401.
  * ============================================================================
  */
 
@@ -45,12 +34,12 @@ export interface AppSession {
 
 /**
  * Ambil session saat ini (atau null jika belum login).
- * Auto-detect: cek Bearer token (mobile) dulu, fallback ke NextAuth session (web).
  *
- * Priority:
- * 1. Supabase Bearer token (jika SUPABASE_* env di-set)
- * 2. Firebase Bearer token (jika FIREBASE_* env di-set)
- * 3. NextAuth session cookie (web)
+ * Verifikasi Bearer token via Supabase Auth API. Token dikirim via
+ * Authorization header oleh client (web admin & mobile apps).
+ *
+ * Note: NextAuth fallback sudah dihapus. Web admin HARUS kirim Supabase
+ * access_token via Authorization header (lihat src/lib/api-client.ts).
  */
 export async function getSession(req?: { headers: Headers }): Promise<AppSession | null> {
   // Get headers — either from req param or from Next.js headers() function
@@ -59,34 +48,26 @@ export async function getSession(req?: { headers: Headers }): Promise<AppSession
     try {
       headerObj = await headers()
     } catch {
-      // headers() might not work in all contexts
+      // headers() might not work in all contexts (e.g. during static gen)
     }
   }
 
-  // 1. Cek Bearer token (untuk API calls from browser with Supabase Auth)
-  if (headerObj) {
-    const authHeader = headerObj.get("authorization")
-    if (authHeader?.startsWith("Bearer ")) {
-      const token = authHeader.slice(7)
+  if (!headerObj) return null
 
-      // Try Supabase token verification
-      if (isSupabaseConfigured()) {
-        const supabaseSession = await verifySupabaseToken(token)
-        if (supabaseSession) return supabaseSession
-      }
+  // Cek Bearer token
+  const authHeader = headerObj.get("authorization")
+  if (!authHeader?.startsWith("Bearer ")) return null
 
-      // Fallback: Firebase token verification
-      if (isFirebaseConfigured()) {
-        const firebaseSession = await verifyBearerToken(authHeader)
-        if (firebaseSession) return firebaseSession
-      }
-    }
+  const token = authHeader.slice(7)
+
+  // Supabase token verification (primary & only mode)
+  if (isSupabaseConfigured()) {
+    return await verifySupabaseToken(token)
   }
 
-  // 2. Fallback ke NextAuth session (untuk web — cookie-based)
-  const session = await getServerSession(authOptions)
-  if (!session?.user) return null
-  return session as unknown as AppSession
+  // Supabase tidak terkonfigurasi — return null
+  console.warn("[auth] Supabase not configured. Set NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY env vars.")
+  return null
 }
 
 /**

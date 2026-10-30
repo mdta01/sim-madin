@@ -20,7 +20,7 @@ import path from "path"
 import { randomBytes } from "crypto"
 
 export interface StorageAdapter {
-  type: "local" | "firebase" | "r2"
+  type: "local" | "r2" | "supabase"
   upload(file: Buffer, options: UploadOptions): Promise<UploadResult>
   delete(url: string): Promise<void>
   getSignedUrl?(url: string, expiresIn?: number): Promise<string>
@@ -58,44 +58,146 @@ export function isR2Configured(): boolean {
 }
 
 /**
- * Detect apakah Firebase Storage dikonfigurasi
+ * Detect apakah Firebase Storage dikonfigurasi (legacy — sudah deprecated)
+ * Tetap di-keep untuk backward compatibility dengan env vars lama, tapi
+ * adapter Firebase Storage sudah dihapus. Akan return false di production.
+ * Untuk storage baru, pakai Supabase Storage (auto-detect) atau Cloudflare R2.
  */
 export function isFirebaseStorageConfigured(): boolean {
-  return !!(
-    process.env.FIREBASE_PROJECT_ID &&
-    process.env.FIREBASE_STORAGE_BUCKET &&
-    process.env.FIREBASE_CLIENT_EMAIL &&
-    process.env.FIREBASE_PRIVATE_KEY
-  )
+  // Always false — Firebase Storage adapter sudah dihapus
+  // Fallback ke Supabase Storage (yang sudah include di Supabase project)
+  return false
 }
 
 /**
- * Get storage type yang aktif
+ * Get storage type yang aktif (sync — for display purposes)
  */
-export function getActiveStorageType(): "local" | "firebase" | "r2" {
+export function getActiveStorageType(): "local" | "r2" | "supabase" {
   if (isR2Configured()) return "r2"
-  if (isFirebaseStorageConfigured()) return "firebase"
+  if (isSupabaseStorageConfigured()) return "supabase"
   return "local"
 }
 
 /**
  * Get storage adapter berdasarkan env config (auto-detect)
- * Priority: R2 > Firebase > Local
+ * Priority: R2 > Supabase > Local
  */
 export async function getStorageAdapter(): Promise<StorageAdapter> {
-  // 1. Cloudflare R2 (preferred for production)
+  // 1. Cloudflare R2 (preferred for production — cheapest at scale)
   if (isR2Configured()) {
     const { getR2StorageAdapter } = await import("./r2-adapter")
     return await getR2StorageAdapter()
   }
 
-  // 2. Firebase Storage (legacy/alternative)
-  if (isFirebaseStorageConfigured()) {
-    return await getFirebaseStorageAdapter()
+  // 2. Supabase Storage (default — included with Supabase project, free 1GB)
+  if (isSupabaseStorageConfigured()) {
+    return await getSupabaseStorageAdapter()
   }
 
-  // 3. Local storage (dev fallback)
+  // 3. Local storage (dev fallback — saves to public/uploads/)
   return getLocalStorageAdapter()
+}
+
+/**
+ * Detect apakah Supabase Storage dikonfigurasi (URL + anon key + service role).
+ * Supabase project sudah include 1GB Storage free — paling praktis untuk MVP.
+ */
+function isSupabaseStorageConfigured(): boolean {
+  return !!(
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  )
+}
+
+/**
+ * Supabase Storage Adapter — pakai service_role key (server-only, bypass RLS)
+ *
+ * Bucket: 'sim-madin-uploads' (auto-created kalau belum ada — first upload)
+ * Public read URLs: https://[project-ref].supabase.co/storage/v1/object/public/[bucket]/[path]
+ */
+async function getSupabaseStorageAdapter(): Promise<StorageAdapter> {
+  const { createClient } = await import("@supabase/supabase-js")
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+  const supabase = createClient(url, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+
+  const BUCKET = "sim-madin-uploads"
+
+  // Ensure bucket exists (idempotent — first call creates, subsequent calls no-op)
+  try {
+    const { data: buckets } = await supabase.storage.listBuckets()
+    if (!buckets?.find((b) => b.name === BUCKET)) {
+      await supabase.storage.createBucket(BUCKET, {
+        public: true, // allow public read (untuk img src embedding)
+        fileSizeLimit: MAX_FILE_SIZE,
+        allowedMimeTypes: ALLOWED_TYPES,
+      })
+      console.log(`[storage] Created Supabase bucket: ${BUCKET}`)
+    }
+  } catch (e) {
+    console.warn(`[storage] Bucket setup skipped (may already exist):`, (e as any).message)
+  }
+
+  return {
+    type: "supabase",
+
+    async upload(file: Buffer, options: UploadOptions): Promise<UploadResult> {
+      const ext = path.extname(options.filename).toLowerCase() || ""
+      const safePrefix = (options.prefix || "uploads").replace(/[^a-zA-Z0-9-_/]/g, "")
+      const filename = `${safePrefix}/${Date.now()}-${randomBytes(8).toString("hex")}${ext}`
+
+      const { data, error } = await supabase.storage
+        .from(BUCKET)
+        .upload(filename, file, {
+          contentType: options.contentType,
+          upsert: false,
+        })
+
+      if (error) {
+        throw new Error(`Supabase Storage upload failed: ${error.message}`)
+      }
+
+      // Public URL — Supabase Storage auto-generate ini untuk public bucket
+      const { data: publicUrlData } = supabase.storage
+        .from(BUCKET)
+        .getPublicUrl(filename)
+
+      return {
+        url: publicUrlData.publicUrl,
+        filename: options.filename, // original filename (display)
+        size: file.length,
+        contentType: options.contentType,
+        storagePath: filename, // path di bucket (untuk delete nanti)
+      }
+    },
+
+    async delete(url: string): Promise<void> {
+      // Extract path dari public URL:
+      // https://[ref].supabase.co/storage/v1/object/public/[bucket]/[path]
+      const publicPrefix = `/storage/v1/object/public/${BUCKET}/`
+      const idx = url.indexOf(publicPrefix)
+      if (idx < 0) {
+        console.warn(`[storage:supabase] Cannot extract path from URL: ${url}`)
+        return
+      }
+      const filePath = decodeURIComponent(url.slice(idx + publicPrefix.length))
+
+      const { error } = await supabase.storage.from(BUCKET).remove([filePath])
+      if (error) {
+        console.error(`[storage:supabase] Delete failed:`, error.message)
+      }
+    },
+
+    async getSignedUrl(url: string, expiresIn = 3600): Promise<string> {
+      // For public buckets, URL itself is the public URL — no signing needed.
+      // This method exists for API compat dengan R2 adapter.
+      return url
+    },
+  }
 }
 
 /**
@@ -137,79 +239,6 @@ function getLocalStorageAdapter(): StorageAdapter {
         }
       }
     },
-  }
-}
-
-/**
- * Firebase Storage Adapter (production mode)
- * Lazy load agar tidak crash di dev mode tanpa firebase-admin
- */
-async function getFirebaseStorageAdapter(): Promise<StorageAdapter> {
-  try {
-    const admin: any = await import("firebase-admin")
-    const bucket = admin.storage().bucket()
-
-    return {
-      type: "firebase",
-
-      async upload(file: Buffer, options: UploadOptions): Promise<UploadResult> {
-        const ext = options.filename.split(".").pop() || "bin"
-        const prefix = options.prefix || "file"
-        const randomStr = randomBytes(4).toString("hex")
-        const filename = `${prefix}-${Date.now()}-${randomStr}.${ext}`
-        const storagePath = `uploads/${filename}`
-
-        const fileRef = bucket.file(storagePath)
-        await fileRef.save(file, {
-          metadata: {
-            contentType: options.contentType,
-            metadata: options.metadata,
-          },
-        })
-
-        // Make public (or use signed URL)
-        await fileRef.makePublic()
-
-        const publicUrl = `https://storage.googleapis.com/${process.env.FIREBASE_STORAGE_BUCKET}/${storagePath}`
-
-        return {
-          url: publicUrl,
-          filename,
-          size: file.length,
-          contentType: options.contentType,
-          storagePath,
-        }
-      },
-
-      async delete(url: string): Promise<void> {
-        // Parse storage path from URL
-        const bucketName = process.env.FIREBASE_STORAGE_BUCKET
-        if (url.includes(bucketName || "")) {
-          const storagePath = url.split(`${bucketName}/`)[1]
-          if (storagePath) {
-            await bucket.file(storagePath).delete()
-          }
-        }
-      },
-
-      async getSignedUrl(url: string, expiresIn = 3600): Promise<string> {
-        const bucketName = process.env.FIREBASE_STORAGE_BUCKET
-        if (url.includes(bucketName || "")) {
-          const storagePath = url.split(`${bucketName}/`)[1]
-          if (storagePath) {
-            const [signedUrl] = await bucket.file(storagePath).getSignedUrl({
-              action: "read",
-              expires: Date.now() + expiresIn * 1000,
-            })
-            return signedUrl
-          }
-        }
-        return url
-      },
-    }
-  } catch (err) {
-    console.warn("[storage] Firebase Storage init failed, fallback to local:", err)
-    return getLocalStorageAdapter()
   }
 }
 

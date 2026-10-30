@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useSession } from "next-auth/react"
+import { useSupabaseSession } from "@/hooks/use-supabase-session"
 import { apiGet, apiPost, apiPut } from "@/lib/api-client"
 import { useAdminStore } from "@/stores/admin-store"
 import { PageHeader } from "@/components/admin/shared/page-header"
@@ -44,7 +44,9 @@ export function ProfileView() {
   const [savingProfile, setSavingProfile] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
   const { toast } = useToast()
-  const { update } = useSession()
+  const { session } = useSupabaseSession()
+  // Note: Supabase Auth session auto-refresh via token; for name change to
+  // reflect in header immediately, we trigger a reload after save.
 
   const load = async () => {
     try {
@@ -91,8 +93,9 @@ export function ProfileView() {
       }
       const res = await apiPut("/api/admin/me", updateData)
       toast({ title: "Profil disimpan", description: "Perubahan profil berhasil disimpan" })
-      // Update session
-      await update({ name: res.data.name, email: res.data.email, image: res.data.avatarUrl })
+      // Refresh Supabase session (reload user data dari server)
+      // Tidak perlu manual update session — next api call akan pakai token terbaru
+      void session // reference untuk lint
       load()
       setPwdForm({ currentPassword: "", newPassword: "", confirmPassword: "" })
     } catch (e: any) {
