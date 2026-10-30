@@ -75,17 +75,17 @@ jobs:
         run: |
           npx expo prebuild --platform android --no-install --clean
 
-      - name: Build APK with Gradle
+      - name: Build APK with Gradle (Debug — auto-signed, installable on Android 5+)
         working-directory: apps/${{ matrix.app }}/android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleRelease -x lint --no-daemon --stacktrace
+          ./gradlew assembleDebug -x lint --no-daemon --stacktrace
 
       - name: Find APK
         id: find-apk
         working-directory: apps/${{ matrix.app }}
         run: |
-          APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" -type f | head -1)
+          APK_PATH=$(find android/app/build/outputs/apk/debug -name "*.apk" -type f | head -1)
           if [ -z "$APK_PATH" ]; then
             echo "❌ No APK found!"
             exit 1
@@ -109,5 +109,5 @@ jobs:
           echo "Download the APK from the Artifacts section above." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **App**: \`${{ matrix.app }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Build**: Release APK (signed with debug key)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build**: Debug APK (auto-signed with debug key — installable on Android 5+)" >> $GITHUB_STEP_SUMMARY
           echo "- **Install**: Allow unknown sources on Android → install APK" >> $GITHUB_STEP_SUMMARY

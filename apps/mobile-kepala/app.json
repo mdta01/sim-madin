@@ -20,7 +20,8 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#2563eb"
       },
-      "package": "id.madrasah.madin.kepala"
+      "package": "id.madrasah.madin.kepala",
+      "minSdkVersion": 24
     },
     "scheme": "simadinkepala",
     "extra": {

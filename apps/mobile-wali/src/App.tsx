@@ -1808,7 +1808,7 @@ export default function App() {
     let unsubNotif: (() => void) | null = null
 
     // Dynamic import agar tidak crash jika realtime module belum tersedia
-    import("./vendor/mobile-shared/src/realtime")
+    import("../vendor/mobile-shared/src/realtime")
       .then(async ({ subscribeToNotifikasi }) => {
         unsubNotif = await subscribeToNotifikasi(savedWali.id, (newNotif: any) => {
           // Show local notification via React Native

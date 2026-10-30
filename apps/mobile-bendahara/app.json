@@ -20,7 +20,8 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#7c3aed"
       },
-      "package": "id.madrasah.madin.bendahara"
+      "package": "id.madrasah.madin.bendahara",
+      "minSdkVersion": 24
     },
     "scheme": "simadinbendahara",
     "extra": {

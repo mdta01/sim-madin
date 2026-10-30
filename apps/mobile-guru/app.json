@@ -20,7 +20,8 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ea580c"
       },
-      "package": "id.madrasah.madin.guru"
+      "package": "id.madrasah.madin.guru",
+      "minSdkVersion": 24
     },
     "scheme": "simadinguru",
     "extra": {
