@@ -37,12 +37,12 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       >
         <div className="flex h-16 items-center justify-between border-b px-4">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <GraduationCap className="h-5 w-5" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary overflow-hidden">
+              <img src="/admin-logo.png" alt="SIM MADIN" className="h-6 w-6 object-contain" />
             </div>
             <div className="min-w-0">
               <p className="font-bold text-sm leading-tight truncate">SIM MADIN</p>
-              <p className="text-[11px] text-muted-foreground truncate">Super Admin Panel</p>
+              <p className="text-xs text-muted-foreground truncate">Super Admin Panel</p>
             </div>
           </div>
           <Button variant="ghost" size="icon" className="lg:hidden h-8 w-8" onClick={onClose}>

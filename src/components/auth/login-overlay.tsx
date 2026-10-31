@@ -94,8 +94,8 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...`}
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 via-background to-amber-50 dark:from-emerald-950/30 dark:via-background dark:to-amber-950/30 p-4">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-6">
-          <div className="h-16 w-16 rounded-2xl bg-primary flex items-center justify-center mb-3 shadow-lg">
-            <GraduationCap className="h-9 w-9 text-primary-foreground" />
+          <div className="h-16 w-16 rounded-2xl bg-primary flex items-center justify-center mb-3 shadow-lg overflow-hidden">
+            <img src="/admin-logo.png" alt="SIM MADIN" className="h-10 w-10 object-contain" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight">SIM MADIN</h1>
           <p className="text-sm text-muted-foreground">Sistem Informasi Madrasah Diniyah Terpadu</p>
