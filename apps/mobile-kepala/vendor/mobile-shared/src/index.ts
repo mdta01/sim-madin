@@ -126,10 +126,16 @@ export async function clearWaliSession() {
 export class MobileApiClient {
   private baseUrl: string
   private getToken: () => Promise<string | null>
+  private onTokenExpired?: () => Promise<void>
 
-  constructor(config: { baseUrl: string; getToken: () => Promise<string | null> }) {
+  constructor(config: {
+    baseUrl: string
+    getToken: () => Promise<string | null>
+    onTokenExpired?: () => Promise<void>
+  }) {
     this.baseUrl = config.baseUrl
     this.getToken = config.getToken
+    this.onTokenExpired = config.onTokenExpired
   }
 
   private async getHeaders(): Promise<Record<string, string>> {
@@ -140,17 +146,45 @@ export class MobileApiClient {
     return {}
   }
 
-  async get<T = any>(path: string, params?: Record<string, any>): Promise<T> {
-    const url = new URL(`${this.baseUrl}${path}`)
-    if (params) {
-      Object.entries(params).forEach(([k, v]) => {
-        if (v !== undefined && v !== null && v !== "") {
-          url.searchParams.set(k, String(v))
-        }
-      })
+  /**
+   * Handle non-OK response. If 401 and onTokenExpired callback is configured,
+   * invoke it (e.g. refresh token / re-auth) and signal retry. Otherwise throw.
+   * Returns true if the caller should retry the request once.
+   */
+  private async handleUnauthorized(): Promise<boolean> {
+    if (this.onTokenExpired) {
+      try {
+        await this.onTokenExpired()
+        return true // caller should retry once with refreshed token
+      } catch {
+        // refresh failed — fall through to throw
+      }
     }
-    const headers = await this.getHeaders()
-    const res = await fetch(url.toString(), { headers })
+    throw new Error("Sesi berakhir, silakan login kembali")
+  }
+
+  async get<T = any>(path: string, params?: Record<string, any>): Promise<T> {
+    const buildUrl = () => {
+      const url = new URL(`${this.baseUrl}${path}`)
+      if (params) {
+        Object.entries(params).forEach(([k, v]) => {
+          if (v !== undefined && v !== null && v !== "") {
+            url.searchParams.set(k, String(v))
+          }
+        })
+      }
+      return url.toString()
+    }
+
+    let headers = await this.getHeaders()
+    let res = await fetch(buildUrl(), { headers })
+
+    if (res.status === 401 && (await this.handleUnauthorized())) {
+      // Retry once with refreshed token
+      headers = await this.getHeaders()
+      res = await fetch(buildUrl(), { headers })
+    }
+
     if (!res.ok) {
       let errorMsg = `Request failed: ${res.status}`
       try {
@@ -170,19 +204,26 @@ export class MobileApiClient {
   }
 
   async post<T = any>(path: string, body?: any): Promise<T> {
-    const headers = await this.getHeaders()
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...headers },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    })
+    const doFetch = async () => {
+      const headers = await this.getHeaders()
+      return fetch(`${this.baseUrl}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      })
+    }
+
+    let res = await doFetch()
+    if (res.status === 401 && (await this.handleUnauthorized())) {
+      res = await doFetch()
+    }
+
     if (!res.ok) {
       let errorMsg = `Request failed: ${res.status}`
       try {
         const err = await res.json()
         errorMsg = err?.error || err?.message || errorMsg
       } catch {
-        // Response bukan JSON — pakai status text
         errorMsg = `${errorMsg} ${res.statusText || ""}`.trim()
       }
       throw new Error(errorMsg)
@@ -195,19 +236,26 @@ export class MobileApiClient {
   }
 
   async put<T = any>(path: string, body: any): Promise<T> {
-    const headers = await this.getHeaders()
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify(body),
-    })
+    const doFetch = async () => {
+      const headers = await this.getHeaders()
+      return fetch(`${this.baseUrl}${path}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify(body),
+      })
+    }
+
+    let res = await doFetch()
+    if (res.status === 401 && (await this.handleUnauthorized())) {
+      res = await doFetch()
+    }
+
     if (!res.ok) {
       let errorMsg = `Request failed: ${res.status}`
       try {
         const err = await res.json()
         errorMsg = err?.error || err?.message || errorMsg
       } catch {
-        // Response bukan JSON — pakai status text
         errorMsg = `${errorMsg} ${res.statusText || ""}`.trim()
       }
       throw new Error(errorMsg)
@@ -220,18 +268,25 @@ export class MobileApiClient {
   }
 
   async delete<T = any>(path: string): Promise<T> {
-    const headers = await this.getHeaders()
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      method: "DELETE",
-      headers,
-    })
+    const doFetch = async () => {
+      const headers = await this.getHeaders()
+      return fetch(`${this.baseUrl}${path}`, {
+        method: "DELETE",
+        headers,
+      })
+    }
+
+    let res = await doFetch()
+    if (res.status === 401 && (await this.handleUnauthorized())) {
+      res = await doFetch()
+    }
+
     if (!res.ok) {
       let errorMsg = `Request failed: ${res.status}`
       try {
         const err = await res.json()
         errorMsg = err?.error || err?.message || errorMsg
       } catch {
-        // Response bukan JSON — pakai status text
         errorMsg = `${errorMsg} ${res.statusText || ""}`.trim()
       }
       throw new Error(errorMsg)

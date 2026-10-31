@@ -24,7 +24,7 @@ import {
   saveWaliSession, loadWaliSession, clearWaliSession,
   formatRupiah, formatDate, STATUS_STYLES, DAYS,
 } from "../vendor/mobile-shared/src"
-import { subscribeToTable, subscribeToNotifikasi } from "../vendor/mobile-shared/src/realtime"
+import { subscribeToTable, subscribeToNotifikasi, subscribeToNilai, subscribeToAbsensi, subscribeToTagihan } from "../vendor/mobile-shared/src/realtime"
 
 // ============================================================================
 // CONFIG
@@ -405,12 +405,12 @@ function DashboardScreen({
 }
 
 // --- Santri Detail Screen ---
-function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: () => void }) {
+function SantriDetailScreen({ santri, onBack, refreshKey }: { santri: SantriData, onBack: () => void, refreshKey?: number }) {
   const [detail, setDetail] = useState<SantriDetail | null>(null)
   const [perkembangan, setPerkembangan] = useState<PerkembanganV2 | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState("profile")
+  const [activeTab, setActiveTab] = useState("profil")
 
   const loadDetail = useCallback(async () => {
     try {
@@ -432,20 +432,27 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
 
   useEffect(() => { loadDetail() }, [loadDetail])
 
-  const tabs = [
-    { id: "profile", label: "Profil", icon: "person" },
-    { id: "absensi", label: "Absensi", icon: "checkmark-done" },
-    { id: "nilai", label: "Nilai", icon: "school" },
-    { id: "perkembangan", label: "Rekap", icon: "stats-chart" },
-    { id: "tugas", label: "Tugas", icon: "create" },
-    { id: "ujian", label: "Ujian", icon: "file-tray-full" },
-    { id: "tagihan", label: "Tagihan", icon: "wallet" },
-    { id: "rapor", label: "Rapor", icon: "document-text" },
-    { id: "pengumuman", label: "Info", icon: "megaphone" },
-    { id: "notifikasi", label: "Notif", icon: "notifications" },
-    { id: "chat", label: "Chat", icon: "chatbubble" },
-    { id: "qr", label: "QR", icon: "qr-code" },
+  // Auto-refresh when realtime push arrives (App-level refreshKey changes)
+  useEffect(() => {
+    if (refreshKey === undefined) return
+    loadDetail()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey])
+
+  // Tab groups: 6 tabs that each render multiple sections (scrollable).
+  // Reduces visual clutter from 12 individual tabs. Each group lists the
+  // section ids (matching the original activeTab checks) that it shows.
+  const TAB_GROUPS: Array<{ id: string; label: string; icon: string; sections: string[] }> = [
+    { id: "profil", label: "Profil", icon: "person", sections: ["profile", "qr"] },
+    { id: "akademik", label: "Akademik", icon: "school", sections: ["absensi", "nilai", "perkembangan", "tugas", "rapor"] },
+    { id: "ujian", label: "Ujian", icon: "file-tray-full", sections: ["ujian"] },
+    { id: "keuangan", label: "Keuangan", icon: "wallet", sections: ["tagihan"] },
+    { id: "notif", label: "Notif", icon: "notifications", sections: ["notifikasi"] },
+    { id: "info", label: "Info", icon: "megaphone", sections: ["pengumuman", "chat"] },
   ]
+  const activeSections = TAB_GROUPS.find(g => g.id === activeTab)?.sections || []
+  const showSection = (id: string) => activeSections.includes(id)
+  const tabs = TAB_GROUPS
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -522,7 +529,7 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
         </View>
       ) : (
         <ScrollView style={styles.tabContent}>
-          {activeTab === "profile" && detail && (
+          {showSection("profile") && detail && (
             <View style={styles.contentCard}>
               <Text style={styles.contentTitle}>Informasi Pribadi</Text>
               <InfoRow label="Tempat Lahir" value={detail.santri?.birthPlace || "-"} />
@@ -534,7 +541,7 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
             </View>
           )}
 
-          {activeTab === "absensi" && detail && (
+          {showSection("absensi") && detail && (
             <View style={styles.contentCard}>
               <Text style={styles.contentTitle}>Riwayat Absensi (30 hari)</Text>
               {detail.absensi?.length === 0 ? (
@@ -562,7 +569,7 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
             </View>
           )}
 
-          {activeTab === "nilai" && detail && (
+          {showSection("nilai") && detail && (
             <View style={styles.contentCard}>
               <Text style={styles.contentTitle}>Daftar Nilai</Text>
               {detail.nilai?.length === 0 ? (
@@ -587,20 +594,20 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
           )}
 
           {/* V2: Rekap Perkembangan — trend nilai, materi terbaru, pertemuan terbaru */}
-          {activeTab === "perkembangan" && (
+          {showSection("perkembangan") && (
             <PerkembanganV2Section perkembangan={perkembangan} loading={loading} />
           )}
 
-          {activeTab === "tugas" && (
+          {showSection("tugas") && (
             <TugasListSection santriId={santri.id} />
           )}
 
           {/* V3 Complete — Ujian Online */}
-          {activeTab === "ujian" && (
+          {showSection("ujian") && (
             <UjianListSection santriId={santri.id} />
           )}
 
-          {activeTab === "tagihan" && detail && (
+          {showSection("tagihan") && detail && (
             <View style={styles.contentCard}>
               {detail.tagihanSummary && (
                 <View style={styles.tagihanSummary}>
@@ -674,7 +681,7 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
             </View>
           )}
 
-          {activeTab === "rapor" && detail && (
+          {showSection("rapor") && detail && (
             <View style={styles.contentCard}>
               <Text style={styles.contentTitle}>Rapor Semester</Text>
               {detail.rapor ? (
@@ -738,7 +745,7 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
           )}
 
           {/* Pengumuman */}
-          {activeTab === "pengumuman" && detail && (
+          {showSection("pengumuman") && detail && (
             <View style={styles.contentCard}>
               <Text style={styles.contentTitle}>Pengumuman</Text>
               {detail.announcements?.length === 0 ? (
@@ -758,17 +765,17 @@ function SantriDetailScreen({ santri, onBack }: { santri: SantriData, onBack: ()
           )}
 
           {/* V6 — Notifikasi */}
-          {activeTab === "notifikasi" && (
+          {showSection("notifikasi") && (
             <WaliNotifikasiSection token={waliToken} />
           )}
 
           {/* V6 — Chat */}
-          {activeTab === "chat" && (
+          {showSection("chat") && (
             <WaliChatSection token={waliToken} />
           )}
 
           {/* V8 — QR Digital Card */}
-          {activeTab === "qr" && (
+          {showSection("qr") && (
             <WaliQrSection santriId={santri.id} token={waliToken} />
           )}
         </ScrollView>
@@ -1815,6 +1822,9 @@ export default function App() {
   const [initialRoute, setInitialRoute] = useState<"Login" | "Dashboard">("Login")
   const [savedWali, setSavedWali] = useState<WaliData | null>(null)
   const [savedSantri, setSavedSantri] = useState<SantriData[]>([])
+  // Refresh trigger flag — incremented by realtime subscriptions to nudge
+  // child screens (Dashboard, SantriDetail) into reloading data.
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     async function init() {
@@ -1833,28 +1843,45 @@ export default function App() {
   // ── Realtime: subscribe ke Supabase Realtime untuk notifikasi instant ──
   // Saat admin input nilai/absensi/tagihan, wali terima notifikasi langsung
   // tanpa perlu refresh — via WebSocket (Supabase Realtime).
+  // Subscriptions:
+  //   - Notifikasi (per wali)        → Alert dialog
+  //   - Nilai/Absensi/Tagihan (per santri) → trigger refresh via refreshKey
   useEffect(() => {
-    if (!savedWali) return
+    if (!savedWali || !savedSantri.length) return
 
-    let unsubNotif: (() => void) | null = null
+    let unsubs: Array<() => void> = []
 
-    // Realtime: subscribe ke Supabase Realtime untuk notifikasi instant
     ;(async () => {
       try {
-        unsubNotif = await subscribeToNotifikasi(savedWali.id, (newNotif: any) => {
+        // Subscribe ke Notifikasi untuk wali
+        unsubs.push(await subscribeToNotifikasi(savedWali.id, (notif: any) => {
           if (typeof Alert !== "undefined") {
-            Alert.alert(newNotif.title || "Notifikasi", newNotif.message || "")
+            Alert.alert(notif.title || "Notifikasi", notif.message || "")
           }
-        })
+        }))
+
+        // Subscribe ke Nilai, Absensi, Tagihan untuk SETIAP santri
+        for (const santri of savedSantri) {
+          unsubs.push(await subscribeToNilai(santri.id, () => {
+            // Trigger refresh — child screens watch refreshKey
+            setRefreshKey(k => k + 1)
+          }))
+          unsubs.push(await subscribeToAbsensi(santri.id, () => {
+            setRefreshKey(k => k + 1)
+          }))
+          unsubs.push(await subscribeToTagihan(santri.id, () => {
+            setRefreshKey(k => k + 1)
+          }))
+        }
       } catch (e) {
         // Realtime optional — app tetap jalan tanpa realtime
       }
     })()
 
     return () => {
-      if (unsubNotif) unsubNotif()
+      unsubs.forEach(u => { try { u() } catch {} })
     }
-  }, [savedWali])
+  }, [savedWali, savedSantri])
 
   if (!isReady) {
     return (
@@ -1917,6 +1944,7 @@ export default function App() {
             <SantriDetailScreen
               santri={(route.params as any).santri}
               onBack={() => navigation.goBack()}
+              refreshKey={refreshKey}
             />
           )}
         </Stack.Screen>

@@ -13,17 +13,24 @@ import {
 import { NavigationContainer } from "@react-navigation/native"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { Ionicons } from "@expo/vector-icons"
-import { createClient, SupabaseClient } from "@supabase/supabase-js"
+import { createClient } from "@supabase/supabase-js"
 import * as SecureStore from "expo-secure-store"
 import { formatRupiah, formatDate, STATUS_STYLES, DAYS, NILAI_TYPES } from "../vendor/mobile-shared/src"
 import { subscribeToTable, subscribeToNotifikasi } from "../vendor/mobile-shared/src/realtime"
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "https://sim-madin.vercel.app"
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "https://ooglxextkliuhpequwme.supabase.co"
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9vZ2x4ZXh0a2xpdWhwZXF1d21lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyMDYyNzUsImV4cCI6MjEwODc4MjI3NX0.os3Vbdo0TB6z4OrH4b3ZLFQqBpNY1pMN-8LKyhZaK2w"
+// Supabase config — MUST be set in eas.json env or app.json extra
+// For local dev: set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in .env
+// For EAS Build: configured in eas.json → build.preview.env / build.production.env
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || ""
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || ""
 
-let supabase: SupabaseClient | null = null
+let supabase: any = null
 function getSupabase() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    console.warn("[Supabase] env vars not set. Configure EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in eas.json")
+    return null
+  }
   if (supabase) return supabase
   supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: {
