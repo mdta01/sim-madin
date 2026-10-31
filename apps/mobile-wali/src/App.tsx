@@ -25,6 +25,8 @@ import {
   formatRupiah, formatDate, STATUS_STYLES, DAYS,
 } from "../vendor/mobile-shared/src"
 import { subscribeToTable, subscribeToNotifikasi, subscribeToNilai, subscribeToAbsensi, subscribeToTagihan } from "../vendor/mobile-shared/src/realtime"
+import { Skeleton, SkeletonList, SkeletonCard, SkeletonPage, SkeletonStatsRow } from "../vendor/mobile-shared/src/skeleton"
+import { NetworkStatusIndicator, initNetworkMonitor } from "../vendor/mobile-shared/src/network-status"
 
 // ============================================================================
 // CONFIG
@@ -517,8 +519,10 @@ function SantriDetailScreen({ santri, onBack, refreshKey }: { santri: SantriData
 
       {/* Tab Content */}
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+        <View style={{ flex: 1, backgroundColor: Colors.background, padding: 16 }}>
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
         </View>
       ) : error ? (
         <View style={styles.errorContainer}>
@@ -756,7 +760,7 @@ function SantriDetailScreen({ santri, onBack, refreshKey }: { santri: SantriData
                     <View style={{ flex: 1 }}>
                       <Text style={styles.tagihanName}>{a.title}</Text>
                       <Text style={styles.tagihanDesc} numberOfLines={2}>{a.content}</Text>
-                      <Text style={[styles.tagihanDesc, { fontSize: 10 }]}>{formatDate(a.publishedAt, true)}</Text>
+                      <Text style={[styles.tagihanDesc, { fontSize: 12 }]}>{formatDate(a.publishedAt, true)}</Text>
                     </View>
                   </View>
                 ))
@@ -854,7 +858,7 @@ function WaliNotifikasiSection({ token }: { token: string | null }) {
             <View style={{ flex: 1 }}>
               <Text style={[styles.tagihanName, !n.isRead && { fontWeight: "bold" }]}>{n.title}</Text>
               <Text style={styles.tagihanDesc}>{n.message}</Text>
-              <Text style={[styles.tagihanDesc, { fontSize: 10 }]}>{formatDate(n.createdAt, true)}</Text>
+              <Text style={[styles.tagihanDesc, { fontSize: 12 }]}>{formatDate(n.createdAt, true)}</Text>
             </View>
             {!n.isRead && (
               <TouchableOpacity onPress={() => markRead(n.id)} style={[styles.submitButton, { backgroundColor: Colors.primary }]}>
@@ -908,11 +912,11 @@ function WaliChatSection({ token }: { token: string | null }) {
             <View style={{ flex: 1 }}>
               <Text style={styles.tagihanName}>{r.type === "WALI_WALI_KELAS" ? "Wali Kelas" : r.type === "WALI_MADRASAH" ? "Madrasah" : r.type}</Text>
               {r.lastMessage && <Text style={styles.tagihanDesc} numberOfLines={1}>{r.lastMessage}</Text>}
-              {r.santri && <Text style={[styles.tagihanDesc, { fontSize: 10 }]}>Tentang: {r.santri.name}</Text>}
+              {r.santri && <Text style={[styles.tagihanDesc, { fontSize: 12 }]}>Tentang: {r.santri.name}</Text>}
             </View>
             {r._count?.messages > 0 && (
               <View style={[styles.statusBadge, { backgroundColor: Colors.dangerLight }]}>
-                <Text style={[styles.statusBadgeText, { color: Colors.danger, fontSize: 10 }]}>{r._count.messages}</Text>
+                <Text style={[styles.statusBadgeText, { color: Colors.danger, fontSize: 12 }]}>{r._count.messages}</Text>
               </View>
             )}
           </TouchableOpacity>
@@ -1032,7 +1036,7 @@ function WaliQrSection({ santriId, token }: { santriId: string, token: string | 
           <Text style={{ fontSize: 16, fontWeight: "bold", marginTop: 12, color: Colors.text }}>{qrData.santri?.name}</Text>
           <Text style={{ fontSize: 12, color: Colors.textMuted }}>NIS: {qrData.santri?.nis}</Text>
           {qrData.santri?.kelas && <Text style={{ fontSize: 12, color: Colors.textMuted }}>{qrData.santri.kelas.name}</Text>}
-          <Text style={{ fontSize: 10, color: Colors.textMuted, marginTop: 8, textAlign: "center" }}>
+          <Text style={{ fontSize: 12, color: Colors.textMuted, marginTop: 8, textAlign: "center" }}>
             Tunjukkan QR ini untuk absensi, identitas, atau keperluan lain di madrasah.
           </Text>
         </View>
@@ -1374,7 +1378,7 @@ function PerkembanganV2Section({ perkembangan, loading }: { perkembangan: Perkem
                 <View style={{ alignItems: "flex-end" }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
                     <Ionicons name={trend.icon as any} size={14} color={trend.color} />
-                    <Text style={{ fontSize: 11, color: trend.color }}>{trend.label}</Text>
+                    <Text style={{ fontSize: 12, color: trend.color }}>{trend.label}</Text>
                   </View>
                   <Text style={[styles.nilaiScore, { color: isAboveKKM ? Colors.success : Colors.danger, fontSize: 18 }]}>
                     {npm.rataRata ?? "-"}
@@ -1431,7 +1435,7 @@ function PerkembanganV2Section({ perkembangan, loading }: { perkembangan: Perkem
                   </Text>
                 </View>
                 <View style={[styles.statusBadge, { backgroundColor: statusColor + "20" }]}>
-                  <Text style={[styles.statusBadgeText, { color: statusColor, fontSize: 10 }]}>
+                  <Text style={[styles.statusBadgeText, { color: statusColor, fontSize: 12 }]}>
                     {STATUS_STYLES[p.santriAbsensi]?.label || (p.santriAbsensi === "BELUM" ? "Belum Absen" : p.santriAbsensi)}
                   </Text>
                 </View>
@@ -1523,17 +1527,17 @@ function UjianListSection({ santriId }: { santriId: string }) {
               <View style={{ flex: 1 }}>
                 <Text style={styles.tagihanName}>{u.title}</Text>
                 <Text style={styles.tagihanDesc}>{u.mapel?.name} • {u.soalCount} soal • {u.durationMnt} mnt</Text>
-                <Text style={[styles.tagihanDesc, { fontSize: 10 }]}>{formatDate(u.startTime, true)}</Text>
+                <Text style={[styles.tagihanDesc, { fontSize: 12 }]}>{formatDate(u.startTime, true)}</Text>
               </View>
               <View>
                 <View style={[styles.statusBadge, { backgroundColor: (statusColors[u.status] || Colors.textMuted) + "20" }]}>
-                  <Text style={[styles.statusBadgeText, { color: statusColors[u.status] || Colors.textMuted, fontSize: 10 }]}>
+                  <Text style={[styles.statusBadgeText, { color: statusColors[u.status] || Colors.textMuted, fontSize: 12 }]}>
                     {statusLabels[u.status] || u.status}
                   </Text>
                 </View>
                 {u.hasSubmitted ? (
                   <View style={[styles.statusBadge, { backgroundColor: Colors.successLight, marginTop: 4 }]}>
-                    <Text style={[styles.statusBadgeText, { color: Colors.success, fontSize: 10 }]}>
+                    <Text style={[styles.statusBadgeText, { color: Colors.success, fontSize: 12 }]}>
                       Nilai: {u.sesi?.score ?? "-"}
                     </Text>
                   </View>
@@ -1790,7 +1794,7 @@ function UjianTakeScreen({ ujian, santriId, onClose }: { ujian: any, santriId: s
             }}
           >
             <Text style={{
-              fontSize: 11, fontWeight: "600",
+              fontSize: 12, fontWeight: "600",
               color: i === currentSoal ? Colors.white : answers[s.ujianSoalId]?.answer ? Colors.success : Colors.textMuted,
             }}>{i + 1}</Text>
           </TouchableOpacity>
@@ -1827,6 +1831,7 @@ export default function App() {
   const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
+    initNetworkMonitor()
     async function init() {
       const session = await loadWaliSession()
       if (session) {
@@ -1892,11 +1897,13 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator
-        initialRouteName={initialRoute}
-        screenOptions={{ headerShown: false }}
-      >
+    <View style={{ flex: 1 }}>
+      <NetworkStatusIndicator />
+      <NavigationContainer>
+        <Stack.Navigator
+          initialRouteName={initialRoute}
+          screenOptions={{ headerShown: false }}
+        >
         <Stack.Screen name="Login">
           {({ navigation }) => (
             <LoginScreen
@@ -1950,6 +1957,7 @@ export default function App() {
         </Stack.Screen>
       </Stack.Navigator>
     </NavigationContainer>
+    </View>
   )
 }
 
@@ -1969,7 +1977,7 @@ const styles = StyleSheet.create({
   inputContainer: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: Colors.border, borderRadius: 8, paddingHorizontal: 12 },
   inputIcon: { marginRight: 8 },
   input: { flex: 1, paddingVertical: 12, fontSize: 16, color: Colors.text },
-  eyeIcon: { padding: 8 },
+  eyeIcon: { padding: 10, minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "center" },
   loginButton: { backgroundColor: Colors.primary, borderRadius: 8, paddingVertical: 14, alignItems: "center", marginTop: 24 },
   loginButtonText: { color: Colors.white, fontSize: 16, fontWeight: "600" },
   demoText: { fontSize: 12, color: Colors.textMuted, textAlign: "center", marginTop: 16 },
@@ -1990,12 +1998,12 @@ const styles = StyleSheet.create({
   santriNis: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
   santriBadges: { flexDirection: "row", gap: 6, marginTop: 4 },
   badge: { backgroundColor: Colors.border, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
-  badgeText: { fontSize: 10, color: Colors.text },
+  badgeText: { fontSize: 12, color: Colors.text },
   emptyState: { alignItems: "center", paddingVertical: 48 },
   emptyText: { fontSize: 16, fontWeight: "600", color: Colors.text, marginTop: 12 },
   emptySubtext: { fontSize: 14, color: Colors.textMuted, marginTop: 4, textAlign: "center" },
   detailHeader: { backgroundColor: Colors.primary, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingVertical: 12, paddingTop: Platform.OS === "android" ? 35 : 0 },
-  backButton: { padding: 4 },
+  backButton: { padding: 10, minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "center" },
   detailHeaderTitle: { fontSize: 16, fontWeight: "600", color: Colors.white },
   detailCard: { backgroundColor: Colors.white, margin: 16, borderRadius: 12, padding: 16, flexDirection: "row", alignItems: "center", elevation: 2 },
   detailAvatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: Colors.primaryLight, justifyContent: "center", alignItems: "center", marginRight: 16 },
@@ -2007,10 +2015,10 @@ const styles = StyleSheet.create({
   detailPeriod: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
   statsRow: { flexDirection: "row", paddingHorizontal: 16, gap: 8 },
   statCard: { flex: 1, backgroundColor: Colors.white, borderRadius: 8, padding: 12, alignItems: "center", elevation: 1 },
-  statLabel: { fontSize: 10, color: Colors.textMuted },
+  statLabel: { fontSize: 12, color: Colors.textMuted },
   statValue: { fontSize: 20, fontWeight: "bold", marginTop: 4 },
   tabBar: { flexDirection: "row", backgroundColor: Colors.white, marginTop: 12, marginHorizontal: 16, borderRadius: 8, padding: 4, elevation: 1 },
-  tab: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 8, borderRadius: 6, gap: 4 },
+  tab: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 12, minHeight: 44, borderRadius: 6, gap: 4 },
   tabActive: { backgroundColor: Colors.primaryLight },
   tabText: { fontSize: 12, color: Colors.textMuted },
   tabTextActive: { color: Colors.primary, fontWeight: "600" },
@@ -2018,7 +2026,7 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   errorContainer: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
   errorText: { fontSize: 14, color: Colors.danger, textAlign: "center", marginBottom: 12 },
-  retryButton: { backgroundColor: Colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6 },
+  retryButton: { backgroundColor: Colors.primary, paddingHorizontal: 16, paddingVertical: 12, minHeight: 44, justifyContent: "center", alignItems: "center", borderRadius: 6 },
   retryText: { color: Colors.white, fontSize: 14 },
   contentCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 16, elevation: 1 },
   contentTitle: { fontSize: 16, fontWeight: "600", color: Colors.text, marginBottom: 12 },
@@ -2028,13 +2036,13 @@ const styles = StyleSheet.create({
   listRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.border },
   listRowText: { fontSize: 14, color: Colors.text },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
-  statusBadgeText: { fontSize: 10, fontWeight: "600" },
+  statusBadgeText: { fontSize: 12, fontWeight: "600" },
   emptyTextSmall: { fontSize: 14, color: Colors.textMuted, textAlign: "center", paddingVertical: 16 },
   nilaiRow: { flexDirection: "row", alignItems: "center", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.border },
   nilaiMapel: { fontSize: 14, fontWeight: "500", color: Colors.text },
-  nilaiDate: { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
+  nilaiDate: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
   nilaiBadge: { backgroundColor: Colors.border, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginHorizontal: 8 },
-  nilaiType: { fontSize: 10, color: Colors.text },
+  nilaiType: { fontSize: 12, color: Colors.text },
   nilaiScore: { fontSize: 18, fontWeight: "bold", minWidth: 40, textAlign: "right" },
   tagihanSummary: { flexDirection: "row", justifyContent: "space-around", marginBottom: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: Colors.border },
   tagihanSummaryItem: { alignItems: "center" },
@@ -2042,7 +2050,7 @@ const styles = StyleSheet.create({
   tagihanSummaryValue: { fontSize: 24, fontWeight: "bold", marginTop: 4 },
   tagihanRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.border },
   tagihanName: { fontSize: 14, fontWeight: "500", color: Colors.text },
-  tagihanDesc: { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
+  tagihanDesc: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
   tagihanAmount: { fontSize: 14, fontWeight: "600", color: Colors.text, textAlign: "right" },
   // V2 — Tugas submit modal
   submitButton: {
@@ -2054,7 +2062,7 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     color: Colors.white,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
   },
   modalOverlay: {
@@ -2102,7 +2110,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   modalHint: {
-    fontSize: 11,
+    fontSize: 12,
     color: Colors.textMuted,
     marginTop: 6,
     fontStyle: "italic",

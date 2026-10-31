@@ -17,6 +17,8 @@ import { createClient } from "@supabase/supabase-js"
 import * as SecureStore from "expo-secure-store"
 import { formatRupiah, formatDate } from "../vendor/mobile-shared/src"
 import { subscribeToTable, subscribeToNotifikasi } from "../vendor/mobile-shared/src/realtime"
+import { Skeleton, SkeletonList, SkeletonCard, SkeletonPage, SkeletonStatsRow } from "../vendor/mobile-shared/src/skeleton"
+import { NetworkStatusIndicator, initNetworkMonitor } from "../vendor/mobile-shared/src/network-status"
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "https://sim-madin.vercel.app"
 // Supabase config — MUST be set in eas.json env or app.json extra
@@ -163,8 +165,11 @@ function DashboardScreen({ onLogout, navigation, refreshKey }: { onLogout: () =>
           </TouchableOpacity>
         </View>
       ) : loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+        <View style={{ flex: 1, backgroundColor: Colors.background, padding: 16 }}>
+          <SkeletonStatsRow />
+          <View style={{ marginTop: 16 }}>
+            <SkeletonList items={5} />
+          </View>
         </View>
       ) : (
         <ScrollView style={styles.content}>
@@ -301,7 +306,7 @@ function MonitorListScreen({ navigation, title, endpoint, renderItem, refreshKey
     <SafeAreaView style={styles.screen}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4 }}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 10, minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "center" }}>
           <Ionicons name="arrow-back" size={24} color={Colors.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{title}</Text>
@@ -315,7 +320,9 @@ function MonitorListScreen({ navigation, title, endpoint, renderItem, refreshKey
           </TouchableOpacity>
         </View>
       ) : loading ? (
-        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+        <View style={{ flex: 1, backgroundColor: Colors.background, padding: 8 }}>
+          <SkeletonList items={6} />
+        </View>
       ) : (
         <FlatList
           data={data}
@@ -353,7 +360,7 @@ function MonitorSantriScreen({ navigation, refreshKey }: { navigation: any; refr
           <Text style={styles.kelasWali}>Wali: {item.wali?.name || "-"}</Text>
         </View>
         <View style={{ backgroundColor: item.status === "AKTIF" ? Colors.successLight : Colors.dangerLight, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
-          <Text style={{ fontSize: 10, color: item.status === "AKTIF" ? Colors.success : Colors.danger }}>{item.status}</Text>
+          <Text style={{ fontSize: 12, color: item.status === "AKTIF" ? Colors.success : Colors.danger }}>{item.status}</Text>
         </View>
       </View>
     </View>
@@ -373,7 +380,7 @@ function MonitorGuruScreen({ navigation, refreshKey }: { navigation: any; refres
           <Text style={styles.kelasWali}>{item.phone || "-"}</Text>
         </View>
         <View style={{ backgroundColor: item.status === "AKTIF" ? Colors.successLight : Colors.dangerLight, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
-          <Text style={{ fontSize: 10, color: item.status === "AKTIF" ? Colors.success : Colors.danger }}>{item.status}</Text>
+          <Text style={{ fontSize: 12, color: item.status === "AKTIF" ? Colors.success : Colors.danger }}>{item.status}</Text>
         </View>
       </View>
     </View>
@@ -418,7 +425,7 @@ function MonitorKeuanganScreen({ navigation, refreshKey }: { navigation: any; re
     <SafeAreaView style={styles.screen}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4 }}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 10, minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "center" }}>
           <Ionicons name="arrow-back" size={24} color={Colors.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Monitoring Keuangan</Text>
@@ -445,7 +452,7 @@ function MonitorKeuanganScreen({ navigation, refreshKey }: { navigation: any; re
                 <View style={{ alignItems: "flex-end" }}>
                   <Text style={{ fontSize: 16, fontWeight: "600", color: Colors.success }}>{formatRupiah(item.amount)}</Text>
                   <View style={{ backgroundColor: item.status === "VERIFIED" ? Colors.successLight : Colors.warningLight, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, marginTop: 4 }}>
-                    <Text style={{ fontSize: 10, color: item.status === "VERIFIED" ? Colors.success : Colors.warning }}>{item.status}</Text>
+                    <Text style={{ fontSize: 12, color: item.status === "VERIFIED" ? Colors.success : Colors.warning }}>{item.status}</Text>
                   </View>
                 </View>
               </View>
@@ -475,15 +482,15 @@ function MonitorPengumumanScreen({ navigation, refreshKey }: { navigation: any; 
     <View style={styles.kelasCard}>
       <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
         <View style={{ backgroundColor: item.priority === "URGENT" ? Colors.dangerLight : item.priority === "PENTING" ? Colors.warningLight : "#f1f5f9", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
-          <Text style={{ fontSize: 10, fontWeight: "600", color: item.priority === "URGENT" ? Colors.danger : item.priority === "PENTING" ? Colors.warning : Colors.textMuted }}>{item.priority}</Text>
+          <Text style={{ fontSize: 12, fontWeight: "600", color: item.priority === "URGENT" ? Colors.danger : item.priority === "PENTING" ? Colors.warning : Colors.textMuted }}>{item.priority}</Text>
         </View>
         <View style={{ backgroundColor: "#dbeafe", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
-          <Text style={{ fontSize: 10, color: "#3b82f6" }}>{item.audience}</Text>
+          <Text style={{ fontSize: 12, color: "#3b82f6" }}>{item.audience}</Text>
         </View>
       </View>
       <Text style={styles.kelasName}>{item.title}</Text>
       <Text style={styles.kelasWali} numberOfLines={3}>{item.content}</Text>
-      <Text style={[styles.kelasWali, { fontSize: 11, marginTop: 4 }]}>{formatDate(item.publishedAt, true)}</Text>
+      <Text style={[styles.kelasWali, { fontSize: 12, marginTop: 4 }]}>{formatDate(item.publishedAt, true)}</Text>
     </View>
   )} />
 }
@@ -504,12 +511,12 @@ function MonitorNilaiScreen({ navigation, refreshKey }: { navigation: any; refre
           <View style={{ flex: 1 }}>
             <Text style={styles.kelasName}>{item.santri?.name || "-"}</Text>
             <Text style={styles.kelasWali}>{item.mapel?.name || "-"} • {item.kelas?.name || "-"}</Text>
-            <Text style={[styles.kelasWali, { fontSize: 11, marginTop: 2 }]}>{formatDate(item.assessmentDate)}</Text>
+            <Text style={[styles.kelasWali, { fontSize: 12, marginTop: 2 }]}>{formatDate(item.assessmentDate)}</Text>
           </View>
           <View style={{ alignItems: "flex-end" }}>
             <Text style={{ fontSize: 22, fontWeight: "bold", color: lulus ? Colors.success : Colors.danger }}>{item.score}</Text>
             <View style={{ backgroundColor: typeBg, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, marginTop: 4 }}>
-              <Text style={{ fontSize: 10, fontWeight: "600", color: typeColor }}>{item.type}</Text>
+              <Text style={{ fontSize: 12, fontWeight: "600", color: typeColor }}>{item.type}</Text>
             </View>
           </View>
         </View>
@@ -554,7 +561,7 @@ function DashboardKepalaScreen({ navigation, refreshKey }: { navigation: any; re
     <SafeAreaView style={styles.screen}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4 }}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 10, minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "center" }}>
           <Ionicons name="arrow-back" size={24} color={Colors.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Dashboard Analitik</Text>
@@ -589,7 +596,7 @@ function DashboardKepalaScreen({ navigation, refreshKey }: { navigation: any; re
                 </View>
                 <View style={{ alignItems: "flex-end" }}>
                   <Text style={{ fontSize: 22, fontWeight: "bold", color: Colors.success }}>{s.avg}</Text>
-                  <Text style={{ fontSize: 10, color: Colors.textMuted, marginTop: 2 }}>{s.count} nilai</Text>
+                  <Text style={{ fontSize: 12, color: Colors.textMuted, marginTop: 2 }}>{s.count} nilai</Text>
                 </View>
               </View>
             </View>
@@ -603,7 +610,7 @@ function DashboardKepalaScreen({ navigation, refreshKey }: { navigation: any; re
                 <View style={{ flex: 1 }}>
                   <Text style={styles.kelasName}>{s.name}</Text>
                   <Text style={styles.kelasWali}>{s.nis} • {s.kelas}</Text>
-                  <Text style={[styles.kelasWali, { fontSize: 11 }]}>{s.hadir}/{s.total} hari hadir</Text>
+                  <Text style={[styles.kelasWali, { fontSize: 12 }]}>{s.hadir}/{s.total} hari hadir</Text>
                 </View>
                 <View style={{ backgroundColor: Colors.dangerLight, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
                   <Text style={{ fontSize: 14, fontWeight: "600", color: Colors.danger }}>{s.persentase}%</Text>
@@ -649,6 +656,7 @@ export default function App() {
   const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
+    initNetworkMonitor()
     async function check() {
       const token = await SecureStore.getItemAsync("authToken")
       if (token) {
@@ -695,8 +703,10 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <View style={{ flex: 1 }}>
+      <NetworkStatusIndicator />
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
         {isLoggedIn ? (
           <>
             <Stack.Screen name="Dashboard">
@@ -729,6 +739,7 @@ export default function App() {
         )}
       </Stack.Navigator>
     </NavigationContainer>
+    </View>
   )
 }
 
@@ -753,12 +764,12 @@ const styles = StyleSheet.create({
   statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   statCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 16, width: "47%", elevation: 1 },
   statIcon: { width: 40, height: 40, borderRadius: 8, justifyContent: "center", alignItems: "center", marginBottom: 8 },
-  statLabel: { fontSize: 11, color: Colors.textMuted },
+  statLabel: { fontSize: 12, color: Colors.textMuted },
   statValue: { fontSize: 20, fontWeight: "bold", color: Colors.text, marginTop: 4 },
   absensiRow: { flexDirection: "row", gap: 8 },
   absensiCard: { flex: 1, backgroundColor: Colors.white, borderRadius: 8, padding: 12, alignItems: "center", elevation: 1 },
   absensiValue: { fontSize: 24, fontWeight: "bold", color: Colors.text },
-  absensiLabel: { fontSize: 11, color: Colors.textMuted, marginTop: 4 },
+  absensiLabel: { fontSize: 12, color: Colors.textMuted, marginTop: 4 },
   kelasCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 16, marginBottom: 8, elevation: 1 },
   kelasName: { fontSize: 15, fontWeight: "600", color: Colors.text },
   kelasCount: { fontSize: 14, color: Colors.primary, marginTop: 4 },

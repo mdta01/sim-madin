@@ -17,6 +17,8 @@ import { createClient } from "@supabase/supabase-js"
 import * as SecureStore from "expo-secure-store"
 import { formatRupiah, formatDate, STATUS_STYLES, PAYMENT_METHODS } from "../vendor/mobile-shared/src"
 import { subscribeToTable, subscribeToNotifikasi } from "../vendor/mobile-shared/src/realtime"
+import { Skeleton, SkeletonList, SkeletonCard, SkeletonPage, SkeletonStatsRow } from "../vendor/mobile-shared/src/skeleton"
+import { NetworkStatusIndicator, initNetworkMonitor } from "../vendor/mobile-shared/src/network-status"
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "https://sim-madin.vercel.app"
 // Supabase config — MUST be set in eas.json env or app.json extra
@@ -217,7 +219,9 @@ function DashboardScreen({ onLogout, navigation, refreshKey }: { onLogout: () =>
         {/* Recent Payments */}
         <Text style={styles.sectionTitle}>Pembayaran Terbaru</Text>
         {loading ? (
-          <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+          <View style={{ padding: 8 }}>
+            <SkeletonList items={5} />
+          </View>
         ) : payments.length === 0 ? (
           <View style={styles.emptyCard}><Text style={styles.emptyText}>Belum ada pembayaran</Text></View>
         ) : (
@@ -350,7 +354,9 @@ function PembayaranInputScreen({ navigation }: { navigation: any }) {
 
         {/* Santri List */}
         {loading ? (
-          <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+          <View style={{ padding: 8 }}>
+            <SkeletonList items={5} />
+          </View>
         ) : (
           <View>
             {filteredSantri.slice(0, 5).map(s => (
@@ -601,7 +607,9 @@ function RiwayatListScreen({ navigation }: { navigation: any }) {
           </TouchableOpacity>
         </View>
       ) : loading ? (
-        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+        <View style={{ flex: 1, backgroundColor: Colors.background, padding: 8 }}>
+          <SkeletonList items={6} />
+        </View>
       ) : (
         <FlatList
           data={payments}
@@ -622,10 +630,10 @@ function RiwayatListScreen({ navigation }: { navigation: any }) {
                 </View>
                 {item.status === "PENDING" && (
                   <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
-                    <TouchableOpacity onPress={() => handleVerify(item.id)} style={{ backgroundColor: Colors.success, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6 }}>
+                    <TouchableOpacity onPress={() => handleVerify(item.id)} style={{ backgroundColor: Colors.success, paddingHorizontal: 16, paddingVertical: 12, minHeight: 44, justifyContent: "center", alignItems: "center", borderRadius: 6 }}>
                       <Text style={{ color: Colors.white, fontSize: 12, fontWeight: "600" }}>Verifikasi</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleReject(item.id)} style={{ backgroundColor: Colors.danger, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6 }}>
+                    <TouchableOpacity onPress={() => handleReject(item.id)} style={{ backgroundColor: Colors.danger, paddingHorizontal: 16, paddingVertical: 12, minHeight: 44, justifyContent: "center", alignItems: "center", borderRadius: 6 }}>
                       <Text style={{ color: Colors.white, fontSize: 12, fontWeight: "600" }}>Tolak</Text>
                     </TouchableOpacity>
                   </View>
@@ -722,7 +730,7 @@ function TagihanListScreen({ navigation }: { navigation: any }) {
               </View>
               <View style={{ alignItems: "flex-end" }}>
                 <Text style={styles.tunggakanAmount}>{formatRupiah(item.amount)}</Text>
-                {item.paidAmount > 0 && <Text style={{ fontSize: 11, color: Colors.success }}>Terbayar: {formatRupiah(item.paidAmount)}</Text>}
+                {item.paidAmount > 0 && <Text style={{ fontSize: 12, color: Colors.success }}>Terbayar: {formatRupiah(item.paidAmount)}</Text>}
                 <View style={[styles.statusBadge, { backgroundColor: item.status === "LUNAS" ? Colors.successLight : item.status === "CICIL" ? Colors.warningLight : Colors.dangerLight }]}>
                   <Text style={[styles.statusText, { color: item.status === "LUNAS" ? Colors.success : item.status === "CICIL" ? Colors.warning : Colors.danger }]}>
                     {STATUS_STYLES[item.status]?.label || item.status}
@@ -1375,6 +1383,7 @@ export default function App() {
   const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
+    initNetworkMonitor()
     async function check() {
       const token = await SecureStore.getItemAsync("authToken")
       if (token) {
@@ -1420,8 +1429,10 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <View style={{ flex: 1 }}>
+      <NetworkStatusIndicator />
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
         {isLoggedIn ? (
           <>
             <Stack.Screen name="Dashboard">
@@ -1447,6 +1458,7 @@ export default function App() {
         )}
       </Stack.Navigator>
     </NavigationContainer>
+    </View>
   )
 }
 
@@ -1468,12 +1480,12 @@ const styles = StyleSheet.create({
   demoText: { fontSize: 12, color: Colors.textMuted, textAlign: "center", marginTop: 16 },
   screen: { flex: 1, backgroundColor: Colors.background },
   header: { backgroundColor: Colors.primary, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingVertical: 12, paddingTop: Platform.OS === "android" ? 35 : 0 },
-  backButton: { padding: 4 },
+  backButton: { padding: 10, minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "center" },
   headerTitle: { fontSize: 16, fontWeight: "600", color: Colors.white },
   content: { flex: 1, padding: 16 },
   statsContainer: { flexDirection: "row", gap: 12, marginBottom: 16 },
   statCard: { flex: 1, borderRadius: 12, padding: 16, elevation: 2 },
-  statLabel: { fontSize: 11, color: Colors.white, opacity: 0.9 },
+  statLabel: { fontSize: 12, color: Colors.white, opacity: 0.9 },
   statValue: { fontSize: 18, fontWeight: "bold", color: Colors.white, marginTop: 4 },
   menuGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginBottom: 24 },
   menuCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 20, width: "47%", alignItems: "center", elevation: 1 },
@@ -1482,30 +1494,30 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 16, fontWeight: "600", color: Colors.text, marginBottom: 12 },
   paymentCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 16, marginBottom: 8, flexDirection: "row", justifyContent: "space-between", elevation: 1 },
   paymentSantri: { fontSize: 15, fontWeight: "500", color: Colors.text },
-  paymentInvoice: { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
-  paymentDate: { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
+  paymentInvoice: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+  paymentDate: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
   paymentAmount: { fontSize: 16, fontWeight: "600", color: Colors.success },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, marginTop: 4 },
-  statusText: { fontSize: 10, fontWeight: "600" },
+  statusText: { fontSize: 12, fontWeight: "600" },
   emptyCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 24, alignItems: "center" },
   emptyText: { fontSize: 14, color: Colors.textMuted, marginTop: 8 },
   // Pembayaran Input
-  searchContainer: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: Colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 4, backgroundColor: Colors.white },
+  searchContainer: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: Colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, minHeight: 44, backgroundColor: Colors.white },
   searchInput: { flex: 1, paddingVertical: 8, fontSize: 14, color: Colors.text },
   santriOption: { backgroundColor: Colors.white, borderRadius: 8, padding: 12, marginBottom: 4, flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: Colors.border },
   santriOptionActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
   santriOptionName: { fontSize: 14, fontWeight: "500", color: Colors.text },
-  santriOptionNis: { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
+  santriOptionNis: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
   moreText: { fontSize: 12, color: Colors.textMuted, textAlign: "center", paddingVertical: 8 },
   tagihanOption: { backgroundColor: Colors.white, borderRadius: 8, padding: 12, marginBottom: 4, flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: Colors.border },
   tagihanOptionActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
   tagihanOptionName: { fontSize: 14, fontWeight: "500", color: Colors.text },
-  tagihanOptionDesc: { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
+  tagihanOptionDesc: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
   amountContainer: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: Colors.border, borderRadius: 8, paddingHorizontal: 12, backgroundColor: Colors.white },
   amountPrefix: { fontSize: 18, fontWeight: "600", color: Colors.textMuted, marginRight: 8 },
   amountInput: { flex: 1, paddingVertical: 12, fontSize: 24, fontWeight: "bold", color: Colors.text },
   methodRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  methodBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.white },
+  methodBtn: { paddingHorizontal: 12, paddingVertical: 12, minHeight: 44, justifyContent: "center", alignItems: "center", borderRadius: 8, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.white },
   methodBtnActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   methodBtnText: { fontSize: 12, color: Colors.textMuted },
   methodBtnTextActive: { color: Colors.white, fontWeight: "600" },
@@ -1517,27 +1529,27 @@ const styles = StyleSheet.create({
   totalValue: { fontSize: 24, fontWeight: "bold", color: Colors.white, marginTop: 4 },
   tunggakanCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 16, marginBottom: 8, flexDirection: "row", justifyContent: "space-between", elevation: 1 },
   tunggakanName: { fontSize: 15, fontWeight: "500", color: Colors.text },
-  tunggakanNis: { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
+  tunggakanNis: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
   tunggakanJenis: { fontSize: 13, color: Colors.primary, marginTop: 4 },
-  tunggakanDesc: { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
+  tunggakanDesc: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
   tunggakanAmount: { fontSize: 16, fontWeight: "600", color: Colors.danger },
   // Header action button (for add/new in header bar)
-  headerAction: { padding: 4 },
+  headerAction: { padding: 10, minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "center" },
   // Kas & Rekening
   kasCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 16, marginBottom: 8, elevation: 1 },
   kasIcon: { width: 44, height: 44, borderRadius: 10, justifyContent: "center", alignItems: "center" },
   kasName: { fontSize: 15, fontWeight: "600", color: Colors.text },
   kasType: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
-  kasDesc: { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
+  kasDesc: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
   kasBalanceWrap: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  kasBalanceLabel: { fontSize: 11, color: Colors.textMuted },
+  kasBalanceLabel: { fontSize: 12, color: Colors.textMuted },
   kasBalance: { fontSize: 18, fontWeight: "bold", color: Colors.primary },
   // Transaksi Kas
   trxCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 14, marginBottom: 8, flexDirection: "row", alignItems: "center", elevation: 1 },
   trxIcon: { width: 36, height: 36, borderRadius: 18, justifyContent: "center", alignItems: "center" },
   trxCategory: { fontSize: 14, fontWeight: "500", color: Colors.text },
   trxDesc: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
-  trxMeta: { fontSize: 10, color: Colors.textMuted, marginTop: 2 },
+  trxMeta: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
   trxAmount: { fontSize: 15, fontWeight: "600" },
   // Honor Guru
   honorCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 16, marginBottom: 12, elevation: 1 },

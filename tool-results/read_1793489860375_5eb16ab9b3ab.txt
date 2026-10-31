@@ -1,0 +1,771 @@
+     1→/**
+     2→ * SIM MADIN — Kepala Madrasah Mobile App
+     3→ * Login: Email + Password (Supabase Auth)
+     4→ * Fitur: Dashboard monitoring (statistik santri, guru, keuangan, absensi)
+     5→ */
+     6→
+     7→import React, { useState, useEffect, useCallback } from "react"
+     8→import {
+     9→  View, Text, TextInput, TouchableOpacity, StyleSheet,
+    10→  ActivityIndicator, SafeAreaView, StatusBar, ScrollView, Alert,
+    11→  FlatList, RefreshControl, Platform,
+    12→} from "react-native"
+    13→import { NavigationContainer } from "@react-navigation/native"
+    14→import { createNativeStackNavigator } from "@react-navigation/native-stack"
+    15→import { Ionicons } from "@expo/vector-icons"
+    16→import { createClient } from "@supabase/supabase-js"
+    17→import * as SecureStore from "expo-secure-store"
+    18→import { formatRupiah, formatDate } from "../vendor/mobile-shared/src"
+    19→import { subscribeToTable, subscribeToNotifikasi } from "../vendor/mobile-shared/src/realtime"
+    20→
+    21→const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "https://sim-madin.vercel.app"
+    22→// Supabase config — MUST be set in eas.json env or app.json extra
+    23→// For local dev: set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in .env
+    24→// For EAS Build: configured in eas.json → build.preview.env / build.production.env
+    25→const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || ""
+    26→const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || ""
+    27→
+    28→let supabase: any = null
+    29→function getSupabase() {
+    30→  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    31→    console.warn("[Supabase] env vars not set. Configure EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in eas.json")
+    32→    return null
+    33→  }
+    34→  if (supabase) return supabase
+    35→  supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    36→    auth: {
+    37→      storage: {
+    38→        getItem: async (k: string) => { try { return await SecureStore.getItemAsync(k) } catch { return null } },
+    39→        setItem: async (k: string, v: string) => { try { await SecureStore.setItemAsync(k, v) } catch {} },
+    40→        removeItem: async (k: string) => { try { await SecureStore.deleteItemAsync(k) } catch {} },
+    41→      },
+    42→      autoRefreshToken: true, persistSession: true,
+    43→    },
+    44→  })
+    45→  return supabase
+    46→}
+    47→
+    48→let authToken: string | null = null
+    49→
+    50→async function apiGet(path: string) {
+    51→  const res = await fetch(`${API_BASE_URL}${path}`, {
+    52→    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    53→  })
+    54→  if (!res.ok) throw new Error((await res.json())?.error || `Failed: ${res.status}`)
+    55→  return res.json()
+    56→}
+    57→
+    58→const Colors = {
+    59→  primary: "#2563eb", // blue-600
+    60→  primaryLight: "#dbeafe",
+    61→  background: "#f8fafc",
+    62→  card: "#ffffff",
+    63→  text: "#1e293b",
+    64→  textMuted: "#64748b",
+    65→  border: "#e2e8f0",
+    66→  success: "#059669",
+    67→  successLight: "#d1fae5",
+    68→  danger: "#dc2626",
+    69→  dangerLight: "#fee2e2",
+    70→  warning: "#d97706",
+    71→  warningLight: "#fef3c7",
+    72→  white: "#ffffff",
+    73→}
+    74→
+    75→// Login
+    76→function LoginScreen({ onLogin }: { onLogin: () => void }) {
+    77→  const [email, setEmail] = useState("")
+    78→  const [password, setPassword] = useState("")
+    79→  const [loading, setLoading] = useState(false)
+    80→
+    81→  const handleLogin = async () => {
+    82→    setLoading(true)
+    83→    try {
+    84→      const { data, error } = await getSupabase().auth.signInWithPassword({ email, password })
+    85→      if (error) throw error
+    86→      authToken = data.session?.access_token
+    87→      await SecureStore.setItemAsync("authToken", authToken || "")
+    88→      onLogin()
+    89→    } catch (e: any) { Alert.alert("Login Gagal", e.message) }
+    90→    finally { setLoading(false) }
+    91→  }
+    92→
+    93→  return (
+    94→    <SafeAreaView style={styles.loginContainer}>
+    95→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+    96→      <ScrollView contentContainerStyle={styles.loginScroll}>
+    97→        <View style={styles.loginLogo}>
+    98→          <Ionicons name="analytics" size={80} color={Colors.primary} />
+    99→          <Text style={styles.loginTitle}>SIM MADIN</Text>
+   100→          <Text style={styles.loginSubtitle}>Kepala Madrasah</Text>
+   101→        </View>
+   102→        <View style={styles.loginCard}>
+   103→          <Text style={styles.loginCardTitle}>Masuk sebagai Kepala</Text>
+   104→          <Text style={styles.label}>Email</Text>
+   105→          <TextInput style={styles.input} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+   106→          <Text style={styles.label}>Password</Text>
+   107→          <TextInput style={styles.input} value={password} onChangeText={setPassword} secureTextEntry />
+   108→          <TouchableOpacity style={[styles.loginButton, loading && { opacity: 0.6 }]} onPress={handleLogin} disabled={loading}>
+   109→            {loading ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.loginButtonText}>Masuk</Text>}
+   110→          </TouchableOpacity>
+   111→          <Text style={styles.demoText}>Demo: kepala@madrasah.test / admin123</Text>
+   112→        </View>
+   113→      </ScrollView>
+   114→    </SafeAreaView>
+   115→  )
+   116→}
+   117→
+   118→// Dashboard
+   119→function DashboardScreen({ onLogout, navigation, refreshKey }: { onLogout: () => void; navigation: any; refreshKey: number }) {
+   120→  const [stats, setStats] = useState<any>(null)
+   121→  const [loading, setLoading] = useState(true)
+   122→  const [error, setError] = useState<string | null>(null)
+   123→
+   124→  const load = useCallback(async () => {
+   125→    try {
+   126→      setLoading(true)
+   127→      setError(null)
+   128→      const res = await apiGet("/api/admin/dashboard")
+   129→      setStats(res)
+   130→    } catch (e: any) {
+   131→      setError(e.message || "Terjadi kesalahan")
+   132→    } finally {
+   133→      setLoading(false)
+   134→    }
+   135→  }, [])
+   136→
+   137→  useEffect(() => { load() }, [load, refreshKey])
+   138→
+   139→  const statCards = stats ? [
+   140→    { label: "Total Santri", value: stats?.stats?.totalSantri ?? 0, icon: "people", color: Colors.success, bg: Colors.successLight },
+   141→    { label: "Total Guru", value: stats?.stats?.totalGuru ?? 0, icon: "school", color: Colors.primary, bg: Colors.primaryLight },
+   142→    { label: "Total Kelas", value: stats?.stats?.totalKelas ?? 0, icon: "grid", color: "#7c3aed", bg: "#ede9fe" },
+   143→    { label: "Pemasukan Bulan Ini", value: formatRupiah(stats?.stats?.totalIncomeThisMonth ?? 0), icon: "cash", color: Colors.success, bg: Colors.successLight },
+   144→    { label: "Tunggakan", value: formatRupiah(stats?.stats?.totalOutstanding ?? 0), icon: "warning", color: Colors.danger, bg: Colors.dangerLight },
+   145→    { label: "Tagihan Lunas", value: stats?.stats?.tagihanLunas ?? 0, icon: "checkmark-circle", color: Colors.success, bg: Colors.successLight },
+   146→  ] : []
+   147→
+   148→  return (
+   149→    <SafeAreaView style={styles.screen}>
+   150→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+   151→      <View style={styles.header}>
+   152→        <Text style={styles.headerTitle}>Dashboard Kepala</Text>
+   153→        <TouchableOpacity onPress={onLogout}>
+   154→          <Ionicons name="log-out-outline" size={24} color={Colors.white} />
+   155→        </TouchableOpacity>
+   156→      </View>
+   157→
+   158→      {error ? (
+   159→        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 20 }}>
+   160→          <Text style={{ color: Colors.danger, textAlign: "center", marginBottom: 16 }}>{error}</Text>
+   161→          <TouchableOpacity onPress={() => { setError(null); load() }} style={{ backgroundColor: Colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}>
+   162→            <Text style={{ color: Colors.white, fontWeight: "600" }}>Coba Lagi</Text>
+   163→          </TouchableOpacity>
+   164→        </View>
+   165→      ) : loading ? (
+   166→        <View style={styles.loadingContainer}>
+   167→          <ActivityIndicator size="large" color={Colors.primary} />
+   168→        </View>
+   169→      ) : (
+   170→        <ScrollView style={styles.content}>
+   171→          <Text style={styles.sectionTitle}>Statistik Madrasah</Text>
+   172→          <View style={styles.statsGrid}>
+   173→            {statCards.map((s, i) => (
+   174→              <View key={i} style={styles.statCard}>
+   175→                <View style={[styles.statIcon, { backgroundColor: s.bg }]}>
+   176→                  <Ionicons name={s.icon as any} size={24} color={s.color} />
+   177→                </View>
+   178→                <Text style={styles.statLabel}>{s.label}</Text>
+   179→                <Text style={styles.statValue}>{s.value}</Text>
+   180→              </View>
+   181→            ))}
+   182→          </View>
+   183→
+   184→          {stats.absensiToday && (
+   185→            <>
+   186→              <Text style={styles.sectionTitle}>Absensi Hari Ini</Text>
+   187→              <View style={styles.absensiRow}>
+   188→                <View style={styles.absensiCard}>
+   189→                  <Text style={styles.absensiValue}>{stats.absensiToday.hadir}</Text>
+   190→                  <Text style={styles.absensiLabel}>Hadir</Text>
+   191→                </View>
+   192→                <View style={styles.absensiCard}>
+   193→                  <Text style={styles.absensiValue}>{stats.absensiToday.sakit}</Text>
+   194→                  <Text style={styles.absensiLabel}>Sakit</Text>
+   195→                </View>
+   196→                <View style={styles.absensiCard}>
+   197→                  <Text style={styles.absensiValue}>{stats.absensiToday.izin}</Text>
+   198→                  <Text style={styles.absensiLabel}>Izin</Text>
+   199→                </View>
+   200→                <View style={styles.absensiCard}>
+   201→                  <Text style={styles.absensiValue}>{stats.absensiToday.alfa}</Text>
+   202→                  <Text style={styles.absensiLabel}>Alfa</Text>
+   203→                </View>
+   204→              </View>
+   205→            </>
+   206→          )}
+   207→
+   208→          {stats.santriPerKelas && stats.santriPerKelas.length > 0 && (
+   209→            <>
+   210→              <Text style={styles.sectionTitle}>Distribusi Santri per Kelas</Text>
+   211→              {stats.santriPerKelas.map((k: any, i: number) => (
+   212→                <View key={i} style={styles.kelasCard}>
+   213→                  <Text style={styles.kelasName}>{k.name}</Text>
+   214→                  <Text style={styles.kelasCount}>{k.count} santri</Text>
+   215→                  <Text style={styles.kelasWali}>Wali: {k.waliKelas}</Text>
+   216→                </View>
+   217→              ))}
+   218→            </>
+   219→          )}
+   220→
+   221→          {/* Quick Menu */}
+   222→          <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Monitoring</Text>
+   223→          <View style={styles.statsGrid}>
+   224→            <TouchableOpacity style={styles.statCard} onPress={() => navigation.navigate("MonitorSantri")}>
+   225→              <View style={[styles.statIcon, { backgroundColor: Colors.successLight }]}>
+   226→                <Ionicons name="people" size={24} color={Colors.success} />
+   227→              </View>
+   228→              <Text style={styles.menuTitle}>Data Santri</Text>
+   229→            </TouchableOpacity>
+   230→            <TouchableOpacity style={styles.statCard} onPress={() => navigation.navigate("MonitorGuru")}>
+   231→              <View style={[styles.statIcon, { backgroundColor: Colors.primaryLight }]}>
+   232→                <Ionicons name="school" size={24} color={Colors.primary} />
+   233→              </View>
+   234→              <Text style={styles.menuTitle}>Data Guru</Text>
+   235→            </TouchableOpacity>
+   236→            <TouchableOpacity style={styles.statCard} onPress={() => navigation.navigate("MonitorAbsensi")}>
+   237→              <View style={[styles.statIcon, { backgroundColor: "#dbeafe" }]}>
+   238→                <Ionicons name="checkmark-done" size={24} color="#3b82f6" />
+   239→              </View>
+   240→              <Text style={styles.menuTitle}>Rekap Absensi</Text>
+   241→            </TouchableOpacity>
+   242→            <TouchableOpacity style={styles.statCard} onPress={() => navigation.navigate("MonitorKeuangan")}>
+   243→              <View style={[styles.statIcon, { backgroundColor: Colors.warningLight }]}>
+   244→                <Ionicons name="wallet" size={24} color={Colors.warning} />
+   245→              </View>
+   246→              <Text style={styles.menuTitle}>Monitoring Keuangan</Text>
+   247→            </TouchableOpacity>
+   248→            <TouchableOpacity style={styles.statCard} onPress={() => navigation.navigate("MonitorPengumuman")}>
+   249→              <View style={[styles.statIcon, { backgroundColor: "#fef3c7" }]}>
+   250→                <Ionicons name="megaphone" size={24} color={Colors.warning} />
+   251→              </View>
+   252→              <Text style={styles.menuTitle}>Pengumuman</Text>
+   253→            </TouchableOpacity>
+   254→            <TouchableOpacity style={styles.statCard} onPress={() => navigation.navigate("MonitorNilai")}>
+   255→              <View style={[styles.statIcon, { backgroundColor: "#ede9fe" }]}>
+   256→                <Ionicons name="star" size={24} color="#7c3aed" />
+   257→              </View>
+   258→              <Text style={styles.menuTitle}>Monitoring Nilai</Text>
+   259→            </TouchableOpacity>
+   260→            <TouchableOpacity style={styles.statCard} onPress={() => navigation.navigate("DashboardKepala")}>
+   261→              <View style={[styles.statIcon, { backgroundColor: Colors.primaryLight }]}>
+   262→                <Ionicons name="bar-chart" size={24} color={Colors.primary} />
+   263→              </View>
+   264→              <Text style={styles.menuTitle}>Dashboard Analitik</Text>
+   265→            </TouchableOpacity>
+   266→          </View>
+   267→
+   268→          <View style={{ height: 24 }} />
+   269→        </ScrollView>
+   270→      )}
+   271→    </SafeAreaView>
+   272→  )
+   273→}
+   274→
+   275→// ============================================================================
+   276→// MONITORING SCREENS
+   277→// ============================================================================
+   278→
+   279→function MonitorListScreen({ navigation, title, endpoint, renderItem, refreshKey }: { navigation: any; title: string; endpoint: string; renderItem: (item: any) => React.ReactNode; refreshKey: number }) {
+   280→  const [data, setData] = useState<any[]>([])
+   281→  const [loading, setLoading] = useState(true)
+   282→  const [error, setError] = useState<string | null>(null)
+   283→  const [refreshing, setRefreshing] = useState(false)
+   284→
+   285→  const load = useCallback(async () => {
+   286→    try {
+   287→      setLoading(true)
+   288→      setError(null)
+   289→      const res = await apiGet(endpoint)
+   290→      setData(res.data || [])
+   291→    } catch (e: any) {
+   292→      setError(e.message || "Terjadi kesalahan")
+   293→    } finally {
+   294→      setLoading(false)
+   295→    }
+   296→  }, [endpoint])
+   297→
+   298→  useEffect(() => { load() }, [load, refreshKey])
+   299→
+   300→  return (
+   301→    <SafeAreaView style={styles.screen}>
+   302→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+   303→      <View style={styles.header}>
+   304→        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4 }}>
+   305→          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+   306→        </TouchableOpacity>
+   307→        <Text style={styles.headerTitle}>{title}</Text>
+   308→        <View style={{ width: 24 }} />
+   309→      </View>
+   310→      {error ? (
+   311→        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 20 }}>
+   312→          <Text style={{ color: Colors.danger, textAlign: "center", marginBottom: 16 }}>{error}</Text>
+   313→          <TouchableOpacity onPress={() => { setError(null); load() }} style={{ backgroundColor: Colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}>
+   314→            <Text style={{ color: Colors.white, fontWeight: "600" }}>Coba Lagi</Text>
+   315→          </TouchableOpacity>
+   316→        </View>
+   317→      ) : loading ? (
+   318→        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+   319→      ) : (
+   320→        <FlatList
+   321→          data={data}
+   322→          keyExtractor={(item: any) => item.id}
+   323→          renderItem={({ item }: { item: any }): React.ReactElement => <>{renderItem(item)}</> as React.ReactElement}
+   324→          ListEmptyComponent={<View style={styles.emptyCard}><Text style={styles.emptyText}>Tidak ada data</Text></View>}
+   325→          contentContainerStyle={{ padding: 16 }}
+   326→          refreshControl={
+   327→            <RefreshControl
+   328→              refreshing={refreshing}
+   329→              onRefresh={() => {
+   330→                setRefreshing(true)
+   331→                load().finally(() => setRefreshing(false))
+   332→              }}
+   333→              colors={[Colors.primary]}
+   334→              tintColor={Colors.primary}
+   335→            />
+   336→          }
+   337→        />
+   338→      )}
+   339→    </SafeAreaView>
+   340→  )
+   341→}
+   342→
+   343→function MonitorSantriScreen({ navigation, refreshKey }: { navigation: any; refreshKey: number }) {
+   344→  return <MonitorListScreen navigation={navigation} title="Data Santri" endpoint="/api/admin/santri" refreshKey={refreshKey} renderItem={(item: any) => (
+   345→    <View style={styles.kelasCard}>
+   346→      <View style={{ flexDirection: "row", alignItems: "center" }}>
+   347→        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primaryLight, justifyContent: "center", alignItems: "center", marginRight: 12 }}>
+   348→          <Text style={{ fontSize: 18, fontWeight: "bold", color: Colors.primary }}>{item.name[0]}</Text>
+   349→        </View>
+   350→        <View style={{ flex: 1 }}>
+   351→          <Text style={styles.kelasName}>{item.name}</Text>
+   352→          <Text style={styles.kelasWali}>NIS: {item.nis} • {item.kelas?.name || "-"}</Text>
+   353→          <Text style={styles.kelasWali}>Wali: {item.wali?.name || "-"}</Text>
+   354→        </View>
+   355→        <View style={{ backgroundColor: item.status === "AKTIF" ? Colors.successLight : Colors.dangerLight, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
+   356→          <Text style={{ fontSize: 10, color: item.status === "AKTIF" ? Colors.success : Colors.danger }}>{item.status}</Text>
+   357→        </View>
+   358→      </View>
+   359→    </View>
+   360→  )} />
+   361→}
+   362→
+   363→function MonitorGuruScreen({ navigation, refreshKey }: { navigation: any; refreshKey: number }) {
+   364→  return <MonitorListScreen navigation={navigation} title="Data Guru" endpoint="/api/admin/guru" refreshKey={refreshKey} renderItem={(item: any) => (
+   365→    <View style={styles.kelasCard}>
+   366→      <View style={{ flexDirection: "row", alignItems: "center" }}>
+   367→        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primaryLight, justifyContent: "center", alignItems: "center", marginRight: 12 }}>
+   368→          <Text style={{ fontSize: 18, fontWeight: "bold", color: Colors.primary }}>{item.name[0]}</Text>
+   369→        </View>
+   370→        <View style={{ flex: 1 }}>
+   371→          <Text style={styles.kelasName}>{item.name}</Text>
+   372→          <Text style={styles.kelasWali}>{item.specialization || "Guru"}</Text>
+   373→          <Text style={styles.kelasWali}>{item.phone || "-"}</Text>
+   374→        </View>
+   375→        <View style={{ backgroundColor: item.status === "AKTIF" ? Colors.successLight : Colors.dangerLight, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
+   376→          <Text style={{ fontSize: 10, color: item.status === "AKTIF" ? Colors.success : Colors.danger }}>{item.status}</Text>
+   377→        </View>
+   378→      </View>
+   379→    </View>
+   380→  )} />
+   381→}
+   382→
+   383→function MonitorAbsensiScreen({ navigation, refreshKey }: { navigation: any; refreshKey: number }) {
+   384→  return <MonitorListScreen navigation={navigation} title="Rekap Absensi" endpoint="/api/admin/absensi?limit=50" refreshKey={refreshKey} renderItem={(item: any) => (
+   385→    <View style={styles.kelasCard}>
+   386→      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+   387→        <View style={{ flex: 1 }}>
+   388→          <Text style={styles.kelasName}>{item.santri?.name}</Text>
+   389→          <Text style={styles.kelasWali}>{item.kelas?.name} • {formatDate(item.date)}</Text>
+   390→        </View>
+   391→        <View style={{ backgroundColor: item.status === "HADIR" ? Colors.successLight : item.status === "SAKIT" ? Colors.warningLight : item.status === "IZIN" ? "#dbeafe" : Colors.dangerLight, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 }}>
+   392→          <Text style={{ fontSize: 12, fontWeight: "600", color: item.status === "HADIR" ? Colors.success : item.status === "SAKIT" ? Colors.warning : item.status === "IZIN" ? "#3b82f6" : Colors.danger }}>{item.status}</Text>
+   393→        </View>
+   394→      </View>
+   395→    </View>
+   396→  )} />
+   397→}
+   398→
+   399→function MonitorKeuanganScreen({ navigation, refreshKey }: { navigation: any; refreshKey: number }) {
+   400→  const [payments, setPayments] = useState<any[]>([])
+   401→  const [loading, setLoading] = useState(true)
+   402→  const [refreshing, setRefreshing] = useState(false)
+   403→
+   404→  const load = useCallback(async () => {
+   405→    try {
+   406→      setLoading(true)
+   407→      const res = await apiGet("/api/admin/pembayaran?limit=20")
+   408→      setPayments(res.data || [])
+   409→    } catch (e: any) { Alert.alert("Error", e.message) }
+   410→    finally { setLoading(false) }
+   411→  }, [])
+   412→
+   413→  useEffect(() => { load() }, [load, refreshKey])
+   414→
+   415→  const totalIncome = payments.filter(p => p.status === "VERIFIED").reduce((s, p) => s + p.amount, 0)
+   416→
+   417→  return (
+   418→    <SafeAreaView style={styles.screen}>
+   419→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+   420→      <View style={styles.header}>
+   421→        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4 }}>
+   422→          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+   423→        </TouchableOpacity>
+   424→        <Text style={styles.headerTitle}>Monitoring Keuangan</Text>
+   425→        <View style={{ width: 24 }} />
+   426→      </View>
+   427→      <View style={{ margin: 16, borderRadius: 12, padding: 20, backgroundColor: Colors.success, elevation: 2 }}>
+   428→        <Text style={{ fontSize: 12, color: Colors.white, opacity: 0.9 }}>Total Pemasukan (20 trxs)</Text>
+   429→        <Text style={{ fontSize: 24, fontWeight: "bold", color: Colors.white, marginTop: 4 }}>{formatRupiah(totalIncome)}</Text>
+   430→      </View>
+   431→      {loading ? (
+   432→        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+   433→      ) : (
+   434→        <FlatList
+   435→          data={payments}
+   436→          keyExtractor={item => item.id}
+   437→          renderItem={({ item }) => (
+   438→            <View style={styles.kelasCard}>
+   439→              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+   440→                <View style={{ flex: 1 }}>
+   441→                  <Text style={styles.kelasName}>{item.santri?.name || "-"}</Text>
+   442→                  <Text style={styles.kelasWali}>{item.invoiceNo}</Text>
+   443→                  <Text style={styles.kelasWali}>{formatDate(item.paymentDate, true)}</Text>
+   444→                </View>
+   445→                <View style={{ alignItems: "flex-end" }}>
+   446→                  <Text style={{ fontSize: 16, fontWeight: "600", color: Colors.success }}>{formatRupiah(item.amount)}</Text>
+   447→                  <View style={{ backgroundColor: item.status === "VERIFIED" ? Colors.successLight : Colors.warningLight, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, marginTop: 4 }}>
+   448→                    <Text style={{ fontSize: 10, color: item.status === "VERIFIED" ? Colors.success : Colors.warning }}>{item.status}</Text>
+   449→                  </View>
+   450→                </View>
+   451→              </View>
+   452→            </View>
+   453→          )}
+   454→          ListEmptyComponent={<View style={styles.emptyCard}><Text style={styles.emptyText}>Tidak ada data</Text></View>}
+   455→          contentContainerStyle={{ padding: 16 }}
+   456→          refreshControl={
+   457→            <RefreshControl
+   458→              refreshing={refreshing}
+   459→              onRefresh={() => {
+   460→                setRefreshing(true)
+   461→                load().finally(() => setRefreshing(false))
+   462→              }}
+   463→              colors={[Colors.primary]}
+   464→              tintColor={Colors.primary}
+   465→            />
+   466→          }
+   467→        />
+   468→      )}
+   469→    </SafeAreaView>
+   470→  )
+   471→}
+   472→
+   473→function MonitorPengumumanScreen({ navigation, refreshKey }: { navigation: any; refreshKey: number }) {
+   474→  return <MonitorListScreen navigation={navigation} title="Pengumuman" endpoint="/api/admin/pengumuman" refreshKey={refreshKey} renderItem={(item: any) => (
+   475→    <View style={styles.kelasCard}>
+   476→      <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
+   477→        <View style={{ backgroundColor: item.priority === "URGENT" ? Colors.dangerLight : item.priority === "PENTING" ? Colors.warningLight : "#f1f5f9", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
+   478→          <Text style={{ fontSize: 10, fontWeight: "600", color: item.priority === "URGENT" ? Colors.danger : item.priority === "PENTING" ? Colors.warning : Colors.textMuted }}>{item.priority}</Text>
+   479→        </View>
+   480→        <View style={{ backgroundColor: "#dbeafe", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
+   481→          <Text style={{ fontSize: 10, color: "#3b82f6" }}>{item.audience}</Text>
+   482→        </View>
+   483→      </View>
+   484→      <Text style={styles.kelasName}>{item.title}</Text>
+   485→      <Text style={styles.kelasWali} numberOfLines={3}>{item.content}</Text>
+   486→      <Text style={[styles.kelasWali, { fontSize: 11, marginTop: 4 }]}>{formatDate(item.publishedAt, true)}</Text>
+   487→    </View>
+   488→  )} />
+   489→}
+   490→
+   491→// ============================================================================
+   492→// V11 — Monitoring Nilai Santri
+   493→// Fetch dari /api/admin/nilai?limit=50 (sudah sort by assessmentDate desc)
+   494→// ============================================================================
+   495→function MonitorNilaiScreen({ navigation, refreshKey }: { navigation: any; refreshKey: number }) {
+   496→  return <MonitorListScreen navigation={navigation} title="Monitoring Nilai" endpoint="/api/admin/nilai?limit=50" refreshKey={refreshKey} renderItem={(item: any) => {
+   497→    const kkm = item.mapel?.kkm ?? 70
+   498→    const lulus = item.score >= kkm
+   499→    const typeColor = item.type === "UAS" ? Colors.danger : item.type === "UTS" ? Colors.warning : Colors.primary
+   500→    const typeBg = item.type === "UAS" ? Colors.dangerLight : item.type === "UTS" ? Colors.warningLight : Colors.primaryLight
+   501→    return (
+   502→      <View style={styles.kelasCard}>
+   503→        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+   504→          <View style={{ flex: 1 }}>
+   505→            <Text style={styles.kelasName}>{item.santri?.name || "-"}</Text>
+   506→            <Text style={styles.kelasWali}>{item.mapel?.name || "-"} • {item.kelas?.name || "-"}</Text>
+   507→            <Text style={[styles.kelasWali, { fontSize: 11, marginTop: 2 }]}>{formatDate(item.assessmentDate)}</Text>
+   508→          </View>
+   509→          <View style={{ alignItems: "flex-end" }}>
+   510→            <Text style={{ fontSize: 22, fontWeight: "bold", color: lulus ? Colors.success : Colors.danger }}>{item.score}</Text>
+   511→            <View style={{ backgroundColor: typeBg, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, marginTop: 4 }}>
+   512→              <Text style={{ fontSize: 10, fontWeight: "600", color: typeColor }}>{item.type}</Text>
+   513→            </View>
+   514→          </View>
+   515→        </View>
+   516→      </View>
+   517→    )
+   518→  }} />
+   519→}
+   520→
+   521→// ============================================================================
+   522→// V11 — Dashboard Kepala (Comprehensive Analytics)
+   523→// Fetch dari /api/admin/dashboard-kepala
+   524→// ============================================================================
+   525→function DashboardKepalaScreen({ navigation, refreshKey }: { navigation: any; refreshKey: number }) {
+   526→  const [data, setData] = useState<any>(null)
+   527→  const [loading, setLoading] = useState(true)
+   528→
+   529→  const load = useCallback(async () => {
+   530→    try {
+   531→      setLoading(true)
+   532→      const res = await apiGet("/api/admin/dashboard-kepala")
+   533→      setData(res.data || res)
+   534→    } catch (e: any) { Alert.alert("Error", e.message) }
+   535→    finally { setLoading(false) }
+   536→  }, [])
+   537→
+   538→  useEffect(() => { load() }, [load, refreshKey])
+   539→
+   540→  const statCards = data ? [
+   541→    { label: "Total Santri", value: String(data.santri?.total ?? 0), icon: "people", color: Colors.success, bg: Colors.successLight },
+   542→    { label: "Santri Aktif", value: String(data.santri?.aktif ?? 0), icon: "person", color: Colors.primary, bg: Colors.primaryLight },
+   543→    { label: "Guru Aktif", value: String(data.guru?.aktif ?? 0), icon: "school", color: Colors.primary, bg: Colors.primaryLight },
+   544→    { label: "Saldo Kas", value: formatRupiah(data.keuangan?.saldo ?? 0), icon: "cash", color: Colors.success, bg: Colors.successLight },
+   545→    { label: "Tunggakan", value: formatRupiah(data.keuangan?.totalTunggakan ?? 0), icon: "warning", color: Colors.danger, bg: Colors.dangerLight },
+   546→    { label: "Kehadiran", value: `${data.kehadiran?.persentaseHadir ?? 0}%`, icon: "checkmark-done", color: Colors.success, bg: Colors.successLight },
+   547→  ] : []
+   548→
+   549→  const topSantri = (data?.akademik?.topSantri || []).slice(0, 5)
+   550→  const seringTidakHadir = (data?.kehadiran?.santriSeringTidakHadir || []).slice(0, 5)
+   551→  const rekapPerKelas = data?.kehadiran?.rekapPerKelas || []
+   552→
+   553→  return (
+   554→    <SafeAreaView style={styles.screen}>
+   555→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+   556→      <View style={styles.header}>
+   557→        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 4 }}>
+   558→          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+   559→        </TouchableOpacity>
+   560→        <Text style={styles.headerTitle}>Dashboard Analitik</Text>
+   561→        <View style={{ width: 24 }} />
+   562→      </View>
+   563→      {loading ? (
+   564→        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+   565→      ) : (
+   566→        <ScrollView style={styles.content}>
+   567→          {/* Stat cards */}
+   568→          <Text style={styles.sectionTitle}>Ringkasan</Text>
+   569→          <View style={styles.statsGrid}>
+   570→            {statCards.map((s, i) => (
+   571→              <View key={i} style={styles.statCard}>
+   572→                <View style={[styles.statIcon, { backgroundColor: s.bg }]}>
+   573→                  <Ionicons name={s.icon as any} size={24} color={s.color} />
+   574→                </View>
+   575→                <Text style={styles.statLabel}>{s.label}</Text>
+   576→                <Text style={styles.statValue}>{s.value}</Text>
+   577→              </View>
+   578→            ))}
+   579→          </View>
+   580→
+   581→          {/* Top 5 Santri by avg nilai */}
+   582→          <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Top 5 Santri (by Avg Nilai)</Text>
+   583→          {topSantri.length > 0 ? topSantri.map((s: any, i: number) => (
+   584→            <View key={i} style={styles.kelasCard}>
+   585→              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+   586→                <View style={{ flex: 1 }}>
+   587→                  <Text style={styles.kelasName}>#{s.rank} {s.name}</Text>
+   588→                  <Text style={styles.kelasWali}>{s.nis} • {s.kelas}</Text>
+   589→                </View>
+   590→                <View style={{ alignItems: "flex-end" }}>
+   591→                  <Text style={{ fontSize: 22, fontWeight: "bold", color: Colors.success }}>{s.avg}</Text>
+   592→                  <Text style={{ fontSize: 10, color: Colors.textMuted, marginTop: 2 }}>{s.count} nilai</Text>
+   593→                </View>
+   594→              </View>
+   595→            </View>
+   596→          )) : <View style={styles.emptyCard}><Text style={styles.emptyText}>Belum ada data nilai</Text></View>}
+   597→
+   598→          {/* Santri sering tidak hadir (<80%) */}
+   599→          <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Sering Tidak Hadir (≤80%)</Text>
+   600→          {seringTidakHadir.length > 0 ? seringTidakHadir.map((s: any, i: number) => (
+   601→            <View key={i} style={styles.kelasCard}>
+   602→              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+   603→                <View style={{ flex: 1 }}>
+   604→                  <Text style={styles.kelasName}>{s.name}</Text>
+   605→                  <Text style={styles.kelasWali}>{s.nis} • {s.kelas}</Text>
+   606→                  <Text style={[styles.kelasWali, { fontSize: 11 }]}>{s.hadir}/{s.total} hari hadir</Text>
+   607→                </View>
+   608→                <View style={{ backgroundColor: Colors.dangerLight, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
+   609→                  <Text style={{ fontSize: 14, fontWeight: "600", color: Colors.danger }}>{s.persentase}%</Text>
+   610→                </View>
+   611→              </View>
+   612→            </View>
+   613→          )) : <View style={styles.emptyCard}><Text style={styles.emptyText}>Semua santri hadir ≥80%</Text></View>}
+   614→
+   615→          {/* Rekap kehadiran per kelas */}
+   616→          <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Rekap Kehadiran per Kelas</Text>
+   617→          {rekapPerKelas.length > 0 ? rekapPerKelas.map((k: any, i: number) => {
+   618→            const color = k.persentase >= 80 ? Colors.success : k.persentase >= 60 ? Colors.warning : Colors.danger
+   619→            const bg = k.persentase >= 80 ? Colors.successLight : k.persentase >= 60 ? Colors.warningLight : Colors.dangerLight
+   620→            return (
+   621→              <View key={i} style={styles.kelasCard}>
+   622→                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+   623→                  <View style={{ flex: 1 }}>
+   624→                    <Text style={styles.kelasName}>{k.kelas}</Text>
+   625→                    <Text style={styles.kelasWali}>{k.hadir}/{k.total} hadir</Text>
+   626→                  </View>
+   627→                  <View style={{ backgroundColor: bg, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
+   628→                    <Text style={{ fontSize: 14, fontWeight: "600", color }}>{k.persentase}%</Text>
+   629→                  </View>
+   630→                </View>
+   631→              </View>
+   632→            )
+   633→          }) : <View style={styles.emptyCard}><Text style={styles.emptyText}>Belum ada data absensi</Text></View>}
+   634→
+   635→          <View style={{ height: 24 }} />
+   636→        </ScrollView>
+   637→      )}
+   638→    </SafeAreaView>
+   639→  )
+   640→}
+   641→
+   642→const Stack = createNativeStackNavigator()
+   643→
+   644→export default function App() {
+   645→  const [isLoggedIn, setIsLoggedIn] = useState(false)
+   646→  const [checking, setChecking] = useState(true)
+   647→  // Realtime refresh tick — bumped whenever a subscribed table changes.
+   648→  // Drives dashboard stats refresh on Santri/Guru/Payment events.
+   649→  const [refreshKey, setRefreshKey] = useState(0)
+   650→
+   651→  useEffect(() => {
+   652→    async function check() {
+   653→      const token = await SecureStore.getItemAsync("authToken")
+   654→      if (token) {
+   655→        authToken = token
+   656→        const { data } = await getSupabase().auth.getSession()
+   657→        if (data.session) { authToken = data.session.access_token; setIsLoggedIn(true) }
+   658→      }
+   659→      setChecking(false)
+   660→    }
+   661→    check()
+   662→  }, [])
+   663→
+   664→  // ============================================================================
+   665→  // Supabase Realtime subscriptions (OPTIONAL — fails silently if unavailable)
+   666→  // - Santri   INSERT/UPDATE : data santri berubah → refresh dashboard stats
+   667→  // - Guru     INSERT/UPDATE : data guru berubah  → refresh dashboard stats
+   668→  // - Payment  INSERT/UPDATE : pembayaran baru    → refresh keuangan stats
+   669→  // ============================================================================
+   670→  useEffect(() => {
+   671→    if (!isLoggedIn) return
+   672→    let cancelled = false
+   673→    const unsubs: Array<() => void> = []
+   674→    ;(async () => {
+   675→      try {
+   676→        for (const table of ["Santri", "Guru", "Payment"] as const) {
+   677→          try {
+   678→            const unsub = await subscribeToTable(table, () => {
+   679→              setRefreshKey(k => k + 1)
+   680→            })
+   681→            if (cancelled) { try { unsub() } catch {} }
+   682→            else { unsubs.push(unsub) }
+   683→          } catch {}
+   684→        }
+   685→      } catch(e) { /* realtime optional */ }
+   686→    })()
+   687→    return () => {
+   688→      cancelled = true
+   689→      unsubs.forEach(u => { try { u() } catch {} })
+   690→    }
+   691→  }, [isLoggedIn])
+   692→
+   693→  if (checking) {
+   694→    return <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: Colors.primary }}><ActivityIndicator size="large" color={Colors.white} /></View>
+   695→  }
+   696→
+   697→  return (
+   698→    <NavigationContainer>
+   699→      <Stack.Navigator screenOptions={{ headerShown: false }}>
+   700→        {isLoggedIn ? (
+   701→          <>
+   702→            <Stack.Screen name="Dashboard">
+   703→              {({ navigation }) => <DashboardScreen navigation={navigation} refreshKey={refreshKey} onLogout={async () => { await getSupabase().auth.signOut(); await SecureStore.deleteItemAsync("authToken"); authToken = null; setIsLoggedIn(false) }} />}
+   704→            </Stack.Screen>
+   705→            <Stack.Screen name="MonitorSantri">
+   706→              {({ navigation }) => <MonitorSantriScreen navigation={navigation} refreshKey={refreshKey} />}
+   707→            </Stack.Screen>
+   708→            <Stack.Screen name="MonitorGuru">
+   709→              {({ navigation }) => <MonitorGuruScreen navigation={navigation} refreshKey={refreshKey} />}
+   710→            </Stack.Screen>
+   711→            <Stack.Screen name="MonitorAbsensi">
+   712→              {({ navigation }) => <MonitorAbsensiScreen navigation={navigation} refreshKey={refreshKey} />}
+   713→            </Stack.Screen>
+   714→            <Stack.Screen name="MonitorKeuangan">
+   715→              {({ navigation }) => <MonitorKeuanganScreen navigation={navigation} refreshKey={refreshKey} />}
+   716→            </Stack.Screen>
+   717→            <Stack.Screen name="MonitorPengumuman">
+   718→              {({ navigation }) => <MonitorPengumumanScreen navigation={navigation} refreshKey={refreshKey} />}
+   719→            </Stack.Screen>
+   720→            <Stack.Screen name="MonitorNilai">
+   721→              {({ navigation }) => <MonitorNilaiScreen navigation={navigation} refreshKey={refreshKey} />}
+   722→            </Stack.Screen>
+   723→            <Stack.Screen name="DashboardKepala">
+   724→              {({ navigation }) => <DashboardKepalaScreen navigation={navigation} refreshKey={refreshKey} />}
+   725→            </Stack.Screen>
+   726→          </>
+   727→        ) : (
+   728→          <Stack.Screen name="Login">{() => <LoginScreen onLogin={() => setIsLoggedIn(true)} />}</Stack.Screen>
+   729→        )}
+   730→      </Stack.Navigator>
+   731→    </NavigationContainer>
+   732→  )
+   733→}
+   734→
+   735→const styles = StyleSheet.create({
+   736→  loginContainer: { flex: 1, backgroundColor: Colors.primary },
+   737→  loginScroll: { flexGrow: 1, justifyContent: "center", padding: 24 },
+   738→  loginLogo: { alignItems: "center", marginBottom: 32 },
+   739→  loginTitle: { fontSize: 28, fontWeight: "bold", color: Colors.white, marginTop: 8 },
+   740→  loginSubtitle: { fontSize: 16, color: Colors.white, opacity: 0.8 },
+   741→  loginCard: { backgroundColor: Colors.white, borderRadius: 16, padding: 24, elevation: 4 },
+   742→  loginCardTitle: { fontSize: 20, fontWeight: "bold", color: Colors.text, marginBottom: 20 },
+   743→  label: { fontSize: 12, fontWeight: "600", color: Colors.text, marginTop: 12, marginBottom: 4 },
+   744→  input: { borderWidth: 1, borderColor: Colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12, fontSize: 16, color: Colors.text },
+   745→  loginButton: { backgroundColor: Colors.primary, borderRadius: 8, paddingVertical: 14, alignItems: "center", marginTop: 24 },
+   746→  loginButtonText: { color: Colors.white, fontSize: 16, fontWeight: "600" },
+   747→  demoText: { fontSize: 12, color: Colors.textMuted, textAlign: "center", marginTop: 16 },
+   748→  screen: { flex: 1, backgroundColor: Colors.background },
+   749→  header: { backgroundColor: Colors.primary, paddingHorizontal: 16, paddingVertical: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: Platform.OS === "android" ? 35 : 0 },
+   750→  headerTitle: { fontSize: 18, fontWeight: "bold", color: Colors.white },
+   751→  content: { flex: 1, padding: 16 },
+   752→  sectionTitle: { fontSize: 16, fontWeight: "600", color: Colors.text, marginBottom: 12, marginTop: 8 },
+   753→  statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+   754→  statCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 16, width: "47%", elevation: 1 },
+   755→  statIcon: { width: 40, height: 40, borderRadius: 8, justifyContent: "center", alignItems: "center", marginBottom: 8 },
+   756→  statLabel: { fontSize: 11, color: Colors.textMuted },
+   757→  statValue: { fontSize: 20, fontWeight: "bold", color: Colors.text, marginTop: 4 },
+   758→  absensiRow: { flexDirection: "row", gap: 8 },
+   759→  absensiCard: { flex: 1, backgroundColor: Colors.white, borderRadius: 8, padding: 12, alignItems: "center", elevation: 1 },
+   760→  absensiValue: { fontSize: 24, fontWeight: "bold", color: Colors.text },
+   761→  absensiLabel: { fontSize: 11, color: Colors.textMuted, marginTop: 4 },
+   762→  kelasCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 16, marginBottom: 8, elevation: 1 },
+   763→  kelasName: { fontSize: 15, fontWeight: "600", color: Colors.text },
+   764→  kelasCount: { fontSize: 14, color: Colors.primary, marginTop: 4 },
+   765→  kelasWali: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+   766→  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+   767→  menuTitle: { fontSize: 13, fontWeight: "500", color: Colors.text, textAlign: "center", marginTop: 4 },
+   768→  emptyCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 24, alignItems: "center" },
+   769→  emptyText: { fontSize: 14, color: Colors.textMuted },
+   770→})
+   771→

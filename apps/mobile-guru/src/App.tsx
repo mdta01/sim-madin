@@ -17,6 +17,9 @@ import { createClient } from "@supabase/supabase-js"
 import * as SecureStore from "expo-secure-store"
 import { formatRupiah, formatDate, STATUS_STYLES, DAYS, NILAI_TYPES } from "../vendor/mobile-shared/src"
 import { subscribeToTable, subscribeToNotifikasi } from "../vendor/mobile-shared/src/realtime"
+import { Skeleton, SkeletonList, SkeletonCard, SkeletonPage, SkeletonStatsRow } from "../vendor/mobile-shared/src/skeleton"
+import { NetworkStatusIndicator, initNetworkMonitor } from "../vendor/mobile-shared/src/network-status"
+import DateTimePicker from "@react-native-community/datetimepicker"
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "https://sim-madin.vercel.app"
 // Supabase config — MUST be set in eas.json env or app.json extra
@@ -237,7 +240,9 @@ function DashboardScreen({ onLogout, navigation, refreshKey }: { onLogout: () =>
         {/* Today's Schedule */}
         <Text style={styles.sectionTitle}>Jadwal Hari Ini ({DAYS.find(d => d.value === today)?.label || "-"})</Text>
         {loading ? (
-          <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+          <View style={{ padding: 8 }}>
+            <SkeletonList items={5} />
+          </View>
         ) : todayJadwal.length === 0 ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyText}>Tidak ada jadwal hari ini 🎉</Text>
@@ -280,7 +285,8 @@ function AbsensiInputScreen({ route, navigation }: { route: any; navigation: any
   const [selectedKelas, setSelectedKelas] = useState(kelasIdFromRoute || "")
   const [santriList, setSantriList] = useState<any[]>([])
   const [absensiData, setAbsensiData] = useState<Record<string, string>>({})
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0])
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+  const [showDatePicker, setShowDatePicker] = useState(false)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -333,7 +339,8 @@ function AbsensiInputScreen({ route, navigation }: { route: any; navigation: any
     setSaving(true)
     try {
       const entries = Object.entries(absensiData).map(([santriId, status]) => ({ santriId, status }))
-      const res = await apiPost("/api/admin/absensi", { entries, kelasId: selectedKelas, date: selectedDate })
+      const dateStr = selectedDate.toISOString().split("T")[0]
+      const res = await apiPost("/api/admin/absensi", { entries, kelasId: selectedKelas, date: dateStr })
       Alert.alert("Berhasil", `${res.count} absensi tersimpan`)
       navigation.goBack()
     } catch (e: any) { Alert.alert("Gagal", e.message) }
@@ -354,12 +361,26 @@ function AbsensiInputScreen({ route, navigation }: { route: any; navigation: any
       <View style={styles.absensiControls}>
         {/* Date picker */}
         <Text style={styles.label}>Tanggal</Text>
-        <TextInput
-          style={styles.dateInput}
-          value={selectedDate}
-          onChangeText={setSelectedDate}
-          placeholder="YYYY-MM-DD"
-        />
+        <TouchableOpacity
+          onPress={() => setShowDatePicker(true)}
+          style={[styles.dateInput, { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}
+        >
+          <Text style={{ fontSize: 14, color: Colors.text }}>
+            {selectedDate.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+          </Text>
+          <Ionicons name="calendar" size={20} color={Colors.primary} />
+        </TouchableOpacity>
+        {showDatePicker && (
+          <DateTimePicker
+            value={selectedDate}
+            mode="date"
+            display="default"
+            onChange={(event, date) => {
+              setShowDatePicker(false)
+              if (date) setSelectedDate(date)
+            }}
+          />
+        )}
 
         {/* Kelas selector */}
         <Text style={styles.label}>Kelas</Text>
@@ -400,7 +421,9 @@ function AbsensiInputScreen({ route, navigation }: { route: any; navigation: any
           </TouchableOpacity>
         </View>
       ) : loading ? (
-        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+        <View style={{ flex: 1, backgroundColor: Colors.background, padding: 8 }}>
+          <SkeletonList items={8} />
+        </View>
       ) : (
         <FlatList
           data={santriList}
@@ -795,10 +818,10 @@ function SantriListScreen({ navigation }: { navigation: any }) {
               <View style={styles.jadwalInfo}>
                 <Text style={styles.jadwalMapel}>{item.name}</Text>
                 <Text style={styles.jadwalKelas}>NIS: {item.nis} • {item.gender === "L" ? "Laki-laki" : "Perempuan"}</Text>
-                {item.wali && <Text style={[styles.jadwalKelas, { fontSize: 11 }]}>Wali: {item.wali.name}</Text>}
+                {item.wali && <Text style={[styles.jadwalKelas, { fontSize: 12 }]}>Wali: {item.wali.name}</Text>}
               </View>
               <View style={[styles.statusBadge, { backgroundColor: item.status === "AKTIF" ? Colors.successLight : Colors.dangerLight }]}>
-                <Text style={[styles.statusText, { color: item.status === "AKTIF" ? Colors.success : Colors.danger, fontSize: 10 }]}>
+                <Text style={[styles.statusText, { color: item.status === "AKTIF" ? Colors.success : Colors.danger, fontSize: 12 }]}>
                   {item.status}
                 </Text>
               </View>
@@ -874,15 +897,15 @@ function PengumumanListScreen({ navigation }: { navigation: any }) {
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                     <View style={[styles.statusBadge, { backgroundColor: pc.bg }]}>
-                      <Text style={[styles.statusText, { color: pc.color, fontSize: 10 }]}>{item.priority}</Text>
+                      <Text style={[styles.statusText, { color: pc.color, fontSize: 12 }]}>{item.priority}</Text>
                     </View>
                     <View style={[styles.statusBadge, { backgroundColor: "#dbeafe" }]}>
-                      <Text style={[styles.statusText, { color: "#3b82f6", fontSize: 10 }]}>{item.audience}</Text>
+                      <Text style={[styles.statusText, { color: "#3b82f6", fontSize: 12 }]}>{item.audience}</Text>
                     </View>
                   </View>
                   <Text style={[styles.jadwalMapel, { marginTop: 8 }]}>{item.title}</Text>
                   <Text style={[styles.jadwalKelas, { marginTop: 4 }]} numberOfLines={3}>{item.content}</Text>
-                  <Text style={[styles.jadwalKelas, { fontSize: 11, marginTop: 4, color: Colors.textMuted }]}>{formatDate(item.publishedAt, true)}</Text>
+                  <Text style={[styles.jadwalKelas, { fontSize: 12, marginTop: 4, color: Colors.textMuted }]}>{formatDate(item.publishedAt, true)}</Text>
                 </View>
               </View>
             )
@@ -976,12 +999,12 @@ function MateriListScreen({ navigation }: { navigation: any }) {
                   <Text style={styles.jadwalKelas} numberOfLines={1}>
                     {item.mapel?.name || "-"} • {item.kelas?.name || "Semua kelas"}
                   </Text>
-                  <Text style={[styles.jadwalKelas, { fontSize: 11 }]} numberOfLines={1}>
+                  <Text style={[styles.jadwalKelas, { fontSize: 12 }]} numberOfLines={1}>
                     {item.guru?.name ? `Guru: ${item.guru.name}` : ""}{item.pertemuan ? ` • Pertemuan ${item.pertemuan}` : ""}
                   </Text>
                 </View>
                 <View style={[styles.statusBadge, { backgroundColor: item.isPublished ? Colors.successLight : "#f1f5f9" }]}>
-                  <Text style={[styles.statusText, { color: item.isPublished ? Colors.success : Colors.textMuted, fontSize: 10 }]}>
+                  <Text style={[styles.statusText, { color: item.isPublished ? Colors.success : Colors.textMuted, fontSize: 12 }]}>
                     {item.isPublished ? "Published" : "Draft"}
                   </Text>
                 </View>
@@ -1132,7 +1155,9 @@ function TugasListScreen({ navigation, refreshKey }: { navigation: any; refreshK
         </View>
 
         {loading ? (
-          <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+          <View style={{ padding: 8 }}>
+            <SkeletonList items={5} />
+          </View>
         ) : tugas.length === 0 ? (
           <View style={styles.emptyCard}><Text style={styles.emptyText}>Belum ada tugas</Text></View>
         ) : (
@@ -1143,17 +1168,17 @@ function TugasListScreen({ navigation, refreshKey }: { navigation: any; refreshK
                 <View style={styles.jadwalInfo}>
                   <Text style={styles.jadwalMapel} numberOfLines={1}>{item.title}</Text>
                   <Text style={styles.jadwalKelas}>{item.mapel?.name || "-"} • {item.kelas?.name || "-"}</Text>
-                  <Text style={[styles.jadwalKelas, { fontSize: 11 }]}>
+                  <Text style={[styles.jadwalKelas, { fontSize: 12 }]}>
                     Jenis: {item.type || "-"} • Tenggat: {dueDate}
                   </Text>
                 </View>
                 <View style={{ alignItems: "flex-end", gap: 4 }}>
                   <View style={[styles.statusBadge, { backgroundColor: item.isOverdue ? Colors.dangerLight : item.isPublished ? Colors.successLight : "#f1f5f9" }]}>
-                    <Text style={[styles.statusText, { color: item.isOverdue ? Colors.danger : item.isPublished ? Colors.success : Colors.textMuted, fontSize: 10 }]}>
+                    <Text style={[styles.statusText, { color: item.isOverdue ? Colors.danger : item.isPublished ? Colors.success : Colors.textMuted, fontSize: 12 }]}>
                       {item.isOverdue ? "Overdue" : item.isPublished ? "Aktif" : "Draft"}
                     </Text>
                   </View>
-                  <Text style={[styles.jadwalKelas, { fontSize: 11 }]}>
+                  <Text style={[styles.jadwalKelas, { fontSize: 12 }]}>
                     {item._count?.submissions ?? 0} kumpul
                   </Text>
                   <TouchableOpacity
@@ -1161,7 +1186,7 @@ function TugasListScreen({ navigation, refreshKey }: { navigation: any; refreshK
                     onPress={() => openSubmissions(item.id)}
                   >
                     <Ionicons name="eye" size={14} color={Colors.white} />
-                    <Text style={[styles.absensiQuickText, { fontSize: 11 }]}>Lihat</Text>
+                    <Text style={[styles.absensiQuickText, { fontSize: 12 }]}>Lihat</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -1277,10 +1302,10 @@ function PertemuanListScreen({ navigation }: { navigation: any }) {
               <View style={styles.jadwalInfo}>
                 <Text style={styles.jadwalMapel} numberOfLines={1}>{item.topic || `Pertemuan ke-${item.pertemuanKe}`}</Text>
                 <Text style={styles.jadwalKelas}>{item.mapel?.name || "-"} • {item.kelas?.name || "-"}</Text>
-                <Text style={[styles.jadwalKelas, { fontSize: 11 }]}>{formatDate(item.date)}</Text>
+                <Text style={[styles.jadwalKelas, { fontSize: 12 }]}>{formatDate(item.date)}</Text>
               </View>
               <View style={[styles.statusBadge, { backgroundColor: item.isCompleted ? Colors.successLight : Colors.warningLight }]}>
-                <Text style={[styles.statusText, { color: item.isCompleted ? Colors.success : Colors.warning, fontSize: 10 }]}>
+                <Text style={[styles.statusText, { color: item.isCompleted ? Colors.success : Colors.warning, fontSize: 12 }]}>
                   {item.isCompleted ? "Selesai" : "Belum"}
                 </Text>
               </View>
@@ -1364,23 +1389,23 @@ function UjianListScreen({ navigation }: { navigation: any }) {
                 <View style={styles.jadwalInfo}>
                   <Text style={styles.jadwalMapel} numberOfLines={1}>{item.title}</Text>
                   <Text style={styles.jadwalKelas}>{item.type} • {item.mapel?.name || "-"} • {item.kelas?.name || "-"}</Text>
-                  <Text style={[styles.jadwalKelas, { fontSize: 11 }]}>
+                  <Text style={[styles.jadwalKelas, { fontSize: 12 }]}>
                     {formatDate(item.startTime, true)} → {formatDate(item.endTime, true)}
                   </Text>
-                  <Text style={[styles.jadwalKelas, { fontSize: 11 }]}>
+                  <Text style={[styles.jadwalKelas, { fontSize: 12 }]}>
                     {item._count?.peserta ?? 0} peserta • {item._count?.nilai ?? 0} nilai
                   </Text>
                 </View>
                 <View style={{ alignItems: "flex-end", gap: 6 }}>
                   <View style={[styles.statusBadge, { backgroundColor: sm.bg }]}>
-                    <Text style={[styles.statusText, { color: sm.color, fontSize: 10 }]}>{sm.label}</Text>
+                    <Text style={[styles.statusText, { color: sm.color, fontSize: 12 }]}>{sm.label}</Text>
                   </View>
                   <TouchableOpacity
                     style={[styles.absensiQuickBtn, { backgroundColor: Colors.info }]}
                     onPress={() => openDetail(item.id)}
                   >
                     <Ionicons name="eye" size={14} color={Colors.white} />
-                    <Text style={[styles.absensiQuickText, { fontSize: 11 }]}>Lihat</Text>
+                    <Text style={[styles.absensiQuickText, { fontSize: 12 }]}>Lihat</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -1524,8 +1549,8 @@ function PerkembanganScreen({ navigation }: { navigation: any }) {
               {item.type} • {item.surah || "-"}{item.juz ? ` • Juz ${item.juz}` : ""}
               {item.ayatFrom ? ` • ${item.ayatFrom}${item.ayatTo ? `-${item.ayatTo}` : ""}` : ""}
             </Text>
-            <Text style={[styles.jadwalKelas, { fontSize: 11 }]}>{formatDate(date)}</Text>
-            {item.catatan ? <Text style={[styles.jadwalKelas, { fontSize: 11, fontStyle: "italic" }]} numberOfLines={2}>"{item.catatan}"</Text> : null}
+            <Text style={[styles.jadwalKelas, { fontSize: 12 }]}>{formatDate(date)}</Text>
+            {item.catatan ? <Text style={[styles.jadwalKelas, { fontSize: 12, fontStyle: "italic" }]} numberOfLines={2}>"{item.catatan}"</Text> : null}
           </View>
           {item.score != null && (
             <View style={[styles.statusBadge, { backgroundColor: Number(item.score) >= 70 ? Colors.successLight : Colors.dangerLight }]}>
@@ -1543,8 +1568,8 @@ function PerkembanganScreen({ navigation }: { navigation: any }) {
             <Text style={styles.jadwalKelas}>
               {item.type} • {item.kitabName}{item.halaman ? ` • hlm ${item.halaman}` : ""}
             </Text>
-            <Text style={[styles.jadwalKelas, { fontSize: 11 }]}>{formatDate(date)}</Text>
-            {item.catatan ? <Text style={[styles.jadwalKelas, { fontSize: 11, fontStyle: "italic" }]} numberOfLines={2}>"{item.catatan}"</Text> : null}
+            <Text style={[styles.jadwalKelas, { fontSize: 12 }]}>{formatDate(date)}</Text>
+            {item.catatan ? <Text style={[styles.jadwalKelas, { fontSize: 12, fontStyle: "italic" }]} numberOfLines={2}>"{item.catatan}"</Text> : null}
           </View>
           {item.score != null && (
             <View style={[styles.statusBadge, { backgroundColor: Number(item.score) >= 70 ? Colors.successLight : Colors.dangerLight }]}>
@@ -1560,12 +1585,12 @@ function PerkembanganScreen({ navigation }: { navigation: any }) {
           <View style={styles.jadwalInfo}>
             <Text style={styles.jadwalMapel} numberOfLines={1}>{santriName}</Text>
             <Text style={styles.jadwalKelas}>Rata-rata: {item.rataRata?.toFixed?.(1) ?? item.rataRata ?? "-"}</Text>
-            <Text style={[styles.jadwalKelas, { fontSize: 11 }]}>{formatDate(date)}</Text>
-            {item.catatan ? <Text style={[styles.jadwalKelas, { fontSize: 11, fontStyle: "italic" }]} numberOfLines={2}>"{item.catatan}"</Text> : null}
+            <Text style={[styles.jadwalKelas, { fontSize: 12 }]}>{formatDate(date)}</Text>
+            {item.catatan ? <Text style={[styles.jadwalKelas, { fontSize: 12, fontStyle: "italic" }]} numberOfLines={2}>"{item.catatan}"</Text> : null}
           </View>
           {item.predikat && (
             <View style={[styles.statusBadge, { backgroundColor: Colors.infoLight }]}>
-              <Text style={[styles.statusText, { color: Colors.info, fontSize: 11 }]}>{item.predikat}</Text>
+              <Text style={[styles.statusText, { color: Colors.info, fontSize: 12 }]}>{item.predikat}</Text>
             </View>
           )}
         </View>
@@ -1579,15 +1604,15 @@ function PerkembanganScreen({ navigation }: { navigation: any }) {
         <View style={styles.jadwalInfo}>
           <Text style={styles.jadwalMapel} numberOfLines={1}>{item.title}</Text>
           <Text style={styles.jadwalKelas}>{santriName} • {item.type}</Text>
-          <Text style={[styles.jadwalKelas, { fontSize: 11 }]} numberOfLines={2}>{item.description}</Text>
-          <Text style={[styles.jadwalKelas, { fontSize: 11 }]}>{formatDate(date)}</Text>
+          <Text style={[styles.jadwalKelas, { fontSize: 12 }]} numberOfLines={2}>{item.description}</Text>
+          <Text style={[styles.jadwalKelas, { fontSize: 12 }]}>{formatDate(date)}</Text>
         </View>
         <View style={{ alignItems: "flex-end", gap: 4 }}>
           <View style={[styles.statusBadge, { backgroundColor: sevBg }]}>
-            <Text style={[styles.statusText, { color: sevColor, fontSize: 10 }]}>{item.severity}</Text>
+            <Text style={[styles.statusText, { color: sevColor, fontSize: 12 }]}>{item.severity}</Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: item.status === "OPEN" ? Colors.dangerLight : Colors.successLight }]}>
-            <Text style={[styles.statusText, { color: item.status === "OPEN" ? Colors.danger : Colors.success, fontSize: 10 }]}>{item.status}</Text>
+            <Text style={[styles.statusText, { color: item.status === "OPEN" ? Colors.danger : Colors.success, fontSize: 12 }]}>{item.status}</Text>
           </View>
         </View>
       </View>
@@ -1905,11 +1930,11 @@ function ChatListScreen({ navigation }: { navigation: any }) {
                     {item.wali?.name || "-"}{item.santri ? ` • ${item.santri.name}` : ""}
                   </Text>
                   <Text style={styles.jadwalKelas}>{tm.label}{item.guru ? ` • Guru: ${item.guru.name}` : ""}</Text>
-                  <Text style={[styles.jadwalKelas, { fontSize: 11 }]}>{formatDate(item.lastMessageAt, true)}</Text>
+                  <Text style={[styles.jadwalKelas, { fontSize: 12 }]}>{formatDate(item.lastMessageAt, true)}</Text>
                 </View>
                 <View style={{ alignItems: "flex-end", gap: 4 }}>
                   <View style={[styles.statusBadge, { backgroundColor: Colors.infoLight }]}>
-                    <Text style={[styles.statusText, { color: Colors.info, fontSize: 11 }]}>{item._count?.messages ?? 0} pesan</Text>
+                    <Text style={[styles.statusText, { color: Colors.info, fontSize: 12 }]}>{item._count?.messages ?? 0} pesan</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
                 </View>
@@ -2034,6 +2059,7 @@ export default function App() {
   const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
+    initNetworkMonitor()
     async function checkSession() {
       const token = await SecureStore.getItemAsync("authToken")
       if (token) {
@@ -2087,8 +2113,10 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <View style={{ flex: 1 }}>
+      <NetworkStatusIndicator />
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
         {isLoggedIn ? (
           <>
             <Stack.Screen name="Dashboard">
@@ -2126,6 +2154,7 @@ export default function App() {
         )}
       </Stack.Navigator>
     </NavigationContainer>
+    </View>
   )
 }
 
@@ -2147,7 +2176,7 @@ const styles = StyleSheet.create({
   demoText: { fontSize: 12, color: Colors.textMuted, textAlign: "center", marginTop: 16 },
   screen: { flex: 1, backgroundColor: Colors.background },
   header: { backgroundColor: Colors.primary, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingVertical: 12, paddingTop: Platform.OS === "android" ? 35 : 0 },
-  backButton: { padding: 4 },
+  backButton: { padding: 10, minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "center" },
   headerTitle: { fontSize: 16, fontWeight: "600", color: Colors.white },
   content: { flex: 1, padding: 16 },
   sectionTitle: { fontSize: 16, fontWeight: "600", color: Colors.text, marginBottom: 12 },
@@ -2163,53 +2192,53 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border,
   },
   v2StatValue: { fontSize: 24, fontWeight: "bold", color: Colors.text, marginTop: 4 },
-  v2StatLabel: { fontSize: 10, color: Colors.textMuted, marginTop: 2, textAlign: "center" },
+  v2StatLabel: { fontSize: 12, color: Colors.textMuted, marginTop: 2, textAlign: "center" },
   emptyCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 24, alignItems: "center" },
   emptyText: { fontSize: 14, color: Colors.textMuted },
   jadwalCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 16, marginBottom: 8, flexDirection: "row", alignItems: "center", elevation: 1 },
   jadwalTime: { width: 60, alignItems: "center" },
   jadwalStartTime: { fontSize: 14, fontWeight: "600", color: Colors.primary },
-  jadwalEndTime: { fontSize: 11, color: Colors.textMuted },
+  jadwalEndTime: { fontSize: 12, color: Colors.textMuted },
   jadwalInfo: { flex: 1, marginLeft: 12 },
   jadwalMapel: { fontSize: 15, fontWeight: "500", color: Colors.text },
   jadwalKelas: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
-  absensiQuickBtn: { backgroundColor: Colors.success, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6, flexDirection: "row", alignItems: "center", gap: 4 },
+  absensiQuickBtn: { backgroundColor: Colors.success, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 12, minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4 },
   absensiQuickText: { fontSize: 12, color: Colors.white, fontWeight: "600" },
   // Absensi Input
   absensiControls: { padding: 16, backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.border },
   dateInput: { borderWidth: 1, borderColor: Colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: Colors.text },
   pickerContainer: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
   pickerScroll: { marginTop: 4 },
-  kelasPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.white, marginRight: 8 },
+  kelasPill: { paddingHorizontal: 12, paddingVertical: 12, minHeight: 44, justifyContent: "center", alignItems: "center", borderRadius: 16, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.white, marginRight: 8 },
   kelasPillActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   kelasPillText: { fontSize: 12, color: Colors.textMuted },
   kelasPillTextActive: { color: Colors.white, fontWeight: "600" },
-  pill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.white, marginRight: 8 },
+  pill: { paddingHorizontal: 12, paddingVertical: 12, minHeight: 44, justifyContent: "center", alignItems: "center", borderRadius: 16, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.white, marginRight: 8 },
   pillActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   pillText: { fontSize: 12, color: Colors.textMuted },
   pillTextActive: { color: Colors.white, fontWeight: "600" },
   quickSetRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12, flexWrap: "wrap" },
   quickSetLabel: { fontSize: 12, fontWeight: "600", color: Colors.text },
-  quickSetBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, borderWidth: 1 },
-  quickSetText: { fontSize: 11, fontWeight: "600" },
+  quickSetBtn: { paddingHorizontal: 12, paddingVertical: 12, minHeight: 44, justifyContent: "center", alignItems: "center", borderRadius: 6, borderWidth: 1 },
+  quickSetText: { fontSize: 12, fontWeight: "600" },
   absensiRow: { flexDirection: "row", alignItems: "center", padding: 12, backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.border },
   absensiInfo: { flex: 1 },
   absensiName: { fontSize: 14, fontWeight: "500", color: Colors.text },
-  absensiNis: { fontSize: 11, color: Colors.textMuted, marginTop: 1 },
+  absensiNis: { fontSize: 12, color: Colors.textMuted, marginTop: 1 },
   absensiButtons: { flexDirection: "row", gap: 4 },
-  absensiBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.white },
-  absensiBtnText: { fontSize: 10 },
+  absensiBtn: { paddingHorizontal: 12, paddingVertical: 12, minHeight: 44, justifyContent: "center", alignItems: "center", borderRadius: 6, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.white },
+  absensiBtnText: { fontSize: 12 },
   // Nilai Input
   nilaiControls: { padding: 16, backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.border },
   typeRow: { flexDirection: "row", gap: 8, marginTop: 4, flexWrap: "wrap" },
-  typeBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.white },
+  typeBtn: { paddingHorizontal: 12, paddingVertical: 12, minHeight: 44, justifyContent: "center", alignItems: "center", borderRadius: 8, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.white },
   typeBtnActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   typeBtnText: { fontSize: 12, color: Colors.textMuted },
   typeBtnTextActive: { color: Colors.white, fontWeight: "600" },
   nilaiRow: { flexDirection: "row", alignItems: "center", padding: 12, backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.border },
   nilaiInfo: { flex: 1 },
   nilaiName: { fontSize: 14, fontWeight: "500", color: Colors.text },
-  nilaiNis: { fontSize: 11, color: Colors.textMuted, marginTop: 1 },
+  nilaiNis: { fontSize: 12, color: Colors.textMuted, marginTop: 1 },
   nilaiInput: { width: 70, height: 40, borderWidth: 2, borderColor: Colors.border, borderRadius: 8, textAlign: "center", fontSize: 18, fontWeight: "bold", color: Colors.text },
   // Save button
   saveButton: { position: "absolute", bottom: 16, left: 16, right: 16, backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 14, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8, elevation: 4 },
@@ -2217,12 +2246,12 @@ const styles = StyleSheet.create({
   // Jadwal List
   dayTitle: { fontSize: 14, fontWeight: "bold", color: Colors.primary, marginTop: 16, marginBottom: 8, paddingHorizontal: 4 },
   // Header right action (Tambah button)
-  headerAction: { padding: 4 },
+  headerAction: { padding: 10, minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "center" },
   // Filter bar (PertemuanList)
   filterBar: { padding: 12, backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.border },
   // Tab row (Perkembangan)
   tabRow: { flexDirection: "row", backgroundColor: Colors.white, paddingHorizontal: 8, paddingVertical: 8, gap: 4, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  tabBtn: { flex: 1, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.white, alignItems: "center" },
+  tabBtn: { flex: 1, paddingVertical: 12, minHeight: 44, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.white, alignItems: "center", justifyContent: "center" },
   tabBtnActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   tabBtnText: { fontSize: 12, color: Colors.textMuted, fontWeight: "500" },
   tabBtnTextActive: { color: Colors.white, fontWeight: "600" },
@@ -2243,5 +2272,5 @@ const styles = StyleSheet.create({
   modalOpenText: { fontSize: 14, color: Colors.white, fontWeight: "600" },
   // Status badge (used across multiple screens: guru list, pengumuman, tugas, perkembangan, ujian, nilai)
   statusBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: "transparent" },
-  statusText: { fontSize: 10, fontWeight: "700", letterSpacing: 0.3 },
+  statusText: { fontSize: 12, fontWeight: "700", letterSpacing: 0.3 },
 })
