@@ -8,7 +8,7 @@ import React, { useState, useEffect, useCallback } from "react"
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, SafeAreaView, StatusBar, ScrollView, Alert,
-  FlatList, Modal, Linking,
+  FlatList, Modal, Linking, RefreshControl, Platform,
 } from "react-native"
 import { NavigationContainer } from "@react-navigation/native"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
@@ -56,6 +56,16 @@ async function apiPost(path: string, body: any) {
   return res.json()
 }
 
+async function apiPut(path: string, body: any) {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error((await res.json())?.error || `Failed: ${res.status}`)
+  return res.json()
+}
+
 const Colors = {
   primary: "#7c3aed", primaryLight: "#ede9fe", primaryDark: "#5b21b6",
   background: "#f8fafc", card: "#ffffff", text: "#1e293b", textMuted: "#64748b",
@@ -70,8 +80,8 @@ const Colors = {
 // LOGIN SCREEN
 // ============================================================================
 function LoginScreen({ onLogin }: { onLogin: () => void }) {
-  const [email, setEmail] = useState("bendahara@madrasah.test")
-  const [password, setPassword] = useState("admin123")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
 
   const handleLogin = async () => {
@@ -114,25 +124,31 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
 // ============================================================================
 // DASHBOARD SCREEN
 // ============================================================================
-function DashboardScreen({ onLogout, navigation }: { onLogout: () => void; navigation: any }) {
+function DashboardScreen({ onLogout, navigation, refreshKey }: { onLogout: () => void; navigation: any; refreshKey: number }) {
   const [payments, setPayments] = useState<any[]>([])
   const [tagihan, setTagihan] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   const load = useCallback(async () => {
     try {
       setLoading(true)
+      setError(null)
       const [payRes, tagihanRes] = await Promise.all([
         apiGet("/api/admin/pembayaran?limit=10"),
         apiGet("/api/admin/tagihan?status=BELUM_BAYAR"),
       ])
       setPayments(payRes.data || [])
       setTagihan(tagihanRes.data || [])
-    } catch (e: any) { Alert.alert("Error", e.message) }
-    finally { setLoading(false) }
+    } catch (e: any) {
+      setError(e.message || "Terjadi kesalahan")
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load() }, [load, refreshKey])
 
   const totalIncome = payments.filter(p => p.status === "VERIFIED").reduce((s, p) => s + p.amount, 0)
   const totalOutstanding = tagihan.reduce((s, t) => s + (t.amount - t.paidAmount), 0)
@@ -158,7 +174,15 @@ function DashboardScreen({ onLogout, navigation }: { onLogout: () => void; navig
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content}>
+      {error ? (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 20 }}>
+          <Text style={{ color: Colors.danger, textAlign: "center", marginBottom: 16 }}>{error}</Text>
+          <TouchableOpacity onPress={() => { setError(null); load() }} style={{ backgroundColor: Colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}>
+            <Text style={{ color: Colors.white, fontWeight: "600" }}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+      <ScrollView style={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load().finally(() => setRefreshing(false)) }} colors={[Colors.primary]} tintColor={Colors.primary} />}>
         {/* Stats Cards */}
         <View style={styles.statsContainer}>
           <View style={[styles.statCard, { backgroundColor: Colors.success }]}>
@@ -209,6 +233,7 @@ function DashboardScreen({ onLogout, navigation }: { onLogout: () => void; navig
           ))
         )}
       </ScrollView>
+      )}
     </SafeAreaView>
   )
 }
@@ -226,23 +251,31 @@ function PembayaranInputScreen({ navigation }: { navigation: any }) {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [searchText, setSearchText] = useState("")
+  const [error, setError] = useState<string | null>(null)
 
   const loadSantri = useCallback(async () => {
     try {
       setLoading(true)
+      setError(null)
       const res = await apiGet("/api/admin/santri?status=AKTIF")
       setSantriList(res.data || [])
-    } catch (e: any) { Alert.alert("Error", e.message) }
-    finally { setLoading(false) }
+    } catch (e: any) {
+      setError(e.message || "Terjadi kesalahan")
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   const loadTagihan = useCallback(async () => {
     if (!selectedSantri) { setTagihanList([]); return }
     try {
+      setError(null)
       const res = await apiGet(`/api/admin/tagihan?santriId=${selectedSantri}`)
       const unpaid = (res.data || []).filter((t: any) => t.status !== "LUNAS")
       setTagihanList(unpaid)
-    } catch (e: any) { Alert.alert("Error", e.message) }
+    } catch (e: any) {
+      setError(e.message || "Terjadi kesalahan")
+    }
   }, [selectedSantri])
 
   useEffect(() => { loadSantri() }, [loadSantri])
@@ -287,6 +320,14 @@ function PembayaranInputScreen({ navigation }: { navigation: any }) {
         <View style={{ width: 24 }} />
       </View>
 
+      {error ? (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 20 }}>
+          <Text style={{ color: Colors.danger, textAlign: "center", marginBottom: 16 }}>{error}</Text>
+          <TouchableOpacity onPress={() => { setError(null); loadSantri() }} style={{ backgroundColor: Colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}>
+            <Text style={{ color: Colors.white, fontWeight: "600" }}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
       <ScrollView style={styles.content}>
         {/* Search Santri */}
         <Text style={styles.label}>Cari Santri</Text>
@@ -389,6 +430,7 @@ function PembayaranInputScreen({ navigation }: { navigation: any }) {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+      )}
     </SafeAreaView>
   )
 }
@@ -399,6 +441,7 @@ function PembayaranInputScreen({ navigation }: { navigation: any }) {
 function TunggakanListScreen({ navigation }: { navigation: any }) {
   const [tagihan, setTagihan] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -458,6 +501,17 @@ function TunggakanListScreen({ navigation }: { navigation: any }) {
             </View>
           )}
           contentContainerStyle={{ padding: 16 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true)
+                load().finally(() => setRefreshing(false))
+              }}
+              colors={[Colors.primary]}
+              tintColor={Colors.primary}
+            />
+          }
         />
       )}
     </SafeAreaView>
@@ -470,17 +524,49 @@ function TunggakanListScreen({ navigation }: { navigation: any }) {
 function RiwayatListScreen({ navigation }: { navigation: any }) {
   const [payments, setPayments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   const load = useCallback(async () => {
     try {
       setLoading(true)
+      setError(null)
       const res = await apiGet("/api/admin/pembayaran?limit=50")
       setPayments(res.data || [])
-    } catch (e: any) { Alert.alert("Error", e.message) }
-    finally { setLoading(false) }
+    } catch (e: any) {
+      setError(e.message || "Terjadi kesalahan")
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  const handleVerify = async (paymentId: string) => {
+    Alert.alert("Verifikasi Pembayaran", "Pilih kas yang menerima pembayaran ini", [
+      { text: "Batal" },
+      { text: "Kas Utama (default)", onPress: async () => {
+        try {
+          await apiPut(`/api/admin/siklus/payment-verify/${paymentId}`, { kasId: "" })
+          Alert.alert("Berhasil", "Pembayaran diverifikasi")
+          load()
+        } catch (e: any) { Alert.alert("Error", e.message) }
+      }},
+    ])
+  }
+
+  const handleReject = (paymentId: string) => {
+    Alert.alert("Tolak Pembayaran", "Yakin ingin menolak pembayaran ini?", [
+      { text: "Batal" },
+      { text: "Tolak", style: "destructive", onPress: async () => {
+        try {
+          await apiPut(`/api/admin/pembayaran/${paymentId}`, { status: "REJECTED" })
+          Alert.alert("Berhasil", "Pembayaran ditolak")
+          load()
+        } catch (e: any) { Alert.alert("Error", e.message) }
+      }},
+    ])
+  }
 
   const total = payments.filter(p => p.status === "VERIFIED").reduce((s, p) => s + p.amount, 0)
 
@@ -500,7 +586,14 @@ function RiwayatListScreen({ navigation }: { navigation: any }) {
         <Text style={styles.totalValue}>{formatRupiah(total)}</Text>
       </View>
 
-      {loading ? (
+      {error ? (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 20 }}>
+          <Text style={{ color: Colors.danger, textAlign: "center", marginBottom: 16 }}>{error}</Text>
+          <TouchableOpacity onPress={() => { setError(null); load() }} style={{ backgroundColor: Colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}>
+            <Text style={{ color: Colors.white, fontWeight: "600" }}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      ) : loading ? (
         <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
       ) : (
         <FlatList
@@ -520,6 +613,16 @@ function RiwayatListScreen({ navigation }: { navigation: any }) {
                     {STATUS_STYLES[item.status]?.label || item.status}
                   </Text>
                 </View>
+                {item.status === "PENDING" && (
+                  <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+                    <TouchableOpacity onPress={() => handleVerify(item.id)} style={{ backgroundColor: Colors.success, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6 }}>
+                      <Text style={{ color: Colors.white, fontSize: 12, fontWeight: "600" }}>Verifikasi</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleReject(item.id)} style={{ backgroundColor: Colors.danger, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6 }}>
+                      <Text style={{ color: Colors.white, fontSize: 12, fontWeight: "600" }}>Tolak</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
             </View>
           )}
@@ -527,6 +630,17 @@ function RiwayatListScreen({ navigation }: { navigation: any }) {
             <View style={styles.emptyCard}><Text style={styles.emptyText}>Belum ada pembayaran</Text></View>
           )}
           contentContainerStyle={{ padding: 16 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true)
+                load().finally(() => setRefreshing(false))
+              }}
+              colors={[Colors.primary]}
+              tintColor={Colors.primary}
+            />
+          }
         />
       )}
     </SafeAreaView>
@@ -540,6 +654,7 @@ function TagihanListScreen({ navigation }: { navigation: any }) {
   const [tagihan, setTagihan] = useState<any[]>([])
   const [filter, setFilter] = useState<string>("")
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -613,6 +728,17 @@ function TagihanListScreen({ navigation }: { navigation: any }) {
             <View style={styles.emptyCard}><Text style={styles.emptyText}>Tidak ada tagihan</Text></View>
           )}
           contentContainerStyle={{ padding: 16 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true)
+                load().finally(() => setRefreshing(false))
+              }}
+              colors={[Colors.primary]}
+              tintColor={Colors.primary}
+            />
+          }
         />
       )}
     </SafeAreaView>
@@ -625,6 +751,7 @@ function TagihanListScreen({ navigation }: { navigation: any }) {
 function KasListScreen({ navigation }: { navigation: any }) {
   const [kasList, setKasList] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -686,6 +813,17 @@ function KasListScreen({ navigation }: { navigation: any }) {
             </View>
           )}
           contentContainerStyle={{ padding: 16 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true)
+                load().finally(() => setRefreshing(false))
+              }}
+              colors={[Colors.primary]}
+              tintColor={Colors.primary}
+            />
+          }
         />
       )}
     </SafeAreaView>
@@ -955,6 +1093,7 @@ function TransaksiKasScreen({ navigation }: { navigation: any }) {
 function HonorGuruScreen({ navigation }: { navigation: any }) {
   const [honorList, setHonorList] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -1056,6 +1195,17 @@ function HonorGuruScreen({ navigation }: { navigation: any }) {
             </View>
           )}
           contentContainerStyle={{ padding: 16 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true)
+                load().finally(() => setRefreshing(false))
+              }}
+              colors={[Colors.primary]}
+              tintColor={Colors.primary}
+            />
+          }
         />
       )}
     </SafeAreaView>
@@ -1271,6 +1421,7 @@ export default function App() {
               {({ navigation }) => (
                 <DashboardScreen
                   navigation={navigation}
+                  refreshKey={refreshKey}
                   onLogout={async () => { await getSupabase().auth.signOut(); await SecureStore.deleteItemAsync("authToken"); authToken = null; setIsLoggedIn(false) }}
                 />
               )}
@@ -1309,7 +1460,7 @@ const styles = StyleSheet.create({
   loginButtonText: { color: Colors.white, fontSize: 16, fontWeight: "600" },
   demoText: { fontSize: 12, color: Colors.textMuted, textAlign: "center", marginTop: 16 },
   screen: { flex: 1, backgroundColor: Colors.background },
-  header: { backgroundColor: Colors.primary, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingVertical: 12, paddingTop: 48 },
+  header: { backgroundColor: Colors.primary, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingVertical: 12, paddingTop: Platform.OS === "android" ? 35 : 0 },
   backButton: { padding: 4 },
   headerTitle: { fontSize: 16, fontWeight: "600", color: Colors.white },
   content: { flex: 1, padding: 16 },

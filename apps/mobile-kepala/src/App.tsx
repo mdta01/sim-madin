@@ -8,7 +8,7 @@ import React, { useState, useEffect, useCallback } from "react"
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, SafeAreaView, StatusBar, ScrollView, Alert,
-  FlatList,
+  FlatList, RefreshControl, Platform,
 } from "react-native"
 import { NavigationContainer } from "@react-navigation/native"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
@@ -67,8 +67,8 @@ const Colors = {
 
 // Login
 function LoginScreen({ onLogin }: { onLogin: () => void }) {
-  const [email, setEmail] = useState("kepala@madrasah.test")
-  const [password, setPassword] = useState("admin123")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
 
   const handleLogin = async () => {
@@ -109,28 +109,33 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
 }
 
 // Dashboard
-function DashboardScreen({ onLogout, navigation }: { onLogout: () => void; navigation: any }) {
+function DashboardScreen({ onLogout, navigation, refreshKey }: { onLogout: () => void; navigation: any; refreshKey: number }) {
   const [stats, setStats] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     try {
       setLoading(true)
+      setError(null)
       const res = await apiGet("/api/admin/dashboard")
       setStats(res)
-    } catch (e: any) { Alert.alert("Error", e.message) }
-    finally { setLoading(false) }
+    } catch (e: any) {
+      setError(e.message || "Terjadi kesalahan")
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load() }, [load, refreshKey])
 
   const statCards = stats ? [
-    { label: "Total Santri", value: stats.stats.totalSantri, icon: "people", color: Colors.success, bg: Colors.successLight },
-    { label: "Total Guru", value: stats.stats.totalGuru, icon: "school", color: Colors.primary, bg: Colors.primaryLight },
-    { label: "Total Kelas", value: stats.stats.totalKelas, icon: "grid", color: "#7c3aed", bg: "#ede9fe" },
-    { label: "Pemasukan Bulan Ini", value: formatRupiah(stats.stats.totalIncomeThisMonth), icon: "cash", color: Colors.success, bg: Colors.successLight },
-    { label: "Tunggakan", value: formatRupiah(stats.stats.totalOutstanding), icon: "warning", color: Colors.danger, bg: Colors.dangerLight },
-    { label: "Tagihan Lunas", value: stats.stats.tagihanLunas, icon: "checkmark-circle", color: Colors.success, bg: Colors.successLight },
+    { label: "Total Santri", value: stats?.stats?.totalSantri ?? 0, icon: "people", color: Colors.success, bg: Colors.successLight },
+    { label: "Total Guru", value: stats?.stats?.totalGuru ?? 0, icon: "school", color: Colors.primary, bg: Colors.primaryLight },
+    { label: "Total Kelas", value: stats?.stats?.totalKelas ?? 0, icon: "grid", color: "#7c3aed", bg: "#ede9fe" },
+    { label: "Pemasukan Bulan Ini", value: formatRupiah(stats?.stats?.totalIncomeThisMonth ?? 0), icon: "cash", color: Colors.success, bg: Colors.successLight },
+    { label: "Tunggakan", value: formatRupiah(stats?.stats?.totalOutstanding ?? 0), icon: "warning", color: Colors.danger, bg: Colors.dangerLight },
+    { label: "Tagihan Lunas", value: stats?.stats?.tagihanLunas ?? 0, icon: "checkmark-circle", color: Colors.success, bg: Colors.successLight },
   ] : []
 
   return (
@@ -143,7 +148,14 @@ function DashboardScreen({ onLogout, navigation }: { onLogout: () => void; navig
         </TouchableOpacity>
       </View>
 
-      {loading ? (
+      {error ? (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 20 }}>
+          <Text style={{ color: Colors.danger, textAlign: "center", marginBottom: 16 }}>{error}</Text>
+          <TouchableOpacity onPress={() => { setError(null); load() }} style={{ backgroundColor: Colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}>
+            <Text style={{ color: Colors.white, fontWeight: "600" }}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      ) : loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
@@ -257,20 +269,26 @@ function DashboardScreen({ onLogout, navigation }: { onLogout: () => void; navig
 // MONITORING SCREENS
 // ============================================================================
 
-function MonitorListScreen({ navigation, title, endpoint, renderItem }: { navigation: any; title: string; endpoint: string; renderItem: (item: any) => React.ReactNode }) {
+function MonitorListScreen({ navigation, title, endpoint, renderItem, refreshKey }: { navigation: any; title: string; endpoint: string; renderItem: (item: any) => React.ReactNode; refreshKey: number }) {
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   const load = useCallback(async () => {
     try {
       setLoading(true)
+      setError(null)
       const res = await apiGet(endpoint)
       setData(res.data || [])
-    } catch (e: any) { Alert.alert("Error", e.message) }
-    finally { setLoading(false) }
+    } catch (e: any) {
+      setError(e.message || "Terjadi kesalahan")
+    } finally {
+      setLoading(false)
+    }
   }, [endpoint])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load() }, [load, refreshKey])
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -282,7 +300,14 @@ function MonitorListScreen({ navigation, title, endpoint, renderItem }: { naviga
         <Text style={styles.headerTitle}>{title}</Text>
         <View style={{ width: 24 }} />
       </View>
-      {loading ? (
+      {error ? (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 20 }}>
+          <Text style={{ color: Colors.danger, textAlign: "center", marginBottom: 16 }}>{error}</Text>
+          <TouchableOpacity onPress={() => { setError(null); load() }} style={{ backgroundColor: Colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}>
+            <Text style={{ color: Colors.white, fontWeight: "600" }}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      ) : loading ? (
         <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
       ) : (
         <FlatList
@@ -291,14 +316,25 @@ function MonitorListScreen({ navigation, title, endpoint, renderItem }: { naviga
           renderItem={({ item }: { item: any }): React.ReactElement => <>{renderItem(item)}</> as React.ReactElement}
           ListEmptyComponent={<View style={styles.emptyCard}><Text style={styles.emptyText}>Tidak ada data</Text></View>}
           contentContainerStyle={{ padding: 16 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true)
+                load().finally(() => setRefreshing(false))
+              }}
+              colors={[Colors.primary]}
+              tintColor={Colors.primary}
+            />
+          }
         />
       )}
     </SafeAreaView>
   )
 }
 
-function MonitorSantriScreen({ navigation }: { navigation: any }) {
-  return <MonitorListScreen navigation={navigation} title="Data Santri" endpoint="/api/admin/santri" renderItem={(item: any) => (
+function MonitorSantriScreen({ navigation, refreshKey }: { navigation: any; refreshKey: number }) {
+  return <MonitorListScreen navigation={navigation} title="Data Santri" endpoint="/api/admin/santri" refreshKey={refreshKey} renderItem={(item: any) => (
     <View style={styles.kelasCard}>
       <View style={{ flexDirection: "row", alignItems: "center" }}>
         <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primaryLight, justifyContent: "center", alignItems: "center", marginRight: 12 }}>
@@ -317,8 +353,8 @@ function MonitorSantriScreen({ navigation }: { navigation: any }) {
   )} />
 }
 
-function MonitorGuruScreen({ navigation }: { navigation: any }) {
-  return <MonitorListScreen navigation={navigation} title="Data Guru" endpoint="/api/admin/guru" renderItem={(item: any) => (
+function MonitorGuruScreen({ navigation, refreshKey }: { navigation: any; refreshKey: number }) {
+  return <MonitorListScreen navigation={navigation} title="Data Guru" endpoint="/api/admin/guru" refreshKey={refreshKey} renderItem={(item: any) => (
     <View style={styles.kelasCard}>
       <View style={{ flexDirection: "row", alignItems: "center" }}>
         <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primaryLight, justifyContent: "center", alignItems: "center", marginRight: 12 }}>
@@ -337,8 +373,8 @@ function MonitorGuruScreen({ navigation }: { navigation: any }) {
   )} />
 }
 
-function MonitorAbsensiScreen({ navigation }: { navigation: any }) {
-  return <MonitorListScreen navigation={navigation} title="Rekap Absensi" endpoint="/api/admin/absensi?limit=50" renderItem={(item: any) => (
+function MonitorAbsensiScreen({ navigation, refreshKey }: { navigation: any; refreshKey: number }) {
+  return <MonitorListScreen navigation={navigation} title="Rekap Absensi" endpoint="/api/admin/absensi?limit=50" refreshKey={refreshKey} renderItem={(item: any) => (
     <View style={styles.kelasCard}>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <View style={{ flex: 1 }}>
@@ -353,20 +389,21 @@ function MonitorAbsensiScreen({ navigation }: { navigation: any }) {
   )} />
 }
 
-function MonitorKeuanganScreen({ navigation }: { navigation: any }) {
+function MonitorKeuanganScreen({ navigation, refreshKey }: { navigation: any; refreshKey: number }) {
   const [payments, setPayments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const res = await apiGet("/api/admin/pembayaran?limit=20")
-        setPayments(res.data || [])
-      } catch (e: any) { Alert.alert("Error", e.message) }
-      finally { setLoading(false) }
-    }
-    load()
+  const load = useCallback(async () => {
+    try {
+      setLoading(true)
+      const res = await apiGet("/api/admin/pembayaran?limit=20")
+      setPayments(res.data || [])
+    } catch (e: any) { Alert.alert("Error", e.message) }
+    finally { setLoading(false) }
   }, [])
+
+  useEffect(() => { load() }, [load, refreshKey])
 
   const totalIncome = payments.filter(p => p.status === "VERIFIED").reduce((s, p) => s + p.amount, 0)
 
@@ -407,15 +444,27 @@ function MonitorKeuanganScreen({ navigation }: { navigation: any }) {
               </View>
             </View>
           )}
+          ListEmptyComponent={<View style={styles.emptyCard}><Text style={styles.emptyText}>Tidak ada data</Text></View>}
           contentContainerStyle={{ padding: 16 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true)
+                load().finally(() => setRefreshing(false))
+              }}
+              colors={[Colors.primary]}
+              tintColor={Colors.primary}
+            />
+          }
         />
       )}
     </SafeAreaView>
   )
 }
 
-function MonitorPengumumanScreen({ navigation }: { navigation: any }) {
-  return <MonitorListScreen navigation={navigation} title="Pengumuman" endpoint="/api/admin/pengumuman" renderItem={(item: any) => (
+function MonitorPengumumanScreen({ navigation, refreshKey }: { navigation: any; refreshKey: number }) {
+  return <MonitorListScreen navigation={navigation} title="Pengumuman" endpoint="/api/admin/pengumuman" refreshKey={refreshKey} renderItem={(item: any) => (
     <View style={styles.kelasCard}>
       <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
         <View style={{ backgroundColor: item.priority === "URGENT" ? Colors.dangerLight : item.priority === "PENTING" ? Colors.warningLight : "#f1f5f9", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
@@ -436,8 +485,8 @@ function MonitorPengumumanScreen({ navigation }: { navigation: any }) {
 // V11 — Monitoring Nilai Santri
 // Fetch dari /api/admin/nilai?limit=50 (sudah sort by assessmentDate desc)
 // ============================================================================
-function MonitorNilaiScreen({ navigation }: { navigation: any }) {
-  return <MonitorListScreen navigation={navigation} title="Monitoring Nilai" endpoint="/api/admin/nilai?limit=50" renderItem={(item: any) => {
+function MonitorNilaiScreen({ navigation, refreshKey }: { navigation: any; refreshKey: number }) {
+  return <MonitorListScreen navigation={navigation} title="Monitoring Nilai" endpoint="/api/admin/nilai?limit=50" refreshKey={refreshKey} renderItem={(item: any) => {
     const kkm = item.mapel?.kkm ?? 70
     const lulus = item.score >= kkm
     const typeColor = item.type === "UAS" ? Colors.danger : item.type === "UTS" ? Colors.warning : Colors.primary
@@ -466,7 +515,7 @@ function MonitorNilaiScreen({ navigation }: { navigation: any }) {
 // V11 — Dashboard Kepala (Comprehensive Analytics)
 // Fetch dari /api/admin/dashboard-kepala
 // ============================================================================
-function DashboardKepalaScreen({ navigation }: { navigation: any }) {
+function DashboardKepalaScreen({ navigation, refreshKey }: { navigation: any; refreshKey: number }) {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
@@ -479,7 +528,7 @@ function DashboardKepalaScreen({ navigation }: { navigation: any }) {
     finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load() }, [load, refreshKey])
 
   const statCards = data ? [
     { label: "Total Santri", value: String(data.santri?.total ?? 0), icon: "people", color: Colors.success, bg: Colors.successLight },
@@ -644,15 +693,29 @@ export default function App() {
         {isLoggedIn ? (
           <>
             <Stack.Screen name="Dashboard">
-              {({ navigation }) => <DashboardScreen navigation={navigation} onLogout={async () => { await getSupabase().auth.signOut(); await SecureStore.deleteItemAsync("authToken"); authToken = null; setIsLoggedIn(false) }} />}
+              {({ navigation }) => <DashboardScreen navigation={navigation} refreshKey={refreshKey} onLogout={async () => { await getSupabase().auth.signOut(); await SecureStore.deleteItemAsync("authToken"); authToken = null; setIsLoggedIn(false) }} />}
             </Stack.Screen>
-            <Stack.Screen name="MonitorSantri" component={MonitorSantriScreen} />
-            <Stack.Screen name="MonitorGuru" component={MonitorGuruScreen} />
-            <Stack.Screen name="MonitorAbsensi" component={MonitorAbsensiScreen} />
-            <Stack.Screen name="MonitorKeuangan" component={MonitorKeuanganScreen} />
-            <Stack.Screen name="MonitorPengumuman" component={MonitorPengumumanScreen} />
-            <Stack.Screen name="MonitorNilai" component={MonitorNilaiScreen} />
-            <Stack.Screen name="DashboardKepala" component={DashboardKepalaScreen} />
+            <Stack.Screen name="MonitorSantri">
+              {({ navigation }) => <MonitorSantriScreen navigation={navigation} refreshKey={refreshKey} />}
+            </Stack.Screen>
+            <Stack.Screen name="MonitorGuru">
+              {({ navigation }) => <MonitorGuruScreen navigation={navigation} refreshKey={refreshKey} />}
+            </Stack.Screen>
+            <Stack.Screen name="MonitorAbsensi">
+              {({ navigation }) => <MonitorAbsensiScreen navigation={navigation} refreshKey={refreshKey} />}
+            </Stack.Screen>
+            <Stack.Screen name="MonitorKeuangan">
+              {({ navigation }) => <MonitorKeuanganScreen navigation={navigation} refreshKey={refreshKey} />}
+            </Stack.Screen>
+            <Stack.Screen name="MonitorPengumuman">
+              {({ navigation }) => <MonitorPengumumanScreen navigation={navigation} refreshKey={refreshKey} />}
+            </Stack.Screen>
+            <Stack.Screen name="MonitorNilai">
+              {({ navigation }) => <MonitorNilaiScreen navigation={navigation} refreshKey={refreshKey} />}
+            </Stack.Screen>
+            <Stack.Screen name="DashboardKepala">
+              {({ navigation }) => <DashboardKepalaScreen navigation={navigation} refreshKey={refreshKey} />}
+            </Stack.Screen>
           </>
         ) : (
           <Stack.Screen name="Login">{() => <LoginScreen onLogin={() => setIsLoggedIn(true)} />}</Stack.Screen>
@@ -676,7 +739,7 @@ const styles = StyleSheet.create({
   loginButtonText: { color: Colors.white, fontSize: 16, fontWeight: "600" },
   demoText: { fontSize: 12, color: Colors.textMuted, textAlign: "center", marginTop: 16 },
   screen: { flex: 1, backgroundColor: Colors.background },
-  header: { backgroundColor: Colors.primary, paddingHorizontal: 16, paddingVertical: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 48 },
+  header: { backgroundColor: Colors.primary, paddingHorizontal: 16, paddingVertical: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: Platform.OS === "android" ? 35 : 0 },
   headerTitle: { fontSize: 18, fontWeight: "bold", color: Colors.white },
   content: { flex: 1, padding: 16 },
   sectionTitle: { fontSize: 16, fontWeight: "600", color: Colors.text, marginBottom: 12, marginTop: 8 },

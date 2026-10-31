@@ -8,7 +8,7 @@ import React, { useState, useEffect, useCallback } from "react"
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, SafeAreaView, StatusBar, ScrollView, Alert,
-  FlatList, Modal, Linking,
+  FlatList, Modal, Linking, RefreshControl, Platform,
 } from "react-native"
 import { NavigationContainer } from "@react-navigation/native"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
@@ -77,8 +77,8 @@ const ABS_STATUS = [
 // LOGIN SCREEN
 // ============================================================================
 function LoginScreen({ onLogin }: { onLogin: () => void }) {
-  const [email, setEmail] = useState("guru@madrasah.test")
-  const [password, setPassword] = useState("admin123")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
 
   const handleLogin = async () => {
@@ -122,9 +122,10 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
 // ============================================================================
 // DASHBOARD SCREEN (Home with menu)
 // ============================================================================
-function DashboardScreen({ onLogout, navigation }: { onLogout: () => void; navigation: any }) {
+function DashboardScreen({ onLogout, navigation, refreshKey }: { onLogout: () => void; navigation: any; refreshKey: number }) {
   const [jadwal, setJadwal] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   // V2: guru-specific stats
   const [v2Stats, setV2Stats] = useState<{
     pertemuanToday: number
@@ -136,15 +137,19 @@ function DashboardScreen({ onLogout, navigation }: { onLogout: () => void; navig
   const loadJadwal = useCallback(async () => {
     try {
       setLoading(true)
+      setError(null)
       const res = await apiGet("/api/admin/jadwal")
       setJadwal(res.data || [])
       // V2: fetch guru dashboard stats in parallel (best-effort, don't fail whole load)
       apiGet("/api/admin/guru/stats").then((statsRes) => setV2Stats(statsRes.data)).catch(() => setV2Stats(null))
-    } catch (e: any) { Alert.alert("Error", e.message) }
-    finally { setLoading(false) }
+    } catch (e: any) {
+      setError(e.message || "Terjadi kesalahan")
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  useEffect(() => { loadJadwal() }, [loadJadwal])
+  useEffect(() => { loadJadwal() }, [loadJadwal, refreshKey])
 
   const today = new Date().getDay() || 7
   const todayJadwal = jadwal.filter(j => j.dayOfWeek === today)
@@ -175,6 +180,14 @@ function DashboardScreen({ onLogout, navigation }: { onLogout: () => void; navig
         </TouchableOpacity>
       </View>
 
+      {error ? (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 20 }}>
+          <Text style={{ color: Colors.danger, textAlign: "center", marginBottom: 16 }}>{error}</Text>
+          <TouchableOpacity onPress={() => { setError(null); loadJadwal() }} style={{ backgroundColor: Colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}>
+            <Text style={{ color: Colors.white, fontWeight: "600" }}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
       <ScrollView style={styles.content}>
         {/* V2 — Guru Quick Stats */}
         {v2Stats && (
@@ -244,6 +257,7 @@ function DashboardScreen({ onLogout, navigation }: { onLogout: () => void; navig
           ))
         )}
       </ScrollView>
+      )}
     </SafeAreaView>
   )
 }
@@ -262,29 +276,36 @@ function AbsensiInputScreen({ route, navigation }: { route: any; navigation: any
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   const loadKelas = useCallback(async () => {
     try {
+      setError(null)
       const res = await apiGet("/api/admin/kelas")
       setKelasList(res.data || [])
       if (!selectedKelas && res.data?.length > 0) {
         setSelectedKelas(res.data[0].id)
       }
-    } catch (e: any) { Alert.alert("Error", e.message) }
+    } catch (e: any) {
+      setError(e.message || "Terjadi kesalahan")
+    }
   }, [selectedKelas])
 
   const loadSantri = useCallback(async () => {
     if (!selectedKelas) return
     try {
       setLoading(true)
+      setError(null)
       const res = await apiGet(`/api/admin/santri?kelasId=${selectedKelas}&status=AKTIF`)
       setSantriList(res.data || [])
       // Default semua HADIR
       const defaults: Record<string, string> = {}
       res.data?.forEach((s: any) => { defaults[s.id] = "HADIR" })
       setAbsensiData(defaults)
-    } catch (e: any) { Alert.alert("Error", e.message) }
-    finally { setLoading(false) }
+    } catch (e: any) {
+      setError(e.message || "Terjadi kesalahan")
+    } finally { setLoading(false) }
   }, [selectedKelas])
 
   useEffect(() => { loadKelas() }, [loadKelas])
@@ -364,7 +385,14 @@ function AbsensiInputScreen({ route, navigation }: { route: any; navigation: any
         </View>
       </View>
 
-      {loading ? (
+      {error ? (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 20 }}>
+          <Text style={{ color: Colors.danger, textAlign: "center", marginBottom: 16 }}>{error}</Text>
+          <TouchableOpacity onPress={() => { setError(null); loadKelas(); if (selectedKelas) loadSantri() }} style={{ backgroundColor: Colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}>
+            <Text style={{ color: Colors.white, fontWeight: "600" }}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      ) : loading ? (
         <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
       ) : (
         <FlatList
@@ -403,6 +431,17 @@ function AbsensiInputScreen({ route, navigation }: { route: any; navigation: any
             </View>
           )}
           contentContainerStyle={{ paddingBottom: 80 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true)
+                loadSantri().finally(() => setRefreshing(false))
+              }}
+              colors={[Colors.primary]}
+              tintColor={Colors.primary}
+            />
+          }
         />
       )}
 
@@ -438,6 +477,7 @@ function NilaiInputScreen({ navigation }: { navigation: any }) {
   const [nilaiData, setNilaiData] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
 
   const loadMaster = useCallback(async () => {
     try {
@@ -582,6 +622,17 @@ function NilaiInputScreen({ navigation }: { navigation: any }) {
             </View>
           )}
           contentContainerStyle={{ paddingBottom: 80 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true)
+                loadSantri().finally(() => setRefreshing(false))
+              }}
+              colors={[Colors.primary]}
+              tintColor={Colors.primary}
+            />
+          }
         />
       )}
 
@@ -677,6 +728,7 @@ function SantriListScreen({ navigation }: { navigation: any }) {
   const [selectedKelas, setSelectedKelas] = useState("")
   const [santriList, setSantriList] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
   const loadKelas = useCallback(async () => {
     try {
@@ -749,6 +801,17 @@ function SantriListScreen({ navigation }: { navigation: any }) {
             <View style={styles.emptyCard}><Text style={styles.emptyText}>Belum ada santri di kelas ini</Text></View>
           )}
           contentContainerStyle={{ padding: 16 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true)
+                loadSantri().finally(() => setRefreshing(false))
+              }}
+              colors={[Colors.primary]}
+              tintColor={Colors.primary}
+            />
+          }
         />
       )}
     </SafeAreaView>
@@ -761,6 +824,7 @@ function SantriListScreen({ navigation }: { navigation: any }) {
 function PengumumanListScreen({ navigation }: { navigation: any }) {
   const [announcements, setAnnouncements] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -820,6 +884,17 @@ function PengumumanListScreen({ navigation }: { navigation: any }) {
             <View style={styles.emptyCard}><Text style={styles.emptyText}>Belum ada pengumuman</Text></View>
           )}
           contentContainerStyle={{ padding: 16 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true)
+                load().finally(() => setRefreshing(false))
+              }}
+              colors={[Colors.primary]}
+              tintColor={Colors.primary}
+            />
+          }
         />
       )}
     </SafeAreaView>
@@ -833,6 +908,7 @@ function MateriListScreen({ navigation }: { navigation: any }) {
   const [materi, setMateri] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedMateri, setSelectedMateri] = useState<any | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -909,6 +985,17 @@ function MateriListScreen({ navigation }: { navigation: any }) {
             <View style={styles.emptyCard}><Text style={styles.emptyText}>Belum ada materi</Text></View>
           )}
           contentContainerStyle={{ padding: 16 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true)
+                load().finally(() => setRefreshing(false))
+              }}
+              colors={[Colors.primary]}
+              tintColor={Colors.primary}
+            />
+          }
         />
       )}
 
@@ -967,20 +1054,25 @@ function MateriListScreen({ navigation }: { navigation: any }) {
 // ============================================================================
 // TUGAS LIST SCREEN (V2)
 // ============================================================================
-function TugasListScreen({ navigation }: { navigation: any }) {
+function TugasListScreen({ navigation, refreshKey }: { navigation: any; refreshKey: number }) {
   const [tugas, setTugas] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     try {
       setLoading(true)
+      setError(null)
       const res = await apiGet("/api/admin/tugas")
       setTugas(res.data || [])
-    } catch (e: any) { Alert.alert("Error", e.message) }
-    finally { setLoading(false) }
+    } catch (e: any) {
+      setError(e.message || "Terjadi kesalahan")
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load() }, [load, refreshKey])
 
   const stats = {
     total: tugas.length,
@@ -1004,6 +1096,14 @@ function TugasListScreen({ navigation }: { navigation: any }) {
         <View style={{ width: 24 }} />
       </View>
 
+      {error ? (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 20 }}>
+          <Text style={{ color: Colors.danger, textAlign: "center", marginBottom: 16 }}>{error}</Text>
+          <TouchableOpacity onPress={() => { setError(null); load() }} style={{ backgroundColor: Colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}>
+            <Text style={{ color: Colors.white, fontWeight: "600" }}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
       <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 16 }}>
         {/* Stats Row */}
         <View style={styles.v2StatsRow}>
@@ -1062,6 +1162,7 @@ function TugasListScreen({ navigation }: { navigation: any }) {
           })
         )}
       </ScrollView>
+      )}
     </SafeAreaView>
   )
 }
@@ -1076,6 +1177,7 @@ function PertemuanListScreen({ navigation }: { navigation: any }) {
   const [filterKelas, setFilterKelas] = useState("")
   const [filterMapel, setFilterMapel] = useState("")
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -1181,6 +1283,17 @@ function PertemuanListScreen({ navigation }: { navigation: any }) {
             <View style={styles.emptyCard}><Text style={styles.emptyText}>Belum ada pertemuan</Text></View>
           )}
           contentContainerStyle={{ padding: 16 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true)
+                load().finally(() => setRefreshing(false))
+              }}
+              colors={[Colors.primary]}
+              tintColor={Colors.primary}
+            />
+          }
         />
       )}
     </SafeAreaView>
@@ -1193,6 +1306,7 @@ function PertemuanListScreen({ navigation }: { navigation: any }) {
 function UjianListScreen({ navigation }: { navigation: any }) {
   const [ujian, setUjian] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -1269,6 +1383,17 @@ function UjianListScreen({ navigation }: { navigation: any }) {
             <View style={styles.emptyCard}><Text style={styles.emptyText}>Belum ada ujian</Text></View>
           )}
           contentContainerStyle={{ padding: 16 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true)
+                load().finally(() => setRefreshing(false))
+              }}
+              colors={[Colors.primary]}
+              tintColor={Colors.primary}
+            />
+          }
         />
       )}
     </SafeAreaView>
@@ -1688,6 +1813,7 @@ function ChatListScreen({ navigation }: { navigation: any }) {
   const [selectedSantri, setSelectedSantri] = useState("")
   const [roomType, setRoomType] = useState("WALI_GURU")
   const [saving, setSaving] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -1787,6 +1913,17 @@ function ChatListScreen({ navigation }: { navigation: any }) {
             <View style={styles.emptyCard}><Text style={styles.emptyText}>Belum ada chat room. Tekan + untuk membuat.</Text></View>
           )}
           contentContainerStyle={{ padding: 16 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true)
+                load().finally(() => setRefreshing(false))
+              }}
+              colors={[Colors.primary]}
+              tintColor={Colors.primary}
+            />
+          }
         />
       )}
 
@@ -1951,6 +2088,7 @@ export default function App() {
               {({ navigation }) => (
                 <DashboardScreen
                   navigation={navigation}
+                  refreshKey={refreshKey}
                   onLogout={async () => {
                     await getSupabase().auth.signOut()
                     await SecureStore.deleteItemAsync("authToken")
@@ -1966,7 +2104,9 @@ export default function App() {
             <Stack.Screen name="SantriList" component={SantriListScreen} />
             <Stack.Screen name="PengumumanList" component={PengumumanListScreen} />
             <Stack.Screen name="MateriList" component={MateriListScreen} />
-            <Stack.Screen name="TugasList" component={TugasListScreen} />
+            <Stack.Screen name="TugasList">
+              {({ navigation }) => <TugasListScreen navigation={navigation} refreshKey={refreshKey} />}
+            </Stack.Screen>
             <Stack.Screen name="PertemuanList" component={PertemuanListScreen} />
             <Stack.Screen name="UjianList" component={UjianListScreen} />
             <Stack.Screen name="Perkembangan" component={PerkembanganScreen} />
@@ -1999,7 +2139,7 @@ const styles = StyleSheet.create({
   loginButtonText: { color: Colors.white, fontSize: 16, fontWeight: "600" },
   demoText: { fontSize: 12, color: Colors.textMuted, textAlign: "center", marginTop: 16 },
   screen: { flex: 1, backgroundColor: Colors.background },
-  header: { backgroundColor: Colors.primary, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingVertical: 12, paddingTop: 48 },
+  header: { backgroundColor: Colors.primary, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingVertical: 12, paddingTop: Platform.OS === "android" ? 35 : 0 },
   backButton: { padding: 4 },
   headerTitle: { fontSize: 16, fontWeight: "600", color: Colors.white },
   content: { flex: 1, padding: 16 },

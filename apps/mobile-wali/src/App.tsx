@@ -11,7 +11,7 @@ import React, { useState, useEffect, useCallback } from "react"
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, SafeAreaView, StatusBar, ScrollView, Alert,
-  FlatList, Image, Modal,
+  FlatList, Image, Modal, RefreshControl, Platform,
 } from "react-native"
 import { NavigationContainer } from "@react-navigation/native"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
@@ -97,7 +97,7 @@ const Colors = {
 
 // --- Login Screen ---
 function LoginScreen({ onLogin, onForgotPin }: { onLogin: (token: string, wali: WaliData, santriList: SantriData[]) => void; onForgotPin?: () => void }) {
-  const [phone, setPhone] = useState("081234511001")
+  const [phone, setPhone] = useState("")
   const [pin, setPin] = useState("")
   const [loading, setLoading] = useState(false)
   const [showPin, setShowPin] = useState(false)
@@ -327,11 +327,13 @@ function ForgotPinScreen({ onBack }: { onBack: () => void }) {
 
 // --- Dashboard Screen (List Anak) ---
 function DashboardScreen({
-  wali, santriList, onSelectSantri, onLogout,
+  wali, santriList, onSelectSantri, onLogout, onRefresh,
 }: {
   wali: WaliData, santriList: SantriData[],
   onSelectSantri: (santri: SantriData) => void, onLogout: () => void,
+  onRefresh?: () => Promise<void> | void,
 }) {
+  const [refreshing, setRefreshing] = useState(false)
   const renderSantri = ({ item }: { item: SantriData }) => (
     <TouchableOpacity style={styles.santriCard} onPress={() => onSelectSantri(item)}>
       <View style={styles.santriAvatar}>
@@ -382,6 +384,21 @@ function DashboardScreen({
             <Text style={styles.emptySubtext}>Hubungi madrasah untuk menghubungkan akun</Text>
           </View>
         )}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={async () => {
+              setRefreshing(true)
+              try {
+                if (onRefresh) await onRefresh()
+              } finally {
+                setRefreshing(false)
+              }
+            }}
+            colors={[Colors.primary]}
+            tintColor={Colors.primary}
+          />
+        }
       />
     </SafeAreaView>
   )
@@ -767,11 +784,13 @@ function WaliNotifikasiSection({ token }: { token: string | null }) {
   const [list, setList] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState<any>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!token) return
     try {
       setLoading(true)
+      setError(null)
       const res = await fetch(`${API_BASE_URL}/api/wali/notifikasi`, {
         headers: { Authorization: `Bearer ${token}` },
       })
@@ -779,7 +798,7 @@ function WaliNotifikasiSection({ token }: { token: string | null }) {
       setList(data.data || [])
       setStats(data.stats)
     } catch (e: any) {
-      console.error("notif load error:", e.message)
+      setError(e.message || "Terjadi kesalahan")
     } finally {
       setLoading(false)
     }
@@ -800,6 +819,17 @@ function WaliNotifikasiSection({ token }: { token: string | null }) {
   }
 
   if (loading) return <View style={styles.contentCard}><ActivityIndicator size="large" color={Colors.primary} /></View>
+
+  if (error) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 20 }}>
+        <Text style={{ color: Colors.danger, textAlign: "center", marginBottom: 16 }}>{error}</Text>
+        <TouchableOpacity onPress={() => { setError(null); load() }} style={{ backgroundColor: Colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}>
+          <Text style={{ color: Colors.white, fontWeight: "600" }}>Coba Lagi</Text>
+        </TouchableOpacity>
+      </View>
+    )
+  }
 
   return (
     <View style={styles.contentCard}>
@@ -1634,8 +1664,8 @@ function UjianTakeScreen({ ujian, santriId, onClose }: { ujian: any, santriId: s
       <View style={styles.contentCard}>
         <Text style={[styles.contentTitle, { textAlign: "center" }]}>Ujian Selesai</Text>
         <View style={{ alignItems: "center", marginTop: 20 }}>
-          <Text style={{ fontSize: 48, fontWeight: "bold", color: result.data.score >= 70 ? Colors.success : Colors.danger }}>
-            {result.data.score}
+          <Text style={{ fontSize: 48, fontWeight: "bold", color: (result?.data?.score ?? result?.score ?? 0) >= 70 ? Colors.success : Colors.danger }}>
+            {result?.data?.score ?? result?.score ?? 0}
           </Text>
           <Text style={{ fontSize: 14, color: Colors.textMuted }}>/ {ujian.maxScore}</Text>
           <Text style={{ fontSize: 12, color: Colors.textMuted, marginTop: 8, textAlign: "center" }}>
@@ -1864,6 +1894,14 @@ export default function App() {
               wali={savedWali!}
               santriList={savedSantri}
               onSelectSantri={(santri) => navigation.navigate("SantriDetail", { santri })}
+              onRefresh={async () => {
+                const session = await loadWaliSession()
+                if (session) {
+                  waliToken = session.token
+                  setSavedWali(session.wali)
+                  setSavedSantri(session.santriList)
+                }
+              }}
               onLogout={async () => {
                 waliToken = null
                 await clearWaliSession()
@@ -1910,7 +1948,7 @@ const styles = StyleSheet.create({
   forgotPinBtn: { alignItems: "center", marginTop: 12 },
   forgotPinText: { fontSize: 13, color: Colors.primary, fontWeight: "500" },
   screen: { flex: 1, backgroundColor: Colors.background },
-  header: { backgroundColor: Colors.primary, paddingHorizontal: 16, paddingVertical: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 48 },
+  header: { backgroundColor: Colors.primary, paddingHorizontal: 16, paddingVertical: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: Platform.OS === "android" ? 35 : 0 },
   headerTitle: { fontSize: 14, color: Colors.white, opacity: 0.9 },
   headerName: { fontSize: 18, fontWeight: "bold", color: Colors.white },
   listContainer: { padding: 16 },
@@ -1928,7 +1966,7 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: "center", paddingVertical: 48 },
   emptyText: { fontSize: 16, fontWeight: "600", color: Colors.text, marginTop: 12 },
   emptySubtext: { fontSize: 14, color: Colors.textMuted, marginTop: 4, textAlign: "center" },
-  detailHeader: { backgroundColor: Colors.primary, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingVertical: 12, paddingTop: 48 },
+  detailHeader: { backgroundColor: Colors.primary, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingVertical: 12, paddingTop: Platform.OS === "android" ? 35 : 0 },
   backButton: { padding: 4 },
   detailHeaderTitle: { fontSize: 16, fontWeight: "600", color: Colors.white },
   detailCard: { backgroundColor: Colors.white, margin: 16, borderRadius: 12, padding: 16, flexDirection: "row", alignItems: "center", elevation: 2 },

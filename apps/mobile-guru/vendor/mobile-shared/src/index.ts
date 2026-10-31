@@ -152,10 +152,21 @@ export class MobileApiClient {
     const headers = await this.getHeaders()
     const res = await fetch(url.toString(), { headers })
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error(err?.error || err?.message || `Request failed: ${res.status}`)
+      let errorMsg = `Request failed: ${res.status}`
+      try {
+        const err = await res.json()
+        errorMsg = err?.error || err?.message || errorMsg
+      } catch {
+        // Response bukan JSON — pakai status text
+        errorMsg = `${errorMsg} ${res.statusText || ""}`.trim()
+      }
+      throw new Error(errorMsg)
     }
-    return res.json()
+    try {
+      return await res.json()
+    } catch {
+      throw new Error("Server returned non-JSON response")
+    }
   }
 
   async post<T = any>(path: string, body?: any): Promise<T> {
@@ -166,10 +177,21 @@ export class MobileApiClient {
       body: body === undefined ? undefined : JSON.stringify(body),
     })
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error(err?.error || err?.message || `Request failed: ${res.status}`)
+      let errorMsg = `Request failed: ${res.status}`
+      try {
+        const err = await res.json()
+        errorMsg = err?.error || err?.message || errorMsg
+      } catch {
+        // Response bukan JSON — pakai status text
+        errorMsg = `${errorMsg} ${res.statusText || ""}`.trim()
+      }
+      throw new Error(errorMsg)
     }
-    return res.json()
+    try {
+      return await res.json()
+    } catch {
+      throw new Error("Server returned non-JSON response")
+    }
   }
 
   async put<T = any>(path: string, body: any): Promise<T> {
@@ -180,10 +202,21 @@ export class MobileApiClient {
       body: JSON.stringify(body),
     })
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error(err?.error || err?.message || `Request failed: ${res.status}`)
+      let errorMsg = `Request failed: ${res.status}`
+      try {
+        const err = await res.json()
+        errorMsg = err?.error || err?.message || errorMsg
+      } catch {
+        // Response bukan JSON — pakai status text
+        errorMsg = `${errorMsg} ${res.statusText || ""}`.trim()
+      }
+      throw new Error(errorMsg)
     }
-    return res.json()
+    try {
+      return await res.json()
+    } catch {
+      throw new Error("Server returned non-JSON response")
+    }
   }
 
   async delete<T = any>(path: string): Promise<T> {
@@ -193,10 +226,21 @@ export class MobileApiClient {
       headers,
     })
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error(err?.error || err?.message || `Request failed: ${res.status}`)
+      let errorMsg = `Request failed: ${res.status}`
+      try {
+        const err = await res.json()
+        errorMsg = err?.error || err?.message || errorMsg
+      } catch {
+        // Response bukan JSON — pakai status text
+        errorMsg = `${errorMsg} ${res.statusText || ""}`.trim()
+      }
+      throw new Error(errorMsg)
     }
-    return res.json()
+    try {
+      return await res.json()
+    } catch {
+      throw new Error("Server returned non-JSON response")
+    }
   }
 }
 
