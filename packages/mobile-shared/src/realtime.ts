@@ -20,6 +20,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { getMobileSupabase } from "./index"
 
 type RealtimeCallback<T = any> = (payload: {
   eventType: "INSERT" | "UPDATE" | "DELETE"
@@ -31,9 +32,9 @@ type RealtimeCallback<T = any> = (payload: {
 /**
  * Get the Supabase client from mobile-shared (singleton).
  * Returns null if not configured.
+ * Uses STATIC import (not dynamic) to avoid Metro release bundler crash.
  */
-async function getSupabase(): Promise<SupabaseClient | null> {
-  const { getMobileSupabase } = await import("./index")
+function getSupabase(): SupabaseClient | null {
   return getMobileSupabase()
 }
 
@@ -57,7 +58,7 @@ export async function subscribeToTable<T = any>(
   callback: RealtimeCallback<T>,
   filter?: string,
 ): Promise<() => void> {
-  const supabase = await getSupabase()
+  const supabase = getSupabase()
   if (!supabase) {
     console.warn("[realtime] Supabase not configured, skipping subscription")
     return () => {}

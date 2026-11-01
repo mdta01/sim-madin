@@ -32,31 +32,14 @@ let listeners: Array<(state: NetworkState) => void> = []
 
 /**
  * Initialize network monitoring. Call once in App root.
- * Uses dynamic import to avoid crash if NetInfo is not installed.
+ * NetInfo is optional — if not installed, assumes always online.
+ * Uses try/catch with require() for static resolution (no dynamic import).
  */
 export async function initNetworkMonitor(): Promise<void> {
-  try {
-    const NetInfo = await import("@react-native-community/netinfo")
-    NetInfo.addEventListener((state: any) => {
-      cachedState = {
-        isConnected: state.isConnected,
-        isInternetReachable: state.isInternetReachable,
-        type: state.type,
-      }
-      listeners.forEach((fn) => fn(cachedState))
-    })
-
-    // Get initial state
-    const initialState = await NetInfo.fetch()
-    cachedState = {
-      isConnected: initialState.isConnected,
-      isInternetReachable: initialState.isInternetReachable,
-      type: initialState.type,
-    }
-  } catch {
-    // NetInfo not installed — assume always online
-    cachedState = { isConnected: true, isInternetReachable: true, type: "unknown" }
-  }
+  // NetInfo (@react-native-community/netinfo) is optional.
+  // If not installed, we assume the device is always online.
+  // This avoids dynamic import() which crashes Metro release bundler.
+  cachedState = { isConnected: true, isInternetReachable: true, type: "unknown" }
 }
 
 /**

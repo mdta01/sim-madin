@@ -30,6 +30,12 @@
       }
     },
     "owner": "madinmu01s-team",
-    "hermesEnabled": true
+    "hermesEnabled": true,
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/c1793ef8-86aa-4b5e-a4c7-024201be43e1"
+    }
   }
 }
