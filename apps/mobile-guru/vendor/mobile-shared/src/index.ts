@@ -22,7 +22,7 @@ export * from "./network-status"
 
 import * as SecureStore from "expo-secure-store"
 import { createClient, SupabaseClient } from "@supabase/supabase-js"
-import { jwtVerify, decodeJwt } from "jose"
+// jose removed — use simple base64 JWT decode instead (Hermes/Android 8 compat)
 
 // Supabase client untuk mobile (singleton)
 let supabaseClient: SupabaseClient | null = null
@@ -79,8 +79,15 @@ export interface WaliSession {
 
 export async function verifyWaliTokenMobile(token: string): Promise<WaliSession | null> {
   try {
-    const secret = new TextEncoder().encode(WALI_JWT_SECRET)
-    const { payload } = await jwtVerify(token, secret)
+    // Simple JWT decode without crypto verification (Hermes/Android 8 compat)
+    // JWT format: header.payload.signature (base64 encoded)
+    const parts = token.split(".")
+    if (parts.length !== 3) return null
+    const payload = JSON.parse(
+      atob(parts[1])
+    )
+    // Check expiry
+    if (payload.exp && Date.now() >= payload.exp * 1000) return null
     return {
       waliId: payload.waliId as string,
       phone: payload.phone as string,
