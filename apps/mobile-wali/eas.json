@@ -6,6 +6,8 @@
   "build": {
     "preview": {
       "distribution": "internal",
+      "autoIncrement": true,
+      "credentialsSource": "remote",
       "android": {
         "buildType": "apk",
         "image": "latest"
