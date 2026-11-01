@@ -360,42 +360,60 @@ function MonitorListScreen({ navigation, title, endpoint, renderItem, refreshKey
 }
 
 function MonitorSantriScreen({ navigation, refreshKey }: { navigation: any; refreshKey: number }) {
+  const openDetail = (item: any) => {
+    Alert.alert(
+      item.name || "Detail Santri",
+      `NIS: ${item.nis || "-"}\nKelas: ${item.kelas?.name || "-"}\nGender: ${item.gender === "L" ? "Laki-laki" : item.gender === "P" ? "Perempuan" : "-"}\nStatus: ${item.status || "-"}\nWali: ${item.wali?.name || "-"}${item.wali?.phone ? ` (${item.wali.phone})` : ""}`,
+      [{ text: "Tutup" }]
+    )
+  }
   return <MonitorListScreen navigation={navigation} title="Data Santri" endpoint="/api/admin/santri" refreshKey={refreshKey} renderItem={(item: any) => (
-    <View style={styles.kelasCard}>
-      <View style={{ flexDirection: "row", alignItems: "center" }}>
-        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primaryLight, justifyContent: "center", alignItems: "center", marginRight: 12 }}>
-          <Text style={{ fontSize: 18, fontWeight: "bold", color: Colors.primary }}>{item.name[0]}</Text>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.kelasName}>{item.name}</Text>
-          <Text style={styles.kelasWali}>NIS: {item.nis} • {item.kelas?.name || "-"}</Text>
-          <Text style={styles.kelasWali}>Wali: {item.wali?.name || "-"}</Text>
-        </View>
-        <View style={{ backgroundColor: item.status === "AKTIF" ? Colors.successLight : Colors.dangerLight, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
-          <Text style={{ fontSize: 12, color: item.status === "AKTIF" ? Colors.success : Colors.danger }}>{item.status}</Text>
+    <TouchableOpacity activeOpacity={0.7} onPress={() => openDetail(item)}>
+      <View style={styles.kelasCard}>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primaryLight, justifyContent: "center", alignItems: "center", marginRight: 12 }}>
+            <Text style={{ fontSize: 18, fontWeight: "bold", color: Colors.primary }}>{item.name[0]}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.kelasName}>{item.name}</Text>
+            <Text style={styles.kelasWali}>NIS: {item.nis} • {item.kelas?.name || "-"}</Text>
+            <Text style={styles.kelasWali}>Wali: {item.wali?.name || "-"}</Text>
+          </View>
+          <View style={{ backgroundColor: item.status === "AKTIF" ? Colors.successLight : Colors.dangerLight, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
+            <Text style={{ fontSize: 12, color: item.status === "AKTIF" ? Colors.success : Colors.danger }}>{item.status}</Text>
+          </View>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   )} />
 }
 
 function MonitorGuruScreen({ navigation, refreshKey }: { navigation: any; refreshKey: number }) {
+  const openDetail = (item: any) => {
+    Alert.alert(
+      item.name || "Detail Guru",
+      `NIP: ${item.nip || "-"}\nSpesialisasi: ${item.specialization || "-"}\nStatus: ${item.status || "-"}\nTelepon: ${item.phone || "-"}`,
+      [{ text: "Tutup" }]
+    )
+  }
   return <MonitorListScreen navigation={navigation} title="Data Guru" endpoint="/api/admin/guru" refreshKey={refreshKey} renderItem={(item: any) => (
-    <View style={styles.kelasCard}>
-      <View style={{ flexDirection: "row", alignItems: "center" }}>
-        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primaryLight, justifyContent: "center", alignItems: "center", marginRight: 12 }}>
-          <Text style={{ fontSize: 18, fontWeight: "bold", color: Colors.primary }}>{item.name[0]}</Text>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.kelasName}>{item.name}</Text>
-          <Text style={styles.kelasWali}>{item.specialization || "Guru"}</Text>
-          <Text style={styles.kelasWali}>{item.phone || "-"}</Text>
-        </View>
-        <View style={{ backgroundColor: item.status === "AKTIF" ? Colors.successLight : Colors.dangerLight, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
-          <Text style={{ fontSize: 12, color: item.status === "AKTIF" ? Colors.success : Colors.danger }}>{item.status}</Text>
+    <TouchableOpacity activeOpacity={0.7} onPress={() => openDetail(item)}>
+      <View style={styles.kelasCard}>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primaryLight, justifyContent: "center", alignItems: "center", marginRight: 12 }}>
+            <Text style={{ fontSize: 18, fontWeight: "bold", color: Colors.primary }}>{item.name[0]}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.kelasName}>{item.name}</Text>
+            <Text style={styles.kelasWali}>{item.specialization || "Guru"}</Text>
+            <Text style={styles.kelasWali}>{item.phone || "-"}</Text>
+          </View>
+          <View style={{ backgroundColor: item.status === "AKTIF" ? Colors.successLight : Colors.dangerLight, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
+            <Text style={{ fontSize: 12, color: item.status === "AKTIF" ? Colors.success : Colors.danger }}>{item.status}</Text>
+          </View>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   )} />
 }
 

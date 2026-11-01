@@ -1281,6 +1281,12 @@ function LaporanScreen({ navigation }: { navigation: any }) {
   const surplus = laporan?.surplus ?? (totalPemasukan - totalPengeluaran)
   const saldo = laporan?.saldo || laporan?.balance || 0
   const tunggakan = laporan?.tunggakan || laporan?.outstanding || 0
+  const jumlahTransaksi = laporan?.jumlahTransaksi || (pemasukanKategori.length + pengeluaranKategori.length)
+
+  // Max amounts for bar chart scaling (avoid divide-by-zero)
+  const maxPemasukan = Math.max(...pemasukanKategori.map((k: any) => Number(k.amount || k.total || 0)), 1)
+  const maxPengeluaran = Math.max(...pengeluaranKategori.map((k: any) => Number(k.amount || k.total || 0)), 1)
+  const totalCompare = Math.max(totalPemasukan + totalPengeluaran, 1)
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -1339,6 +1345,23 @@ function LaporanScreen({ navigation }: { navigation: any }) {
               </View>
             </View>
 
+            {/* Progress bar: Pemasukan vs Pengeluaran */}
+            <View style={styles.laporanCard}>
+              <Text style={styles.sectionTitle}>Pemasukan vs Pengeluaran</Text>
+              <View style={{ flexDirection: "row", height: 24, borderRadius: 12, overflow: "hidden", marginTop: 8, backgroundColor: Colors.border }}>
+                <View style={{ flex: totalPemasukan > 0 ? totalPemasukan : 0.001, backgroundColor: Colors.success }} />
+                <View style={{ flex: totalPengeluaran > 0 ? totalPengeluaran : 0.001, backgroundColor: Colors.danger }} />
+              </View>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6 }}>
+                <Text style={{ fontSize: 12, color: Colors.success, fontWeight: "600" }}>
+                  Masuk: {formatRupiah(totalPemasukan)} ({Math.round((totalPemasukan / totalCompare) * 100)}%)
+                </Text>
+                <Text style={{ fontSize: 12, color: Colors.danger, fontWeight: "600" }}>
+                  Keluar: {formatRupiah(totalPengeluaran)} ({Math.round((totalPengeluaran / totalCompare) * 100)}%)
+                </Text>
+              </View>
+            </View>
+
             <View style={[styles.totalCard, { margin: 0, marginBottom: 12, backgroundColor: surplus >= 0 ? Colors.primary : Colors.warning }]}>
               <Text style={styles.totalLabel}>{surplus >= 0 ? "Surplus" : "Defisit"}</Text>
               <Text style={styles.totalValue}>{formatRupiah(Math.abs(surplus))}</Text>
@@ -1356,30 +1379,71 @@ function LaporanScreen({ navigation }: { navigation: any }) {
               </View>
             )}
 
-            {/* Pemasukan per kategori */}
+            {/* Ringkasan transaksi */}
+            <View style={styles.laporanCard}>
+              <Text style={styles.sectionTitle}>Ringkasan Transaksi</Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+                <View style={{ flex: 1, minWidth: 100, backgroundColor: Colors.background, borderRadius: 8, padding: 10 }}>
+                  <Text style={{ fontSize: 11, color: Colors.textMuted }}>Total Transaksi</Text>
+                  <Text style={{ fontSize: 16, fontWeight: "bold", color: Colors.text, marginTop: 2 }}>{jumlahTransaksi}</Text>
+                </View>
+                <View style={{ flex: 1, minWidth: 100, backgroundColor: Colors.background, borderRadius: 8, padding: 10 }}>
+                  <Text style={{ fontSize: 11, color: Colors.textMuted }}>Kat. Pemasukan</Text>
+                  <Text style={{ fontSize: 16, fontWeight: "bold", color: Colors.success, marginTop: 2 }}>{pemasukanKategori.length}</Text>
+                </View>
+                <View style={{ flex: 1, minWidth: 100, backgroundColor: Colors.background, borderRadius: 8, padding: 10 }}>
+                  <Text style={{ fontSize: 11, color: Colors.textMuted }}>Kat. Pengeluaran</Text>
+                  <Text style={{ fontSize: 16, fontWeight: "bold", color: Colors.danger, marginTop: 2 }}>{pengeluaranKategori.length}</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Pemasukan per kategori — bar chart */}
             <Text style={styles.sectionTitle}>Pemasukan per Kategori</Text>
             {pemasukanKategori.length === 0 ? (
               <Text style={{ color: Colors.textMuted, fontSize: 12, marginBottom: 12 }}>- Tidak ada data</Text>
             ) : (
-              pemasukanKategori.map((k, i) => (
-                <View key={`in-${i}`} style={styles.laporanRow}>
-                  <Text style={styles.laporanRowLabel}>{k.category || k.name || "-"}</Text>
-                  <Text style={[styles.laporanRowValue, { color: Colors.success }]}>{formatRupiah(k.amount || k.total || 0)}</Text>
-                </View>
-              ))
+              <View style={styles.laporanCard}>
+                {pemasukanKategori.map((k: any, i: number) => {
+                  const amt = Number(k.amount || k.total || 0)
+                  const pct = Math.max((amt / maxPemasukan) * 100, 2)
+                  return (
+                    <View key={`in-${i}`} style={{ marginBottom: 10 }}>
+                      <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+                        <Text style={{ fontSize: 12, color: Colors.text, flex: 1 }}>{k.category || k.name || "-"}</Text>
+                        <Text style={{ fontSize: 12, fontWeight: "600", color: Colors.success }}>{formatRupiah(amt)}</Text>
+                      </View>
+                      <View style={{ height: 8, borderRadius: 4, backgroundColor: Colors.border, overflow: "hidden" }}>
+                        <View style={{ width: `${pct}%`, height: "100%", backgroundColor: Colors.success }} />
+                      </View>
+                    </View>
+                  )
+                })}
+              </View>
             )}
 
-            {/* Pengeluaran per kategori */}
+            {/* Pengeluaran per kategori — bar chart */}
             <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Pengeluaran per Kategori</Text>
             {pengeluaranKategori.length === 0 ? (
               <Text style={{ color: Colors.textMuted, fontSize: 12, marginBottom: 12 }}>- Tidak ada data</Text>
             ) : (
-              pengeluaranKategori.map((k, i) => (
-                <View key={`out-${i}`} style={styles.laporanRow}>
-                  <Text style={styles.laporanRowLabel}>{k.category || k.name || "-"}</Text>
-                  <Text style={[styles.laporanRowValue, { color: Colors.danger }]}>{formatRupiah(k.amount || k.total || 0)}</Text>
-                </View>
-              ))
+              <View style={styles.laporanCard}>
+                {pengeluaranKategori.map((k: any, i: number) => {
+                  const amt = Number(k.amount || k.total || 0)
+                  const pct = Math.max((amt / maxPengeluaran) * 100, 2)
+                  return (
+                    <View key={`out-${i}`} style={{ marginBottom: 10 }}>
+                      <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+                        <Text style={{ fontSize: 12, color: Colors.text, flex: 1 }}>{k.category || k.name || "-"}</Text>
+                        <Text style={{ fontSize: 12, fontWeight: "600", color: Colors.danger }}>{formatRupiah(amt)}</Text>
+                      </View>
+                      <View style={{ height: 8, borderRadius: 4, backgroundColor: Colors.border, overflow: "hidden" }}>
+                        <View style={{ width: `${pct}%`, height: "100%", backgroundColor: Colors.danger }} />
+                      </View>
+                    </View>
+                  )
+                })}
+              </View>
             )}
             <View style={{ height: 40 }} />
           </>
@@ -1588,4 +1652,5 @@ const styles = StyleSheet.create({
   laporanRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: Colors.white, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 4, elevation: 1 },
   laporanRowLabel: { fontSize: 13, color: Colors.text, flex: 1 },
   laporanRowValue: { fontSize: 13, fontWeight: "600" },
+  laporanCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 16, marginBottom: 12, elevation: 1 },
 })

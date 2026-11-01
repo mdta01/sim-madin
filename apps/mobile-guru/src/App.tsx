@@ -1129,9 +1129,17 @@ function TugasListScreen({ navigation, refreshKey }: { navigation: any; refreshK
     overdue: tugas.filter(t => t.isOverdue).length,
   }
 
-  const openSubmissions = (id: string) => {
-    const url = `${API_BASE_URL}/admin/tugas`
-    Linking.openURL(url).catch(() => Alert.alert("Tidak bisa membuka", url))
+  const openSubmissions = (item: any) => {
+    Alert.alert(
+      item.title || "Detail Tugas",
+      `Mapel: ${item.mapel?.name || "-"}\nKelas: ${item.kelas?.name || "-"}\nJenis: ${item.type || "-"}\nTenggat: ${item.dueDate ? formatDate(item.dueDate, true) : "-"}\nStatus: ${item.isOverdue ? "Lewat Tenggat" : item.isPublished ? "Aktif" : "Draft"}${item.description ? `\nDeskripsi: ${item.description}` : ""}`,
+      item.fileUrl
+        ? [
+            { text: "Buka File", onPress: () => Linking.openURL(item.fileUrl.startsWith("http") ? item.fileUrl : `${API_BASE_URL}${item.fileUrl}`).catch(() => Alert.alert("Tidak bisa membuka", item.fileUrl)) },
+            { text: "Tutup" },
+          ]
+        : [{ text: "Tutup" }]
+    )
   }
 
   return (
@@ -1202,7 +1210,7 @@ function TugasListScreen({ navigation, refreshKey }: { navigation: any; refreshK
                   </Text>
                   <TouchableOpacity
                     style={[styles.absensiQuickBtn, { backgroundColor: Colors.info }]}
-                    onPress={() => openSubmissions(item.id)}
+                    onPress={() => openSubmissions(item)}
                   >
                     <Ionicons name="eye" size={14} color={Colors.white} />
                     <Text style={[styles.absensiQuickText, { fontSize: 12 }]}>Lihat</Text>
@@ -1376,9 +1384,19 @@ function UjianListScreen({ navigation }: { navigation: any }) {
     COMPLETED: { bg: "#f1f5f9", color: Colors.textMuted, label: "Selesai" },
   }
 
-  const openDetail = (id: string) => {
-    const url = `${API_BASE_URL}/admin/ujian`
-    Linking.openURL(url).catch(() => Alert.alert("Tidak bisa membuka", url))
+  const openDetail = (item: any) => {
+    const statusMeta: Record<string, {label: string}> = {
+      UPCOMING: { label: "Akan Datang" },
+      ONGOING: { label: "Berlangsung" },
+      COMPLETED: { label: "Selesai" },
+    }
+    const status = new Date(item.startTime) > new Date() ? "UPCOMING"
+      : new Date(item.endTime) < new Date() ? "COMPLETED" : "ONGOING"
+    Alert.alert(
+      item.title,
+      `Mapel: ${item.mapel?.name || "-"}\nKelas: ${item.kelas?.name || "-"}\nTanggal: ${new Date(item.startTime).toLocaleDateString("id-ID")}\nDurasi: ${item.durationMnt} menit\nStatus: ${statusMeta[status]?.label || status}\nRuang: ${item.ruang || "-"}\nPengawas: ${item.pengawas || "-"}`,
+      [{ text: "Tutup" }]
+    )
   }
 
   return (
@@ -1421,7 +1439,7 @@ function UjianListScreen({ navigation }: { navigation: any }) {
                   </View>
                   <TouchableOpacity
                     style={[styles.absensiQuickBtn, { backgroundColor: Colors.info }]}
-                    onPress={() => openDetail(item.id)}
+                    onPress={() => openDetail(item)}
                   >
                     <Ionicons name="eye" size={14} color={Colors.white} />
                     <Text style={[styles.absensiQuickText, { fontSize: 12 }]}>Lihat</Text>
@@ -1907,9 +1925,17 @@ function ChatListScreen({ navigation }: { navigation: any }) {
     finally { setSaving(false) }
   }
 
-  const openChatInBrowser = () => {
-    const url = `${API_BASE_URL}/admin/chat`
-    Linking.openURL(url).catch(() => Alert.alert("Tidak bisa membuka", url))
+  const openChatDetail = (item: any) => {
+    const typeLabels: Record<string, string> = {
+      WALI_GURU: "Wali ↔ Guru",
+      WALI_WALI: "Wali ↔ Wali",
+      GROUP: "Grup",
+    }
+    Alert.alert(
+      item.wali?.name || "Chat Room",
+      `Tipe: ${typeLabels[item.type] || item.type}\nWali: ${item.wali?.name || "-"}${item.santri ? `\nSantri: ${item.santri.name}` : ""}${item.guru ? `\nGuru: ${item.guru.name}` : ""}\nPesan: ${item._count?.messages ?? 0}\nTerakhir aktif: ${formatDate(item.lastMessageAt, true)}`,
+      [{ text: "Tutup" }]
+    )
   }
 
   const typeMeta: Record<string, { bg: string; color: string; label: string; icon: any }> = {
@@ -1940,7 +1966,7 @@ function ChatListScreen({ navigation }: { navigation: any }) {
           renderItem={({ item }) => {
             const tm = typeMeta[item.type] || typeMeta.WALI_GURU
             return (
-              <TouchableOpacity style={[styles.jadwalCard, { alignItems: "center" }]} onPress={openChatInBrowser}>
+              <TouchableOpacity style={[styles.jadwalCard, { alignItems: "center" }]} onPress={() => openChatDetail(item)}>
                 <View style={[styles.menuIcon, { backgroundColor: tm.bg, width: 44, height: 44, borderRadius: 22 }]}>
                   <Ionicons name={tm.icon} size={20} color={tm.color} />
                 </View>
