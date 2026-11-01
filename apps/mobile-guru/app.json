@@ -9,7 +9,7 @@
     "newArchEnabled": false,
     "splash": {
       "resizeMode": "contain",
-      "backgroundColor": "#ea580c"
+      "backgroundColor": "#0D7A4F"
     },
     "ios": {
       "supportsTablet": true,
@@ -18,7 +18,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ea580c"
+        "backgroundColor": "#0D7A4F"
       },
       "package": "id.madrasah.madin.guru",
       "minSdkVersion": 24

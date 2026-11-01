@@ -76,21 +76,32 @@ interface PerkembanganV2 {
 // COLORS
 // ============================================================================
 const Colors = {
-  primary: "#059669", // emerald-600
-  primaryLight: "#d1fae5",
-  primaryDark: "#047857",
-  background: "#f8fafc",
-  card: "#ffffff",
-  text: "#1e293b",
-  textMuted: "#64748b",
-  border: "#e2e8f0",
-  danger: "#dc2626",
-  dangerLight: "#fee2e2",
-  warning: "#d97706",
-  warningLight: "#fef3c7",
-  success: "#059669",
-  successLight: "#d1fae5",
-  white: "#ffffff",
+  // Primary — Islamic Green (dari logo kubah masjid & shield)
+  primary:        "#0D7A4F",
+  primaryDark:    "#0A5C38",
+  primaryLight:   "#D1FAE5",
+
+  // Gold Accent (dari bintang & buku di logo)
+  gold:           "#D4A017",
+  goldLight:      "#FEF3C7",
+
+  // Neutrals
+  background:     "#F8FAFC",
+  card:           "#FFFFFF",
+  text:           "#1E293B",
+  textMuted:      "#64748B",
+  border:         "#E2E8F0",
+  white:          "#FFFFFF",
+
+  // Semantic
+  danger:         "#DC2626",
+  dangerLight:    "#FEE2E2",
+  warning:        "#D97706",
+  warningLight:   "#FEF3C7",
+  success:        "#059669",
+  successLight:   "#D1FAE5",
+  info:           "#2563EB",
+  infoLight:      "#DBEAFE",
 }
 
 // ============================================================================
