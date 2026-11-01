@@ -136,7 +136,7 @@ function LoginScreen({ onLogin, onForgotPin }: { onLogin: (token: string, wali: 
       <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
       <ScrollView contentContainerStyle={styles.loginScroll}>
         <View style={styles.loginLogo}>
-          <Ionicons name="people-circle" size={80} color={Colors.primary} />
+          <Image source={require("../assets/logo-madrasah.png")} style={{ width: 120, height: 120, resizeMode: "contain", marginBottom: 8 }} />
           <Text style={styles.loginTitle}>SIM MADIN</Text>
           <Text style={styles.loginSubtitle}>Wali Santri</Text>
         </View>

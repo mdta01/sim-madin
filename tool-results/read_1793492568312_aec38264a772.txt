@@ -1,0 +1,1573 @@
+     1→/**
+     2→ * SIM MADIN — Bendahara Mobile App (V1 Complete)
+     3→ * Login: Email + Password (Supabase Auth)
+     4→ * Fitur: Dashboard keuangan, Input pembayaran, Daftar tunggakan, Riwayat
+     5→ */
+     6→
+     7→import React, { useState, useEffect, useCallback } from "react"
+     8→import {
+     9→  View, Text, TextInput, TouchableOpacity, StyleSheet,
+    10→  ActivityIndicator, SafeAreaView, StatusBar, ScrollView, Alert,
+    11→  FlatList, Modal, Linking, RefreshControl, Platform,
+    12→} from "react-native"
+    13→import { NavigationContainer } from "@react-navigation/native"
+    14→import { createNativeStackNavigator } from "@react-navigation/native-stack"
+    15→import { Ionicons } from "@expo/vector-icons"
+    16→import { createClient } from "@supabase/supabase-js"
+    17→import * as SecureStore from "expo-secure-store"
+    18→import { formatRupiah, formatDate, STATUS_STYLES, PAYMENT_METHODS } from "../vendor/mobile-shared/src"
+    19→import { subscribeToTable, subscribeToNotifikasi } from "../vendor/mobile-shared/src/realtime"
+    20→import { Skeleton, SkeletonList, SkeletonCard, SkeletonPage, SkeletonStatsRow } from "../vendor/mobile-shared/src/skeleton"
+    21→import { NetworkStatusIndicator, initNetworkMonitor } from "../vendor/mobile-shared/src/network-status"
+    22→
+    23→const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "https://sim-madin.vercel.app"
+    24→// Supabase config — MUST be set in eas.json env or app.json extra
+    25→// For local dev: set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in .env
+    26→// For EAS Build: configured in eas.json → build.preview.env / build.production.env
+    27→const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || ""
+    28→const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || ""
+    29→
+    30→let supabase: any = null
+    31→function getSupabase() {
+    32→  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    33→    console.warn("[Supabase] env vars not set. Configure EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in eas.json")
+    34→    return null
+    35→  }
+    36→  if (supabase) return supabase
+    37→  supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    38→    auth: {
+    39→      storage: {
+    40→        getItem: async (k: string) => { try { return await SecureStore.getItemAsync(k) } catch { return null } },
+    41→        setItem: async (k: string, v: string) => { try { await SecureStore.setItemAsync(k, v) } catch {} },
+    42→        removeItem: async (k: string) => { try { await SecureStore.deleteItemAsync(k) } catch {} },
+    43→      },
+    44→      autoRefreshToken: true, persistSession: true,
+    45→    },
+    46→  })
+    47→  return supabase
+    48→}
+    49→
+    50→let authToken: string | null = null
+    51→
+    52→async function apiGet(path: string) {
+    53→  const res = await fetch(`${API_BASE_URL}${path}`, { headers: authToken ? { Authorization: `Bearer ${authToken}` } : {} })
+    54→  if (!res.ok) throw new Error((await res.json())?.error || `Failed: ${res.status}`)
+    55→  return res.json()
+    56→}
+    57→
+    58→async function apiPost(path: string, body: any) {
+    59→  const res = await fetch(`${API_BASE_URL}${path}`, {
+    60→    method: "POST",
+    61→    headers: { "Content-Type": "application/json", ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
+    62→    body: JSON.stringify(body),
+    63→  })
+    64→  if (!res.ok) throw new Error((await res.json())?.error || `Failed: ${res.status}`)
+    65→  return res.json()
+    66→}
+    67→
+    68→async function apiPut(path: string, body: any) {
+    69→  const res = await fetch(`${API_BASE_URL}${path}`, {
+    70→    method: "PUT",
+    71→    headers: { "Content-Type": "application/json", ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
+    72→    body: JSON.stringify(body),
+    73→  })
+    74→  if (!res.ok) throw new Error((await res.json())?.error || `Failed: ${res.status}`)
+    75→  return res.json()
+    76→}
+    77→
+    78→const Colors = {
+    79→  primary: "#7c3aed", primaryLight: "#ede9fe", primaryDark: "#5b21b6",
+    80→  background: "#f8fafc", card: "#ffffff", text: "#1e293b", textMuted: "#64748b",
+    81→  border: "#e2e8f0", danger: "#dc2626", dangerLight: "#fee2e2",
+    82→  warning: "#d97706", warningLight: "#fef3c7",
+    83→  success: "#059669", successLight: "#d1fae5",
+    84→  info: "#3b82f6", infoLight: "#dbeafe",
+    85→  white: "#ffffff",
+    86→}
+    87→
+    88→// ============================================================================
+    89→// LOGIN SCREEN
+    90→// ============================================================================
+    91→function LoginScreen({ onLogin }: { onLogin: () => void }) {
+    92→  const [email, setEmail] = useState("")
+    93→  const [password, setPassword] = useState("")
+    94→  const [loading, setLoading] = useState(false)
+    95→
+    96→  const handleLogin = async () => {
+    97→    setLoading(true)
+    98→    try {
+    99→      const { data, error } = await getSupabase().auth.signInWithPassword({ email, password })
+   100→      if (error) throw error
+   101→      authToken = data.session?.access_token
+   102→      await SecureStore.setItemAsync("authToken", authToken || "")
+   103→      onLogin()
+   104→    } catch (e: any) { Alert.alert("Login Gagal", e.message) }
+   105→    finally { setLoading(false) }
+   106→  }
+   107→
+   108→  return (
+   109→    <SafeAreaView style={styles.loginContainer}>
+   110→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+   111→      <ScrollView contentContainerStyle={styles.loginScroll}>
+   112→        <View style={styles.loginLogo}>
+   113→          <Ionicons name="wallet" size={80} color={Colors.primary} />
+   114→          <Text style={styles.loginTitle}>SIM MADIN</Text>
+   115→          <Text style={styles.loginSubtitle}>Bendahara</Text>
+   116→        </View>
+   117→        <View style={styles.loginCard}>
+   118→          <Text style={styles.loginCardTitle}>Masuk sebagai Bendahara</Text>
+   119→          <Text style={styles.label}>Email</Text>
+   120→          <TextInput style={styles.input} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+   121→          <Text style={styles.label}>Password</Text>
+   122→          <TextInput style={styles.input} value={password} onChangeText={setPassword} secureTextEntry />
+   123→          <TouchableOpacity style={[styles.loginButton, loading && { opacity: 0.6 }]} onPress={handleLogin} disabled={loading}>
+   124→            {loading ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.loginButtonText}>Masuk</Text>}
+   125→          </TouchableOpacity>
+   126→          <Text style={styles.demoText}>Demo: bendahara@madrasah.test / admin123</Text>
+   127→        </View>
+   128→      </ScrollView>
+   129→    </SafeAreaView>
+   130→  )
+   131→}
+   132→
+   133→// ============================================================================
+   134→// DASHBOARD SCREEN
+   135→// ============================================================================
+   136→function DashboardScreen({ onLogout, navigation, refreshKey }: { onLogout: () => void; navigation: any; refreshKey: number }) {
+   137→  const [payments, setPayments] = useState<any[]>([])
+   138→  const [tagihan, setTagihan] = useState<any[]>([])
+   139→  const [loading, setLoading] = useState(true)
+   140→  const [error, setError] = useState<string | null>(null)
+   141→  const [refreshing, setRefreshing] = useState(false)
+   142→
+   143→  const load = useCallback(async () => {
+   144→    try {
+   145→      setLoading(true)
+   146→      setError(null)
+   147→      const [payRes, tagihanRes] = await Promise.all([
+   148→        apiGet("/api/admin/pembayaran?limit=10"),
+   149→        apiGet("/api/admin/tagihan?status=BELUM_BAYAR"),
+   150→      ])
+   151→      setPayments(payRes.data || [])
+   152→      setTagihan(tagihanRes.data || [])
+   153→    } catch (e: any) {
+   154→      setError(e.message || "Terjadi kesalahan")
+   155→    } finally {
+   156→      setLoading(false)
+   157→    }
+   158→  }, [])
+   159→
+   160→  useEffect(() => { load() }, [load, refreshKey])
+   161→
+   162→  const totalIncome = payments.filter(p => p.status === "VERIFIED").reduce((s, p) => s + p.amount, 0)
+   163→  const totalOutstanding = tagihan.reduce((s, t) => s + (t.amount - t.paidAmount), 0)
+   164→
+   165→  const menuItems = [
+   166→    { id: "bayar", title: "Input Pembayaran", icon: "cash", color: Colors.success, bg: Colors.successLight, onPress: () => navigation.navigate("PembayaranInput") },
+   167→    { id: "tunggakan", title: "Daftar Tunggakan", icon: "warning", color: Colors.danger, bg: Colors.dangerLight, onPress: () => navigation.navigate("TunggakanList") },
+   168→    { id: "tagihan", title: "Data Tagihan", icon: "receipt", color: Colors.primary, bg: Colors.primaryLight, onPress: () => navigation.navigate("TagihanList") },
+   169→    { id: "riwayat", title: "Riwayat Pembayaran", icon: "time", color: Colors.info, bg: Colors.infoLight, onPress: () => navigation.navigate("RiwayatList") },
+   170→    { id: "kas", title: "Kas & Rekening", icon: "wallet", color: Colors.primary, bg: Colors.primaryLight, onPress: () => navigation.navigate("KasList") },
+   171→    { id: "transaksiKas", title: "Transaksi Kas", icon: "swap-horizontal", color: Colors.success, bg: Colors.successLight, onPress: () => navigation.navigate("TransaksiKas") },
+   172→    { id: "honorGuru", title: "Honor Guru", icon: "school", color: Colors.warning, bg: Colors.warningLight, onPress: () => navigation.navigate("HonorGuru") },
+   173→    { id: "laporan", title: "Laporan Keuangan", icon: "document-text", color: Colors.info, bg: Colors.infoLight, onPress: () => navigation.navigate("Laporan") },
+   174→  ]
+   175→
+   176→  return (
+   177→    <SafeAreaView style={styles.screen}>
+   178→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+   179→      <View style={styles.header}>
+   180→        <Text style={styles.headerTitle}>Dashboard Bendahara</Text>
+   181→        <TouchableOpacity onPress={onLogout}>
+   182→          <Ionicons name="log-out-outline" size={24} color={Colors.white} />
+   183→        </TouchableOpacity>
+   184→      </View>
+   185→
+   186→      {error ? (
+   187→        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 20 }}>
+   188→          <Text style={{ color: Colors.danger, textAlign: "center", marginBottom: 16 }}>{error}</Text>
+   189→          <TouchableOpacity onPress={() => { setError(null); load() }} style={{ backgroundColor: Colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}>
+   190→            <Text style={{ color: Colors.white, fontWeight: "600" }}>Coba Lagi</Text>
+   191→          </TouchableOpacity>
+   192→        </View>
+   193→      ) : (
+   194→      <ScrollView style={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load().finally(() => setRefreshing(false)) }} colors={[Colors.primary]} tintColor={Colors.primary} />}>
+   195→        {/* Stats Cards */}
+   196→        <View style={styles.statsContainer}>
+   197→          <View style={[styles.statCard, { backgroundColor: Colors.success }]}>
+   198→            <Text style={styles.statLabel}>Pemasukan (10 trxs)</Text>
+   199→            <Text style={styles.statValue}>{formatRupiah(totalIncome)}</Text>
+   200→          </View>
+   201→          <View style={[styles.statCard, { backgroundColor: Colors.danger }]}>
+   202→            <Text style={styles.statLabel}>Tunggakan ({tagihan.length})</Text>
+   203→            <Text style={styles.statValue}>{formatRupiah(totalOutstanding)}</Text>
+   204→          </View>
+   205→        </View>
+   206→
+   207→        {/* Menu */}
+   208→        <View style={styles.menuGrid}>
+   209→          {menuItems.map(item => (
+   210→            <TouchableOpacity key={item.id} style={styles.menuCard} onPress={item.onPress}>
+   211→              <View style={[styles.menuIcon, { backgroundColor: item.bg }]}>
+   212→                <Ionicons name={item.icon as any} size={28} color={item.color} />
+   213→              </View>
+   214→              <Text style={styles.menuTitle}>{item.title}</Text>
+   215→            </TouchableOpacity>
+   216→          ))}
+   217→        </View>
+   218→
+   219→        {/* Recent Payments */}
+   220→        <Text style={styles.sectionTitle}>Pembayaran Terbaru</Text>
+   221→        {loading ? (
+   222→          <View style={{ padding: 8 }}>
+   223→            <SkeletonList items={5} />
+   224→          </View>
+   225→        ) : payments.length === 0 ? (
+   226→          <View style={styles.emptyCard}><Text style={styles.emptyText}>Belum ada pembayaran</Text></View>
+   227→        ) : (
+   228→          payments.slice(0, 5).map((p, i) => (
+   229→            <View key={i} style={styles.paymentCard}>
+   230→              <View style={{ flex: 1 }}>
+   231→                <Text style={styles.paymentSantri}>{p.santri?.name || "-"}</Text>
+   232→                <Text style={styles.paymentInvoice}>{p.invoiceNo}</Text>
+   233→                <Text style={styles.paymentDate}>{formatDate(p.paymentDate, true)}</Text>
+   234→              </View>
+   235→              <View style={{ alignItems: "flex-end" }}>
+   236→                <Text style={styles.paymentAmount}>{formatRupiah(p.amount)}</Text>
+   237→                <View style={[styles.statusBadge, { backgroundColor: p.status === "VERIFIED" ? Colors.successLight : Colors.warningLight }]}>
+   238→                  <Text style={[styles.statusText, { color: p.status === "VERIFIED" ? Colors.success : Colors.warning }]}>
+   239→                    {STATUS_STYLES[p.status]?.label || p.status}
+   240→                  </Text>
+   241→                </View>
+   242→              </View>
+   243→            </View>
+   244→          ))
+   245→        )}
+   246→      </ScrollView>
+   247→      )}
+   248→    </SafeAreaView>
+   249→  )
+   250→}
+   251→
+   252→// ============================================================================
+   253→// PEMBAYARAN INPUT SCREEN
+   254→// ============================================================================
+   255→function PembayaranInputScreen({ navigation }: { navigation: any }) {
+   256→  const [santriList, setSantriList] = useState<any[]>([])
+   257→  const [tagihanList, setTagihanList] = useState<any[]>([])
+   258→  const [selectedSantri, setSelectedSantri] = useState("")
+   259→  const [selectedTagihan, setSelectedTagihan] = useState("")
+   260→  const [amount, setAmount] = useState("")
+   261→  const [method, setMethod] = useState("TUNAI")
+   262→  const [loading, setLoading] = useState(false)
+   263→  const [saving, setSaving] = useState(false)
+   264→  const [searchText, setSearchText] = useState("")
+   265→  const [error, setError] = useState<string | null>(null)
+   266→
+   267→  const loadSantri = useCallback(async () => {
+   268→    try {
+   269→      setLoading(true)
+   270→      setError(null)
+   271→      const res = await apiGet("/api/admin/santri?status=AKTIF")
+   272→      setSantriList(res.data || [])
+   273→    } catch (e: any) {
+   274→      setError(e.message || "Terjadi kesalahan")
+   275→    } finally {
+   276→      setLoading(false)
+   277→    }
+   278→  }, [])
+   279→
+   280→  const loadTagihan = useCallback(async () => {
+   281→    if (!selectedSantri) { setTagihanList([]); return }
+   282→    try {
+   283→      setError(null)
+   284→      const res = await apiGet(`/api/admin/tagihan?santriId=${selectedSantri}`)
+   285→      const unpaid = (res.data || []).filter((t: any) => t.status !== "LUNAS")
+   286→      setTagihanList(unpaid)
+   287→    } catch (e: any) {
+   288→      setError(e.message || "Terjadi kesalahan")
+   289→    }
+   290→  }, [selectedSantri])
+   291→
+   292→  useEffect(() => { loadSantri() }, [loadSantri])
+   293→  useEffect(() => { loadTagihan() }, [loadTagihan])
+   294→
+   295→  const selectTagihan = (tagihanId: string, tagihanAmount: number) => {
+   296→    setSelectedTagihan(tagihanId)
+   297→    setAmount(String(tagihanAmount - (tagihanList.find(t => t.id === tagihanId)?.paidAmount || 0)))
+   298→  }
+   299→
+   300→  const handleSave = async () => {
+   301→    if (!selectedSantri || !amount || Number(amount) <= 0) {
+   302→      Alert.alert("Validasi", "Pilih santri dan isi nominal")
+   303→      return
+   304→    }
+   305→    setSaving(true)
+   306→    try {
+   307→      await apiPost("/api/admin/pembayaran", {
+   308→        santriId: selectedSantri,
+   309→        tagihanId: selectedTagihan || undefined,
+   310→        amount: Number(amount),
+   311→        paymentMethod: method,
+   312→      })
+   313→      Alert.alert("Berhasil", `Pembayaran ${formatRupiah(Number(amount))} tercatat`)
+   314→      navigation.goBack()
+   315→    } catch (e: any) { Alert.alert("Gagal", e.message) }
+   316→    finally { setSaving(false) }
+   317→  }
+   318→
+   319→  const filteredSantri = santriList.filter(s =>
+   320→    !searchText || s.name.toLowerCase().includes(searchText.toLowerCase()) || s.nis.includes(searchText)
+   321→  )
+   322→
+   323→  return (
+   324→    <SafeAreaView style={styles.screen}>
+   325→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+   326→      <View style={styles.header}>
+   327→        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+   328→          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+   329→        </TouchableOpacity>
+   330→        <Text style={styles.headerTitle}>Input Pembayaran</Text>
+   331→        <View style={{ width: 24 }} />
+   332→      </View>
+   333→
+   334→      {error ? (
+   335→        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 20 }}>
+   336→          <Text style={{ color: Colors.danger, textAlign: "center", marginBottom: 16 }}>{error}</Text>
+   337→          <TouchableOpacity onPress={() => { setError(null); loadSantri() }} style={{ backgroundColor: Colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}>
+   338→            <Text style={{ color: Colors.white, fontWeight: "600" }}>Coba Lagi</Text>
+   339→          </TouchableOpacity>
+   340→        </View>
+   341→      ) : (
+   342→      <ScrollView style={styles.content}>
+   343→        {/* Search Santri */}
+   344→        <Text style={styles.label}>Cari Santri</Text>
+   345→        <View style={styles.searchContainer}>
+   346→          <Ionicons name="search" size={20} color={Colors.textMuted} style={{ marginRight: 8 }} />
+   347→          <TextInput
+   348→            style={styles.searchInput}
+   349→            placeholder="Nama atau NIS..."
+   350→            value={searchText}
+   351→            onChangeText={setSearchText}
+   352→          />
+   353→        </View>
+   354→
+   355→        {/* Santri List */}
+   356→        {loading ? (
+   357→          <View style={{ padding: 8 }}>
+   358→            <SkeletonList items={5} />
+   359→          </View>
+   360→        ) : (
+   361→          <View>
+   362→            {filteredSantri.slice(0, 5).map(s => (
+   363→              <TouchableOpacity
+   364→                key={s.id}
+   365→                style={[styles.santriOption, selectedSantri === s.id && styles.santriOptionActive]}
+   366→                onPress={() => { setSelectedSantri(s.id); setSelectedTagihan(""); setAmount("") }}
+   367→              >
+   368→                <View style={{ flex: 1 }}>
+   369→                  <Text style={styles.santriOptionName}>{s.name}</Text>
+   370→                  <Text style={styles.santriOptionNis}>{s.nis} • {s.kelas?.name}</Text>
+   371→                </View>
+   372→                {selectedSantri === s.id && <Ionicons name="checkmark-circle" size={24} color={Colors.primary} />}
+   373→              </TouchableOpacity>
+   374→            ))}
+   375→            {filteredSantri.length > 5 && (
+   376→              <Text style={styles.moreText}>+{filteredSantri.length - 5} santri lainnya (ketik untuk filter)</Text>
+   377→            )}
+   378→          </View>
+   379→        )}
+   380→
+   381→        {/* Tagihan List (if santri selected) */}
+   382→        {selectedSantri && tagihanList.length > 0 && (
+   383→          <View>
+   384→            <Text style={styles.label}>Tagihan Belum Lunas</Text>
+   385→            {tagihanList.map(t => (
+   386→              <TouchableOpacity
+   387→                key={t.id}
+   388→                style={[styles.tagihanOption, selectedTagihan === t.id && styles.tagihanOptionActive]}
+   389→                onPress={() => selectTagihan(t.id, t.amount)}
+   390→              >
+   391→                <View style={{ flex: 1 }}>
+   392→                  <Text style={styles.tagihanOptionName}>{t.jenisTagihan?.name}</Text>
+   393→                  <Text style={styles.tagihanOptionDesc}>
+   394→                    Total: {formatRupiah(t.amount)} • Sisa: {formatRupiah(t.amount - t.paidAmount)}
+   395→                  </Text>
+   396→                </View>
+   397→                {selectedTagihan === t.id && <Ionicons name="checkmark-circle" size={24} color={Colors.primary} />}
+   398→              </TouchableOpacity>
+   399→            ))}
+   400→          </View>
+   401→        )}
+   402→
+   403→        {/* Amount */}
+   404→        <Text style={styles.label}>Nominal Pembayaran</Text>
+   405→        <View style={styles.amountContainer}>
+   406→          <Text style={styles.amountPrefix}>Rp</Text>
+   407→          <TextInput
+   408→            style={styles.amountInput}
+   409→            value={amount}
+   410→            onChangeText={(v) => setAmount(v.replace(/\D/g, ""))}
+   411→            keyboardType="numeric"
+   412→            placeholder="0"
+   413→          />
+   414→        </View>
+   415→
+   416→        {/* Method */}
+   417→        <Text style={styles.label}>Metode Pembayaran</Text>
+   418→        <View style={styles.methodRow}>
+   419→          {PAYMENT_METHODS.map(m => (
+   420→            <TouchableOpacity
+   421→              key={m.value}
+   422→              style={[styles.methodBtn, method === m.value && styles.methodBtnActive]}
+   423→              onPress={() => setMethod(m.value)}
+   424→            >
+   425→              <Text style={[styles.methodBtnText, method === m.value && styles.methodBtnTextActive]}>{m.label}</Text>
+   426→            </TouchableOpacity>
+   427→          ))}
+   428→        </View>
+   429→
+   430→        {/* Save */}
+   431→        <TouchableOpacity
+   432→          style={[styles.saveButton, saving && { opacity: 0.6 }]}
+   433→          onPress={handleSave}
+   434→          disabled={saving}
+   435→        >
+   436→          {saving ? <ActivityIndicator color={Colors.white} /> : (
+   437→            <>
+   438→              <Ionicons name="save" size={20} color={Colors.white} />
+   439→              <Text style={styles.saveButtonText}>Catat Pembayaran</Text>
+   440→            </>
+   441→          )}
+   442→        </TouchableOpacity>
+   443→
+   444→        <View style={{ height: 40 }} />
+   445→      </ScrollView>
+   446→      )}
+   447→    </SafeAreaView>
+   448→  )
+   449→}
+   450→
+   451→// ============================================================================
+   452→// TUNGAKAN LIST SCREEN
+   453→// ============================================================================
+   454→function TunggakanListScreen({ navigation }: { navigation: any }) {
+   455→  const [tagihan, setTagihan] = useState<any[]>([])
+   456→  const [loading, setLoading] = useState(true)
+   457→  const [refreshing, setRefreshing] = useState(false)
+   458→
+   459→  const load = useCallback(async () => {
+   460→    try {
+   461→      setLoading(true)
+   462→      const res = await apiGet("/api/admin/tagihan?status=BELUM_BAYAR")
+   463→      setTagihan(res.data || [])
+   464→    } catch (e: any) { Alert.alert("Error", e.message) }
+   465→    finally { setLoading(false) }
+   466→  }, [])
+   467→
+   468→  useEffect(() => { load() }, [load])
+   469→
+   470→  const totalOutstanding = tagihan.reduce((s, t) => s + (t.amount - t.paidAmount), 0)
+   471→
+   472→  return (
+   473→    <SafeAreaView style={styles.screen}>
+   474→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+   475→      <View style={styles.header}>
+   476→        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+   477→          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+   478→        </TouchableOpacity>
+   479→        <Text style={styles.headerTitle}>Daftar Tunggakan</Text>
+   480→        <View style={{ width: 24 }} />
+   481→      </View>
+   482→
+   483→      <View style={styles.totalCard}>
+   484→        <Text style={styles.totalLabel}>Total Tunggakan ({tagihan.length} tagihan)</Text>
+   485→        <Text style={styles.totalValue}>{formatRupiah(totalOutstanding)}</Text>
+   486→      </View>
+   487→
+   488→      {loading ? (
+   489→        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+   490→      ) : (
+   491→        <FlatList
+   492→          data={tagihan}
+   493→          keyExtractor={item => item.id}
+   494→          renderItem={({ item }) => (
+   495→            <View style={styles.tunggakanCard}>
+   496→              <View style={{ flex: 1 }}>
+   497→                <Text style={styles.tunggakanName}>{item.santri?.name}</Text>
+   498→                <Text style={styles.tunggakanNis}>{item.santri?.nis} • {item.kelas?.name}</Text>
+   499→                <Text style={styles.tunggakanJenis}>{item.jenisTagihan?.name}</Text>
+   500→                <Text style={styles.tunggakanDesc}>{item.description || formatDate(item.dueDate || item.createdAt)}</Text>
+   501→              </View>
+   502→              <View style={{ alignItems: "flex-end" }}>
+   503→                <Text style={styles.tunggakanAmount}>{formatRupiah(item.amount - item.paidAmount)}</Text>
+   504→                <View style={[styles.statusBadge, { backgroundColor: Colors.dangerLight }]}>
+   505→                  <Text style={[styles.statusText, { color: Colors.danger }]}>{STATUS_STYLES[item.status]?.label || item.status}</Text>
+   506→                </View>
+   507→              </View>
+   508→            </View>
+   509→          )}
+   510→          ListEmptyComponent={() => (
+   511→            <View style={styles.emptyCard}>
+   512→              <Ionicons name="checkmark-circle" size={48} color={Colors.success} />
+   513→              <Text style={styles.emptyText}>Tidak ada tunggakan 🎉</Text>
+   514→            </View>
+   515→          )}
+   516→          contentContainerStyle={{ padding: 16 }}
+   517→          refreshControl={
+   518→            <RefreshControl
+   519→              refreshing={refreshing}
+   520→              onRefresh={() => {
+   521→                setRefreshing(true)
+   522→                load().finally(() => setRefreshing(false))
+   523→              }}
+   524→              colors={[Colors.primary]}
+   525→              tintColor={Colors.primary}
+   526→            />
+   527→          }
+   528→        />
+   529→      )}
+   530→    </SafeAreaView>
+   531→  )
+   532→}
+   533→
+   534→// ============================================================================
+   535→// RIWAYAT LIST SCREEN
+   536→// ============================================================================
+   537→function RiwayatListScreen({ navigation }: { navigation: any }) {
+   538→  const [payments, setPayments] = useState<any[]>([])
+   539→  const [loading, setLoading] = useState(true)
+   540→  const [error, setError] = useState<string | null>(null)
+   541→  const [refreshing, setRefreshing] = useState(false)
+   542→
+   543→  const load = useCallback(async () => {
+   544→    try {
+   545→      setLoading(true)
+   546→      setError(null)
+   547→      const res = await apiGet("/api/admin/pembayaran?limit=50")
+   548→      setPayments(res.data || [])
+   549→    } catch (e: any) {
+   550→      setError(e.message || "Terjadi kesalahan")
+   551→    } finally {
+   552→      setLoading(false)
+   553→    }
+   554→  }, [])
+   555→
+   556→  useEffect(() => { load() }, [load])
+   557→
+   558→  const handleVerify = async (paymentId: string) => {
+   559→    Alert.alert("Verifikasi Pembayaran", "Pilih kas yang menerima pembayaran ini", [
+   560→      { text: "Batal" },
+   561→      { text: "Kas Utama (default)", onPress: async () => {
+   562→        try {
+   563→          await apiPut(`/api/admin/siklus/payment-verify/${paymentId}`, { kasId: "" })
+   564→          Alert.alert("Berhasil", "Pembayaran diverifikasi")
+   565→          load()
+   566→        } catch (e: any) { Alert.alert("Error", e.message) }
+   567→      }},
+   568→    ])
+   569→  }
+   570→
+   571→  const handleReject = (paymentId: string) => {
+   572→    Alert.alert("Tolak Pembayaran", "Yakin ingin menolak pembayaran ini?", [
+   573→      { text: "Batal" },
+   574→      { text: "Tolak", style: "destructive", onPress: async () => {
+   575→        try {
+   576→          await apiPut(`/api/admin/pembayaran/${paymentId}`, { status: "REJECTED" })
+   577→          Alert.alert("Berhasil", "Pembayaran ditolak")
+   578→          load()
+   579→        } catch (e: any) { Alert.alert("Error", e.message) }
+   580→      }},
+   581→    ])
+   582→  }
+   583→
+   584→  const total = payments.filter(p => p.status === "VERIFIED").reduce((s, p) => s + p.amount, 0)
+   585→
+   586→  return (
+   587→    <SafeAreaView style={styles.screen}>
+   588→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+   589→      <View style={styles.header}>
+   590→        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+   591→          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+   592→        </TouchableOpacity>
+   593→        <Text style={styles.headerTitle}>Riwayat Pembayaran</Text>
+   594→        <View style={{ width: 24 }} />
+   595→      </View>
+   596→
+   597→      <View style={[styles.totalCard, { backgroundColor: Colors.success }]}>
+   598→        <Text style={styles.totalLabel}>Total Pemasukan ({payments.length} transaksi)</Text>
+   599→        <Text style={styles.totalValue}>{formatRupiah(total)}</Text>
+   600→      </View>
+   601→
+   602→      {error ? (
+   603→        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 20 }}>
+   604→          <Text style={{ color: Colors.danger, textAlign: "center", marginBottom: 16 }}>{error}</Text>
+   605→          <TouchableOpacity onPress={() => { setError(null); load() }} style={{ backgroundColor: Colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}>
+   606→            <Text style={{ color: Colors.white, fontWeight: "600" }}>Coba Lagi</Text>
+   607→          </TouchableOpacity>
+   608→        </View>
+   609→      ) : loading ? (
+   610→        <View style={{ flex: 1, backgroundColor: Colors.background, padding: 8 }}>
+   611→          <SkeletonList items={6} />
+   612→        </View>
+   613→      ) : (
+   614→        <FlatList
+   615→          data={payments}
+   616→          keyExtractor={item => item.id}
+   617→          renderItem={({ item }) => (
+   618→            <View style={styles.paymentCard}>
+   619→              <View style={{ flex: 1 }}>
+   620→                <Text style={styles.paymentSantri}>{item.santri?.name || "-"}</Text>
+   621→                <Text style={styles.paymentInvoice}>{item.invoiceNo}</Text>
+   622→                <Text style={styles.paymentDate}>{formatDate(item.paymentDate, true)}</Text>
+   623→              </View>
+   624→              <View style={{ alignItems: "flex-end" }}>
+   625→                <Text style={styles.paymentAmount}>{formatRupiah(item.amount)}</Text>
+   626→                <View style={[styles.statusBadge, { backgroundColor: item.status === "VERIFIED" ? Colors.successLight : Colors.warningLight }]}>
+   627→                  <Text style={[styles.statusText, { color: item.status === "VERIFIED" ? Colors.success : Colors.warning }]}>
+   628→                    {STATUS_STYLES[item.status]?.label || item.status}
+   629→                  </Text>
+   630→                </View>
+   631→                {item.status === "PENDING" && (
+   632→                  <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+   633→                    <TouchableOpacity onPress={() => handleVerify(item.id)} style={{ backgroundColor: Colors.success, paddingHorizontal: 16, paddingVertical: 12, minHeight: 44, justifyContent: "center", alignItems: "center", borderRadius: 6 }}>
+   634→                      <Text style={{ color: Colors.white, fontSize: 12, fontWeight: "600" }}>Verifikasi</Text>
+   635→                    </TouchableOpacity>
+   636→                    <TouchableOpacity onPress={() => handleReject(item.id)} style={{ backgroundColor: Colors.danger, paddingHorizontal: 16, paddingVertical: 12, minHeight: 44, justifyContent: "center", alignItems: "center", borderRadius: 6 }}>
+   637→                      <Text style={{ color: Colors.white, fontSize: 12, fontWeight: "600" }}>Tolak</Text>
+   638→                    </TouchableOpacity>
+   639→                  </View>
+   640→                )}
+   641→              </View>
+   642→            </View>
+   643→          )}
+   644→          ListEmptyComponent={() => (
+   645→            <View style={styles.emptyCard}><Text style={styles.emptyText}>Belum ada pembayaran</Text></View>
+   646→          )}
+   647→          contentContainerStyle={{ padding: 16 }}
+   648→          refreshControl={
+   649→            <RefreshControl
+   650→              refreshing={refreshing}
+   651→              onRefresh={() => {
+   652→                setRefreshing(true)
+   653→                load().finally(() => setRefreshing(false))
+   654→              }}
+   655→              colors={[Colors.primary]}
+   656→              tintColor={Colors.primary}
+   657→            />
+   658→          }
+   659→        />
+   660→      )}
+   661→    </SafeAreaView>
+   662→  )
+   663→}
+   664→
+   665→// ============================================================================
+   666→// TAGIHAN LIST SCREEN (all tagihan, not just tunggakan)
+   667→// ============================================================================
+   668→function TagihanListScreen({ navigation }: { navigation: any }) {
+   669→  const [tagihan, setTagihan] = useState<any[]>([])
+   670→  const [filter, setFilter] = useState<string>("")
+   671→  const [loading, setLoading] = useState(true)
+   672→  const [refreshing, setRefreshing] = useState(false)
+   673→
+   674→  const load = useCallback(async () => {
+   675→    try {
+   676→      setLoading(true)
+   677→      const params = filter ? `?status=${filter}` : ""
+   678→      const res = await apiGet(`/api/admin/tagihan${params}`)
+   679→      setTagihan(res.data || [])
+   680→    } catch (e: any) { Alert.alert("Error", e.message) }
+   681→    finally { setLoading(false) }
+   682→  }, [filter])
+   683→
+   684→  useEffect(() => { load() }, [load])
+   685→
+   686→  const filters = [
+   687→    { value: "", label: "Semua" },
+   688→    { value: "LUNAS", label: "Lunas" },
+   689→    { value: "CICIL", label: "Cicil" },
+   690→    { value: "BELUM_BAYAR", label: "Belum Bayar" },
+   691→  ]
+   692→
+   693→  return (
+   694→    <SafeAreaView style={styles.screen}>
+   695→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+   696→      <View style={styles.header}>
+   697→        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+   698→          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+   699→        </TouchableOpacity>
+   700→        <Text style={styles.headerTitle}>Data Tagihan</Text>
+   701→        <View style={{ width: 24 }} />
+   702→      </View>
+   703→
+   704→      {/* Filter pills */}
+   705→      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
+   706→        {filters.map(f => (
+   707→          <TouchableOpacity
+   708→            key={f.value}
+   709→            style={[styles.methodBtn, filter === f.value && styles.methodBtnActive]}
+   710→            onPress={() => setFilter(f.value)}
+   711→          >
+   712→            <Text style={[styles.methodBtnText, filter === f.value && styles.methodBtnTextActive]}>{f.label}</Text>
+   713→          </TouchableOpacity>
+   714→        ))}
+   715→      </ScrollView>
+   716→
+   717→      {loading ? (
+   718→        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+   719→      ) : (
+   720→        <FlatList
+   721→          data={tagihan}
+   722→          keyExtractor={item => item.id}
+   723→          renderItem={({ item }) => (
+   724→            <View style={styles.tunggakanCard}>
+   725→              <View style={{ flex: 1 }}>
+   726→                <Text style={styles.tunggakanName}>{item.santri?.name}</Text>
+   727→                <Text style={styles.tunggakanNis}>{item.santri?.nis} • {item.kelas?.name || "-"}</Text>
+   728→                <Text style={styles.tunggakanJenis}>{item.jenisTagihan?.name}</Text>
+   729→                <Text style={styles.tunggakanDesc}>{item.description || formatDate(item.dueDate || item.createdAt)}</Text>
+   730→              </View>
+   731→              <View style={{ alignItems: "flex-end" }}>
+   732→                <Text style={styles.tunggakanAmount}>{formatRupiah(item.amount)}</Text>
+   733→                {item.paidAmount > 0 && <Text style={{ fontSize: 12, color: Colors.success }}>Terbayar: {formatRupiah(item.paidAmount)}</Text>}
+   734→                <View style={[styles.statusBadge, { backgroundColor: item.status === "LUNAS" ? Colors.successLight : item.status === "CICIL" ? Colors.warningLight : Colors.dangerLight }]}>
+   735→                  <Text style={[styles.statusText, { color: item.status === "LUNAS" ? Colors.success : item.status === "CICIL" ? Colors.warning : Colors.danger }]}>
+   736→                    {STATUS_STYLES[item.status]?.label || item.status}
+   737→                  </Text>
+   738→                </View>
+   739→              </View>
+   740→            </View>
+   741→          )}
+   742→          ListEmptyComponent={() => (
+   743→            <View style={styles.emptyCard}><Text style={styles.emptyText}>Tidak ada tagihan</Text></View>
+   744→          )}
+   745→          contentContainerStyle={{ padding: 16 }}
+   746→          refreshControl={
+   747→            <RefreshControl
+   748→              refreshing={refreshing}
+   749→              onRefresh={() => {
+   750→                setRefreshing(true)
+   751→                load().finally(() => setRefreshing(false))
+   752→              }}
+   753→              colors={[Colors.primary]}
+   754→              tintColor={Colors.primary}
+   755→            />
+   756→          }
+   757→        />
+   758→      )}
+   759→    </SafeAreaView>
+   760→  )
+   761→}
+   762→
+   763→// ============================================================================
+   764→// KAS LIST SCREEN (V5: Kas & Rekening)
+   765→// ============================================================================
+   766→function KasListScreen({ navigation }: { navigation: any }) {
+   767→  const [kasList, setKasList] = useState<any[]>([])
+   768→  const [loading, setLoading] = useState(true)
+   769→  const [refreshing, setRefreshing] = useState(false)
+   770→
+   771→  const load = useCallback(async () => {
+   772→    try {
+   773→      setLoading(true)
+   774→      const res = await apiGet("/api/admin/kas")
+   775→      setKasList(res.data || [])
+   776→    } catch (e: any) { Alert.alert("Error", e.message) }
+   777→    finally { setLoading(false) }
+   778→  }, [])
+   779→
+   780→  useEffect(() => { load() }, [load])
+   781→
+   782→  const totalSaldo = kasList.reduce((s, k) => s + (k.balance || 0), 0)
+   783→
+   784→  return (
+   785→    <SafeAreaView style={styles.screen}>
+   786→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+   787→      <View style={styles.header}>
+   788→        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+   789→          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+   790→        </TouchableOpacity>
+   791→        <Text style={styles.headerTitle}>Kas & Rekening</Text>
+   792→        <View style={{ width: 24 }} />
+   793→      </View>
+   794→
+   795→      <View style={[styles.totalCard, { backgroundColor: Colors.primary }]}>
+   796→        <Text style={styles.totalLabel}>Total Saldo ({kasList.length} kas)</Text>
+   797→        <Text style={styles.totalValue}>{formatRupiah(totalSaldo)}</Text>
+   798→      </View>
+   799→
+   800→      {loading ? (
+   801→        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+   802→      ) : (
+   803→        <FlatList
+   804→          data={kasList}
+   805→          keyExtractor={item => item.id}
+   806→          renderItem={({ item }) => (
+   807→            <View style={styles.kasCard}>
+   808→              <View style={{ flexDirection: "row", alignItems: "center" }}>
+   809→                <View style={[styles.kasIcon, { backgroundColor: item.type === "BANK" ? Colors.primaryLight : Colors.successLight }]}>
+   810→                  <Ionicons name={item.type === "BANK" ? "business" : "cash"} size={22} color={item.type === "BANK" ? Colors.primary : Colors.success} />
+   811→                </View>
+   812→                <View style={{ flex: 1, marginLeft: 12 }}>
+   813→                  <Text style={styles.kasName}>{item.name}</Text>
+   814→                  <Text style={styles.kasType}>{item.type === "BANK" ? "Bank" : "Tunai"}{item.accountNumber ? ` • ${item.accountNumber}` : ""}</Text>
+   815→                  {item.description ? <Text style={styles.kasDesc}>{item.description}</Text> : null}
+   816→                </View>
+   817→              </View>
+   818→              <View style={styles.kasBalanceWrap}>
+   819→                <Text style={styles.kasBalanceLabel}>Saldo</Text>
+   820→                <Text style={styles.kasBalance}>{formatRupiah(item.balance || 0)}</Text>
+   821→              </View>
+   822→            </View>
+   823→          )}
+   824→          ListEmptyComponent={() => (
+   825→            <View style={styles.emptyCard}>
+   826→              <Ionicons name="wallet-outline" size={48} color={Colors.textMuted} />
+   827→              <Text style={styles.emptyText}>Belum ada kas terdaftar</Text>
+   828→            </View>
+   829→          )}
+   830→          contentContainerStyle={{ padding: 16 }}
+   831→          refreshControl={
+   832→            <RefreshControl
+   833→              refreshing={refreshing}
+   834→              onRefresh={() => {
+   835→                setRefreshing(true)
+   836→                load().finally(() => setRefreshing(false))
+   837→              }}
+   838→              colors={[Colors.primary]}
+   839→              tintColor={Colors.primary}
+   840→            />
+   841→          }
+   842→        />
+   843→      )}
+   844→    </SafeAreaView>
+   845→  )
+   846→}
+   847→
+   848→// ============================================================================
+   849→// TRANSAKSI KAS SCREEN (V5: Pemasukan & Pengeluaran)
+   850→// ============================================================================
+   851→function TransaksiKasScreen({ navigation }: { navigation: any }) {
+   852→  const [transaksi, setTransaksi] = useState<any[]>([])
+   853→  const [kasList, setKasList] = useState<any[]>([])
+   854→  const [filterKas, setFilterKas] = useState<string>("")
+   855→  const [loading, setLoading] = useState(true)
+   856→  const [showForm, setShowForm] = useState(false)
+   857→  const [saving, setSaving] = useState(false)
+   858→  // form state
+   859→  const [formType, setFormType] = useState<"PEMASUKAN" | "PENGELUARAN">("PEMASUKAN")
+   860→  const [formCategory, setFormCategory] = useState("")
+   861→  const [formAmount, setFormAmount] = useState("")
+   862→  const [formDesc, setFormDesc] = useState("")
+   863→  const [formKasId, setFormKasId] = useState("")
+   864→
+   865→  const load = useCallback(async () => {
+   866→    try {
+   867→      setLoading(true)
+   868→      const [trxRes, kasRes] = await Promise.all([
+   869→        apiGet("/api/admin/kas/transaksi?limit=50"),
+   870→        apiGet("/api/admin/kas"),
+   871→      ])
+   872→      let list = trxRes.data || []
+   873→      if (filterKas) list = list.filter((t: any) => t.kasId === filterKas)
+   874→      setTransaksi(list)
+   875→      setKasList(kasRes.data || [])
+   876→    } catch (e: any) { Alert.alert("Error", e.message) }
+   877→    finally { setLoading(false) }
+   878→  }, [filterKas])
+   879→
+   880→  useEffect(() => { load() }, [load])
+   881→
+   882→  const totalPemasukan = transaksi.filter(t => t.type === "PEMASUKAN").reduce((s, t) => s + (t.amount || 0), 0)
+   883→  const totalPengeluaran = transaksi.filter(t => t.type === "PENGELUARAN").reduce((s, t) => s + (t.amount || 0), 0)
+   884→  const saldoPeriode = totalPemasukan - totalPengeluaran
+   885→
+   886→  const resetForm = () => {
+   887→    setFormType("PEMASUKAN")
+   888→    setFormCategory("")
+   889→    setFormAmount("")
+   890→    setFormDesc("")
+   891→    setFormKasId("")
+   892→    setShowForm(false)
+   893→  }
+   894→
+   895→  const handleSave = async () => {
+   896→    if (!formAmount || Number(formAmount) <= 0) {
+   897→      Alert.alert("Validasi", "Nominal harus diisi")
+   898→      return
+   899→    }
+   900→    if (!formKasId) {
+   901→      Alert.alert("Validasi", "Pilih kas terlebih dahulu")
+   902→      return
+   903→    }
+   904→    setSaving(true)
+   905→    try {
+   906→      await apiPost("/api/admin/kas/transaksi", {
+   907→        type: formType,
+   908→        category: formCategory || (formType === "PEMASUKAN" ? "Lainnya" : "Operasional"),
+   909→        amount: Number(formAmount),
+   910→        description: formDesc,
+   911→        kasId: formKasId,
+   912→      })
+   913→      Alert.alert("Berhasil", `${formType === "PEMASUKAN" ? "Pemasukan" : "Pengeluaran"} ${formatRupiah(Number(formAmount))} tercatat`)
+   914→      resetForm()
+   915→      load()
+   916→    } catch (e: any) { Alert.alert("Gagal", e.message) }
+   917→    finally { setSaving(false) }
+   918→  }
+   919→
+   920→  return (
+   921→    <SafeAreaView style={styles.screen}>
+   922→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+   923→      <View style={styles.header}>
+   924→        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+   925→          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+   926→        </TouchableOpacity>
+   927→        <Text style={styles.headerTitle}>Transaksi Kas</Text>
+   928→        <TouchableOpacity onPress={() => setShowForm(true)} style={styles.headerAction}>
+   929→          <Ionicons name="add" size={26} color={Colors.white} />
+   930→        </TouchableOpacity>
+   931→      </View>
+   932→
+   933→      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+   934→        {/* Stat cards */}
+   935→        <View style={styles.statsContainer}>
+   936→          <View style={[styles.statCard, { backgroundColor: Colors.success }]}>
+   937→            <Text style={styles.statLabel}>Pemasukan</Text>
+   938→            <Text style={styles.statValue}>{formatRupiah(totalPemasukan)}</Text>
+   939→          </View>
+   940→          <View style={[styles.statCard, { backgroundColor: Colors.danger }]}>
+   941→            <Text style={styles.statLabel}>Pengeluaran</Text>
+   942→            <Text style={styles.statValue}>{formatRupiah(totalPengeluaran)}</Text>
+   943→          </View>
+   944→        </View>
+   945→        <View style={[styles.totalCard, { margin: 0, marginBottom: 12, backgroundColor: saldoPeriode >= 0 ? Colors.primary : Colors.warning }]}>
+   946→          <Text style={styles.totalLabel}>Saldo Periode ({transaksi.length} transaksi)</Text>
+   947→          <Text style={styles.totalValue}>{formatRupiah(saldoPeriode)}</Text>
+   948→        </View>
+   949→
+   950→        {/* Filter Kas */}
+   951→        <Text style={styles.label}>Filter Kas</Text>
+   952→        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+   953→          <TouchableOpacity
+   954→            style={[styles.methodBtn, filterKas === "" && styles.methodBtnActive]}
+   955→            onPress={() => setFilterKas("")}
+   956→          >
+   957→            <Text style={[styles.methodBtnText, filterKas === "" && styles.methodBtnTextActive]}>Semua</Text>
+   958→          </TouchableOpacity>
+   959→          {kasList.map(k => (
+   960→            <TouchableOpacity
+   961→              key={k.id}
+   962→              style={[styles.methodBtn, filterKas === k.id && styles.methodBtnActive]}
+   963→              onPress={() => setFilterKas(k.id)}
+   964→            >
+   965→              <Text style={[styles.methodBtnText, filterKas === k.id && styles.methodBtnTextActive]}>{k.name}</Text>
+   966→            </TouchableOpacity>
+   967→          ))}
+   968→        </ScrollView>
+   969→
+   970→        {/* List Transaksi */}
+   971→        {loading ? (
+   972→          <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+   973→        ) : transaksi.length === 0 ? (
+   974→          <View style={styles.emptyCard}>
+   975→            <Ionicons name="receipt-outline" size={48} color={Colors.textMuted} />
+   976→            <Text style={styles.emptyText}>Belum ada transaksi</Text>
+   977→          </View>
+   978→        ) : (
+   979→          transaksi.map((t, i) => (
+   980→            <View key={i} style={styles.trxCard}>
+   981→              <View style={[styles.trxIcon, { backgroundColor: t.type === "PEMASUKAN" ? Colors.successLight : Colors.dangerLight }]}>
+   982→                <Ionicons name={t.type === "PEMASUKAN" ? "arrow-down" : "arrow-up"} size={18} color={t.type === "PEMASUKAN" ? Colors.success : Colors.danger} />
+   983→              </View>
+   984→              <View style={{ flex: 1, marginLeft: 12 }}>
+   985→                <Text style={styles.trxCategory}>{t.category || "-"}</Text>
+   986→                <Text style={styles.trxDesc}>{t.description || "-"}</Text>
+   987→                <Text style={styles.trxMeta}>{t.kas?.name || "-"} • {formatDate(t.date || t.createdAt, true)}</Text>
+   988→              </View>
+   989→              <View style={{ alignItems: "flex-end" }}>
+   990→                <Text style={[styles.trxAmount, { color: t.type === "PEMASUKAN" ? Colors.success : Colors.danger }]}>
+   991→                  {t.type === "PEMASUKAN" ? "+" : "-"}{formatRupiah(t.amount)}
+   992→                </Text>
+   993→                <View style={[styles.statusBadge, { backgroundColor: t.type === "PEMASUKAN" ? Colors.successLight : Colors.dangerLight }]}>
+   994→                  <Text style={[styles.statusText, { color: t.type === "PEMASUKAN" ? Colors.success : Colors.danger }]}>
+   995→                    {t.type === "PEMASUKAN" ? "Masuk" : "Keluar"}
+   996→                  </Text>
+   997→                </View>
+   998→              </View>
+   999→            </View>
+  1000→          ))
+  1001→        )}
+  1002→      </ScrollView>
+  1003→
+  1004→      {/* Form Modal */}
+  1005→      <Modal visible={showForm} animationType="slide" transparent={false} onRequestClose={resetForm}>
+  1006→        <SafeAreaView style={styles.screen}>
+  1007→          <View style={styles.header}>
+  1008→            <TouchableOpacity onPress={resetForm} style={styles.backButton}>
+  1009→              <Ionicons name="close" size={24} color={Colors.white} />
+  1010→            </TouchableOpacity>
+  1011→            <Text style={styles.headerTitle}>Tambah Transaksi</Text>
+  1012→            <View style={{ width: 24 }} />
+  1013→          </View>
+  1014→          <ScrollView style={styles.content}>
+  1015→            {/* Type */}
+  1016→            <Text style={styles.label}>Tipe Transaksi</Text>
+  1017→            <View style={styles.methodRow}>
+  1018→              {(["PEMASUKAN", "PENGELUARAN"] as const).map(t => (
+  1019→                <TouchableOpacity
+  1020→                  key={t}
+  1021→                  style={[styles.methodBtn, formType === t && styles.methodBtnActive]}
+  1022→                  onPress={() => setFormType(t)}
+  1023→                >
+  1024→                  <Text style={[styles.methodBtnText, formType === t && styles.methodBtnTextActive]}>
+  1025→                    {t === "PEMASUKAN" ? "Pemasukan" : "Pengeluaran"}
+  1026→                  </Text>
+  1027→                </TouchableOpacity>
+  1028→              ))}
+  1029→            </View>
+  1030→
+  1031→            {/* Kas */}
+  1032→            <Text style={styles.label}>Kas / Rekening</Text>
+  1033→            {kasList.length === 0 ? (
+  1034→              <Text style={{ color: Colors.danger, fontSize: 12 }}>Belum ada kas. Tambah dulu di menu Kas & Rekening.</Text>
+  1035→            ) : (
+  1036→              <View>
+  1037→                {kasList.map(k => (
+  1038→                  <TouchableOpacity
+  1039→                    key={k.id}
+  1040→                    style={[styles.santriOption, formKasId === k.id && styles.santriOptionActive]}
+  1041→                    onPress={() => setFormKasId(k.id)}
+  1042→                  >
+  1043→                    <View style={{ flex: 1 }}>
+  1044→                      <Text style={styles.santriOptionName}>{k.name}</Text>
+  1045→                      <Text style={styles.santriOptionNis}>{k.type === "BANK" ? "Bank" : "Tunai"}{k.accountNumber ? ` • ${k.accountNumber}` : ""} • Saldo: {formatRupiah(k.balance || 0)}</Text>
+  1046→                    </View>
+  1047→                    {formKasId === k.id && <Ionicons name="checkmark-circle" size={24} color={Colors.primary} />}
+  1048→                  </TouchableOpacity>
+  1049→                ))}
+  1050→              </View>
+  1051→            )}
+  1052→
+  1053→            {/* Category */}
+  1054→            <Text style={styles.label}>Kategori</Text>
+  1055→            <TextInput
+  1056→              style={styles.input}
+  1057→              value={formCategory}
+  1058→              onChangeText={setFormCategory}
+  1059→              placeholder={formType === "PEMASUKAN" ? "cth: Donasi, Sumbangan" : "cth: Operasional, Honor, ATK"}
+  1060→            />
+  1061→
+  1062→            {/* Amount */}
+  1063→            <Text style={styles.label}>Nominal</Text>
+  1064→            <View style={styles.amountContainer}>
+  1065→              <Text style={styles.amountPrefix}>Rp</Text>
+  1066→              <TextInput
+  1067→                style={styles.amountInput}
+  1068→                value={formAmount}
+  1069→                onChangeText={(v) => setFormAmount(v.replace(/\D/g, ""))}
+  1070→                keyboardType="numeric"
+  1071→                placeholder="0"
+  1072→              />
+  1073→            </View>
+  1074→
+  1075→            {/* Description */}
+  1076→            <Text style={styles.label}>Keterangan</Text>
+  1077→            <TextInput
+  1078→              style={[styles.input, { minHeight: 60, textAlignVertical: "top" }]}
+  1079→              value={formDesc}
+  1080→              onChangeText={setFormDesc}
+  1081→              placeholder="Keterangan tambahan..."
+  1082→              multiline
+  1083→            />
+  1084→
+  1085→            <TouchableOpacity
+  1086→              style={[styles.saveButton, saving && { opacity: 0.6 }]}
+  1087→              onPress={handleSave}
+  1088→              disabled={saving}
+  1089→            >
+  1090→              {saving ? <ActivityIndicator color={Colors.white} /> : (
+  1091→                <>
+  1092→                  <Ionicons name="save" size={20} color={Colors.white} />
+  1093→                  <Text style={styles.saveButtonText}>Simpan Transaksi</Text>
+  1094→                </>
+  1095→              )}
+  1096→            </TouchableOpacity>
+  1097→            <View style={{ height: 40 }} />
+  1098→          </ScrollView>
+  1099→        </SafeAreaView>
+  1100→      </Modal>
+  1101→    </SafeAreaView>
+  1102→  )
+  1103→}
+  1104→
+  1105→// ============================================================================
+  1106→// HONOR GURU SCREEN (V5: Honor Guru + Slip)
+  1107→// ============================================================================
+  1108→function HonorGuruScreen({ navigation }: { navigation: any }) {
+  1109→  const [honorList, setHonorList] = useState<any[]>([])
+  1110→  const [loading, setLoading] = useState(true)
+  1111→  const [refreshing, setRefreshing] = useState(false)
+  1112→
+  1113→  const load = useCallback(async () => {
+  1114→    try {
+  1115→      setLoading(true)
+  1116→      const res = await apiGet("/api/admin/honor-guru")
+  1117→      setHonorList(res.data || [])
+  1118→    } catch (e: any) { Alert.alert("Error", e.message) }
+  1119→    finally { setLoading(false) }
+  1120→  }, [])
+  1121→
+  1122→  useEffect(() => { load() }, [load])
+  1123→
+  1124→  const openSlip = async (id: string) => {
+  1125→    const url = `${API_BASE_URL}/api/admin/honor-guru/${id}/slip`
+  1126→    try {
+  1127→      const supported = await Linking.canOpenURL(url)
+  1128→      if (supported) {
+  1129→        await Linking.openURL(url)
+  1130→      } else {
+  1131→        Alert.alert("Tidak bisa membuka", `URL: ${url}`)
+  1132→      }
+  1133→    } catch (e: any) { Alert.alert("Gagal", e.message) }
+  1134→  }
+  1135→
+  1136→  return (
+  1137→    <SafeAreaView style={styles.screen}>
+  1138→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+  1139→      <View style={styles.header}>
+  1140→        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+  1141→          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+  1142→        </TouchableOpacity>
+  1143→        <Text style={styles.headerTitle}>Honor Guru</Text>
+  1144→        <View style={{ width: 24 }} />
+  1145→      </View>
+  1146→
+  1147→      {loading ? (
+  1148→        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+  1149→      ) : (
+  1150→        <FlatList
+  1151→          data={honorList}
+  1152→          keyExtractor={item => item.id}
+  1153→          renderItem={({ item }) => {
+  1154→            const totalHonor = (item.honorMengajar || 0) + (item.insentif || 0) + (item.tunjangan || 0) - (item.potongan || 0)
+  1155→            return (
+  1156→              <View style={styles.honorCard}>
+  1157→                <View style={styles.honorHeader}>
+  1158→                  <View style={{ flex: 1 }}>
+  1159→                    <Text style={styles.honorGuruName}>{item.guru?.name || item.guru?.user?.name || "-"}</Text>
+  1160→                    <Text style={styles.honorPeriode}>Periode: {item.periodeLabel || "-"}</Text>
+  1161→                  </View>
+  1162→                  <View style={[styles.statusBadge, { backgroundColor: item.status === "DIBAYARKAN" ? Colors.successLight : item.status === "DRAFT" ? Colors.warningLight : Colors.primaryLight }]}>
+  1163→                    <Text style={[styles.statusText, { color: item.status === "DIBAYARKAN" ? Colors.success : item.status === "DRAFT" ? Colors.warning : Colors.primary }]}>
+  1164→                      {item.status || "-"}
+  1165→                    </Text>
+  1166→                  </View>
+  1167→                </View>
+  1168→
+  1169→                <View style={styles.honorBreakdown}>
+  1170→                  <View style={styles.honorRow}>
+  1171→                    <Text style={styles.honorRowLabel}>Honor Mengajar</Text>
+  1172→                    <Text style={styles.honorRowValue}>{formatRupiah(item.honorMengajar || 0)}</Text>
+  1173→                  </View>
+  1174→                  {item.insentif ? (
+  1175→                    <View style={styles.honorRow}>
+  1176→                      <Text style={styles.honorRowLabel}>Insentif</Text>
+  1177→                      <Text style={[styles.honorRowValue, { color: Colors.success }]}>+ {formatRupiah(item.insentif)}</Text>
+  1178→                    </View>
+  1179→                  ) : null}
+  1180→                  {item.tunjangan ? (
+  1181→                    <View style={styles.honorRow}>
+  1182→                      <Text style={styles.honorRowLabel}>Tunjangan</Text>
+  1183→                      <Text style={[styles.honorRowValue, { color: Colors.success }]}>+ {formatRupiah(item.tunjangan)}</Text>
+  1184→                    </View>
+  1185→                  ) : null}
+  1186→                  {item.potongan ? (
+  1187→                    <View style={styles.honorRow}>
+  1188→                      <Text style={styles.honorRowLabel}>Potongan</Text>
+  1189→                      <Text style={[styles.honorRowValue, { color: Colors.danger }]}>- {formatRupiah(item.potongan)}</Text>
+  1190→                    </View>
+  1191→                  ) : null}
+  1192→                </View>
+  1193→
+  1194→                <View style={styles.honorTotalWrap}>
+  1195→                  <Text style={styles.honorTotalLabel}>Total Honor</Text>
+  1196→                  <Text style={styles.honorTotalValue}>{formatRupiah(item.totalHonor || totalHonor)}</Text>
+  1197→                </View>
+  1198→
+  1199→                <TouchableOpacity style={styles.slipButton} onPress={() => openSlip(item.id)}>
+  1200→                  <Ionicons name="document-text-outline" size={18} color={Colors.primary} />
+  1201→                  <Text style={styles.slipButtonText}>Slip Honor</Text>
+  1202→                </TouchableOpacity>
+  1203→              </View>
+  1204→            )
+  1205→          }}
+  1206→          ListEmptyComponent={() => (
+  1207→            <View style={styles.emptyCard}>
+  1208→              <Ionicons name="school-outline" size={48} color={Colors.textMuted} />
+  1209→              <Text style={styles.emptyText}>Belum ada data honor</Text>
+  1210→            </View>
+  1211→          )}
+  1212→          contentContainerStyle={{ padding: 16 }}
+  1213→          refreshControl={
+  1214→            <RefreshControl
+  1215→              refreshing={refreshing}
+  1216→              onRefresh={() => {
+  1217→                setRefreshing(true)
+  1218→                load().finally(() => setRefreshing(false))
+  1219→              }}
+  1220→              colors={[Colors.primary]}
+  1221→              tintColor={Colors.primary}
+  1222→            />
+  1223→          }
+  1224→        />
+  1225→      )}
+  1226→    </SafeAreaView>
+  1227→  )
+  1228→}
+  1229→
+  1230→// ============================================================================
+  1231→// LAPORAN SCREEN (V5: Laporan Keuangan)
+  1232→// ============================================================================
+  1233→function LaporanScreen({ navigation }: { navigation: any }) {
+  1234→  const now = new Date()
+  1235→  const [month, setMonth] = useState<number>(now.getMonth() + 1)
+  1236→  const [year, setYear] = useState<number>(now.getFullYear())
+  1237→  const [laporan, setLaporan] = useState<any>(null)
+  1238→  const [loading, setLoading] = useState(false)
+  1239→
+  1240→  const months = [
+  1241→    { v: 1, label: "Jan" }, { v: 2, label: "Feb" }, { v: 3, label: "Mar" },
+  1242→    { v: 4, label: "Apr" }, { v: 5, label: "Mei" }, { v: 6, label: "Jun" },
+  1243→    { v: 7, label: "Jul" }, { v: 8, label: "Agu" }, { v: 9, label: "Sep" },
+  1244→    { v: 10, label: "Okt" }, { v: 11, label: "Nov" }, { v: 12, label: "Des" },
+  1245→  ]
+  1246→
+  1247→  const load = useCallback(async () => {
+  1248→    try {
+  1249→      setLoading(true)
+  1250→      const res = await apiGet(`/api/admin/kas/laporan?type=bulanan&month=${month}&year=${year}`)
+  1251→      setLaporan(res.data || res)
+  1252→    } catch (e: any) { Alert.alert("Error", e.message) }
+  1253→    finally { setLoading(false) }
+  1254→  }, [month, year])
+  1255→
+  1256→  useEffect(() => { load() }, [load])
+  1257→
+  1258→  const pemasukanKategori: any[] = laporan?.pemasukanPerKategori || laporan?.incomeByCategory || []
+  1259→  const pengeluaranKategori: any[] = laporan?.pengeluaranPerKategori || laporan?.expenseByCategory || []
+  1260→  const totalPemasukan = laporan?.totalPemasukan || laporan?.totalIncome || 0
+  1261→  const totalPengeluaran = laporan?.totalPengeluaran || laporan?.totalExpense || 0
+  1262→  const surplus = laporan?.surplus ?? (totalPemasukan - totalPengeluaran)
+  1263→  const saldo = laporan?.saldo || laporan?.balance || 0
+  1264→  const tunggakan = laporan?.tunggakan || laporan?.outstanding || 0
+  1265→
+  1266→  return (
+  1267→    <SafeAreaView style={styles.screen}>
+  1268→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+  1269→      <View style={styles.header}>
+  1270→        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+  1271→          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+  1272→        </TouchableOpacity>
+  1273→        <Text style={styles.headerTitle}>Laporan Keuangan</Text>
+  1274→        <View style={{ width: 24 }} />
+  1275→      </View>
+  1276→
+  1277→      <ScrollView style={styles.content}>
+  1278→        {/* Month / Year selector */}
+  1279→        <Text style={styles.label}>Pilih Bulan</Text>
+  1280→        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+  1281→          {months.map(m => (
+  1282→            <TouchableOpacity
+  1283→              key={m.v}
+  1284→              style={[styles.methodBtn, month === m.v && styles.methodBtnActive]}
+  1285→              onPress={() => setMonth(m.v)}
+  1286→            >
+  1287→              <Text style={[styles.methodBtnText, month === m.v && styles.methodBtnTextActive]}>{m.label}</Text>
+  1288→            </TouchableOpacity>
+  1289→          ))}
+  1290→        </ScrollView>
+  1291→
+  1292→        <Text style={styles.label}>Pilih Tahun</Text>
+  1293→        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+  1294→          {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map(y => (
+  1295→            <TouchableOpacity
+  1296→              key={y}
+  1297→              style={[styles.methodBtn, year === y && styles.methodBtnActive]}
+  1298→              onPress={() => setYear(y)}
+  1299→            >
+  1300→              <Text style={[styles.methodBtnText, year === y && styles.methodBtnTextActive]}>{y}</Text>
+  1301→            </TouchableOpacity>
+  1302→          ))}
+  1303→        </ScrollView>
+  1304→
+  1305→        {loading ? (
+  1306→          <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+  1307→        ) : !laporan ? (
+  1308→          <View style={styles.emptyCard}><Text style={styles.emptyText}>Tidak ada data</Text></View>
+  1309→        ) : (
+  1310→          <>
+  1311→            {/* Stat cards */}
+  1312→            <View style={styles.statsContainer}>
+  1313→              <View style={[styles.statCard, { backgroundColor: Colors.success }]}>
+  1314→                <Text style={styles.statLabel}>Pemasukan</Text>
+  1315→                <Text style={styles.statValue}>{formatRupiah(totalPemasukan)}</Text>
+  1316→              </View>
+  1317→              <View style={[styles.statCard, { backgroundColor: Colors.danger }]}>
+  1318→                <Text style={styles.statLabel}>Pengeluaran</Text>
+  1319→                <Text style={styles.statValue}>{formatRupiah(totalPengeluaran)}</Text>
+  1320→              </View>
+  1321→            </View>
+  1322→
+  1323→            <View style={[styles.totalCard, { margin: 0, marginBottom: 12, backgroundColor: surplus >= 0 ? Colors.primary : Colors.warning }]}>
+  1324→              <Text style={styles.totalLabel}>{surplus >= 0 ? "Surplus" : "Defisit"}</Text>
+  1325→              <Text style={styles.totalValue}>{formatRupiah(Math.abs(surplus))}</Text>
+  1326→            </View>
+  1327→
+  1328→            <View style={[styles.totalCard, { margin: 0, marginBottom: 12, backgroundColor: Colors.text }]}>
+  1329→              <Text style={styles.totalLabel}>Saldo Akhir</Text>
+  1330→              <Text style={styles.totalValue}>{formatRupiah(saldo)}</Text>
+  1331→            </View>
+  1332→
+  1333→            {tunggakan > 0 && (
+  1334→              <View style={[styles.totalCard, { margin: 0, marginBottom: 12, backgroundColor: Colors.danger }]}>
+  1335→                <Text style={styles.totalLabel}>Tunggakan</Text>
+  1336→                <Text style={styles.totalValue}>{formatRupiah(tunggakan)}</Text>
+  1337→              </View>
+  1338→            )}
+  1339→
+  1340→            {/* Pemasukan per kategori */}
+  1341→            <Text style={styles.sectionTitle}>Pemasukan per Kategori</Text>
+  1342→            {pemasukanKategori.length === 0 ? (
+  1343→              <Text style={{ color: Colors.textMuted, fontSize: 12, marginBottom: 12 }}>- Tidak ada data</Text>
+  1344→            ) : (
+  1345→              pemasukanKategori.map((k, i) => (
+  1346→                <View key={`in-${i}`} style={styles.laporanRow}>
+  1347→                  <Text style={styles.laporanRowLabel}>{k.category || k.name || "-"}</Text>
+  1348→                  <Text style={[styles.laporanRowValue, { color: Colors.success }]}>{formatRupiah(k.amount || k.total || 0)}</Text>
+  1349→                </View>
+  1350→              ))
+  1351→            )}
+  1352→
+  1353→            {/* Pengeluaran per kategori */}
+  1354→            <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Pengeluaran per Kategori</Text>
+  1355→            {pengeluaranKategori.length === 0 ? (
+  1356→              <Text style={{ color: Colors.textMuted, fontSize: 12, marginBottom: 12 }}>- Tidak ada data</Text>
+  1357→            ) : (
+  1358→              pengeluaranKategori.map((k, i) => (
+  1359→                <View key={`out-${i}`} style={styles.laporanRow}>
+  1360→                  <Text style={styles.laporanRowLabel}>{k.category || k.name || "-"}</Text>
+  1361→                  <Text style={[styles.laporanRowValue, { color: Colors.danger }]}>{formatRupiah(k.amount || k.total || 0)}</Text>
+  1362→                </View>
+  1363→              ))
+  1364→            )}
+  1365→            <View style={{ height: 40 }} />
+  1366→          </>
+  1367→        )}
+  1368→      </ScrollView>
+  1369→    </SafeAreaView>
+  1370→  )
+  1371→}
+  1372→
+  1373→// ============================================================================
+  1374→// APP ROOT
+  1375→// ============================================================================
+  1376→const Stack = createNativeStackNavigator()
+  1377→
+  1378→export default function App() {
+  1379→  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  1380→  const [checking, setChecking] = useState(true)
+  1381→  // Realtime refresh tick — bumped whenever a subscribed table changes.
+  1382→  // Passed to DashboardScreen so it can re-fetch on Payment/Tagihan events.
+  1383→  const [refreshKey, setRefreshKey] = useState(0)
+  1384→
+  1385→  useEffect(() => {
+  1386→    initNetworkMonitor()
+  1387→    async function check() {
+  1388→      const token = await SecureStore.getItemAsync("authToken")
+  1389→      if (token) {
+  1390→        authToken = token
+  1391→        const { data } = await getSupabase().auth.getSession()
+  1392→        if (data.session) { authToken = data.session.access_token; setIsLoggedIn(true) }
+  1393→      }
+  1394→      setChecking(false)
+  1395→    }
+  1396→    check()
+  1397→  }, [])
+  1398→
+  1399→  // ============================================================================
+  1400→  // Supabase Realtime subscriptions (OPTIONAL — fails silently if unavailable)
+  1401→  // - Payment INSERT  : new pembayaran recorded → refresh dashboard
+  1402→  // - Tagihan  UPDATE : status BELUM_BAYAR → LUNAS → refresh tunggakan/tagihan
+  1403→  // ============================================================================
+  1404→  useEffect(() => {
+  1405→    if (!isLoggedIn) return
+  1406→    let cancelled = false
+  1407→    const unsubs: Array<() => void> = []
+  1408→    ;(async () => {
+  1409→      try {
+  1410→        for (const table of ["Payment", "Tagihan"] as const) {
+  1411→          try {
+  1412→            const unsub = await subscribeToTable(table, () => {
+  1413→              setRefreshKey(k => k + 1)
+  1414→            })
+  1415→            if (cancelled) { try { unsub() } catch {} }
+  1416→            else { unsubs.push(unsub) }
+  1417→          } catch {}
+  1418→        }
+  1419→      } catch(e) { /* realtime optional */ }
+  1420→    })()
+  1421→    return () => {
+  1422→      cancelled = true
+  1423→      unsubs.forEach(u => { try { u() } catch {} })
+  1424→    }
+  1425→  }, [isLoggedIn])
+  1426→
+  1427→  if (checking) {
+  1428→    return <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: Colors.primary }}><ActivityIndicator size="large" color={Colors.white} /></View>
+  1429→  }
+  1430→
+  1431→  return (
+  1432→    <View style={{ flex: 1 }}>
+  1433→      <NetworkStatusIndicator />
+  1434→      <NavigationContainer>
+  1435→        <Stack.Navigator screenOptions={{ headerShown: false }}>
+  1436→        {isLoggedIn ? (
+  1437→          <>
+  1438→            <Stack.Screen name="Dashboard">
+  1439→              {({ navigation }) => (
+  1440→                <DashboardScreen
+  1441→                  navigation={navigation}
+  1442→                  refreshKey={refreshKey}
+  1443→                  onLogout={async () => { await getSupabase().auth.signOut(); await SecureStore.deleteItemAsync("authToken"); authToken = null; setIsLoggedIn(false) }}
+  1444→                />
+  1445→              )}
+  1446→            </Stack.Screen>
+  1447→            <Stack.Screen name="PembayaranInput" component={PembayaranInputScreen} />
+  1448→            <Stack.Screen name="TunggakanList" component={TunggakanListScreen} />
+  1449→            <Stack.Screen name="TagihanList" component={TagihanListScreen} />
+  1450→            <Stack.Screen name="RiwayatList" component={RiwayatListScreen} />
+  1451→            <Stack.Screen name="KasList" component={KasListScreen} />
+  1452→            <Stack.Screen name="TransaksiKas" component={TransaksiKasScreen} />
+  1453→            <Stack.Screen name="HonorGuru" component={HonorGuruScreen} />
+  1454→            <Stack.Screen name="Laporan" component={LaporanScreen} />
+  1455→          </>
+  1456→        ) : (
+  1457→          <Stack.Screen name="Login">{() => <LoginScreen onLogin={() => setIsLoggedIn(true)} />}</Stack.Screen>
+  1458→        )}
+  1459→      </Stack.Navigator>
+  1460→    </NavigationContainer>
+  1461→    </View>
+  1462→  )
+  1463→}
+  1464→
+  1465→// ============================================================================
+  1466→// STYLES
+  1467→// ============================================================================
+  1468→const styles = StyleSheet.create({
+  1469→  loginContainer: { flex: 1, backgroundColor: Colors.primary },
+  1470→  loginScroll: { flexGrow: 1, justifyContent: "center", padding: 24 },
+  1471→  loginLogo: { alignItems: "center", marginBottom: 32 },
+  1472→  loginTitle: { fontSize: 28, fontWeight: "bold", color: Colors.white, marginTop: 8 },
+  1473→  loginSubtitle: { fontSize: 16, color: Colors.white, opacity: 0.8 },
+  1474→  loginCard: { backgroundColor: Colors.white, borderRadius: 16, padding: 24, elevation: 4 },
+  1475→  loginCardTitle: { fontSize: 20, fontWeight: "bold", color: Colors.text, marginBottom: 20 },
+  1476→  label: { fontSize: 12, fontWeight: "600", color: Colors.text, marginTop: 16, marginBottom: 4 },
+  1477→  input: { borderWidth: 1, borderColor: Colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12, fontSize: 16, color: Colors.text },
+  1478→  loginButton: { backgroundColor: Colors.primary, borderRadius: 8, paddingVertical: 14, alignItems: "center", marginTop: 24 },
+  1479→  loginButtonText: { color: Colors.white, fontSize: 16, fontWeight: "600" },
+  1480→  demoText: { fontSize: 12, color: Colors.textMuted, textAlign: "center", marginTop: 16 },
+  1481→  screen: { flex: 1, backgroundColor: Colors.background },
+  1482→  header: { backgroundColor: Colors.primary, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingVertical: 12, paddingTop: Platform.OS === "android" ? 35 : 0 },
+  1483→  backButton: { padding: 10, minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "center" },
+  1484→  headerTitle: { fontSize: 16, fontWeight: "600", color: Colors.white },
+  1485→  content: { flex: 1, padding: 16 },
+  1486→  statsContainer: { flexDirection: "row", gap: 12, marginBottom: 16 },
+  1487→  statCard: { flex: 1, borderRadius: 12, padding: 16, elevation: 2 },
+  1488→  statLabel: { fontSize: 12, color: Colors.white, opacity: 0.9 },
+  1489→  statValue: { fontSize: 18, fontWeight: "bold", color: Colors.white, marginTop: 4 },
+  1490→  menuGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginBottom: 24 },
+  1491→  menuCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 20, width: "47%", alignItems: "center", elevation: 1 },
+  1492→  menuIcon: { width: 48, height: 48, borderRadius: 12, justifyContent: "center", alignItems: "center", marginBottom: 8 },
+  1493→  menuTitle: { fontSize: 13, fontWeight: "500", color: Colors.text, textAlign: "center" },
+  1494→  sectionTitle: { fontSize: 16, fontWeight: "600", color: Colors.text, marginBottom: 12 },
+  1495→  paymentCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 16, marginBottom: 8, flexDirection: "row", justifyContent: "space-between", elevation: 1 },
+  1496→  paymentSantri: { fontSize: 15, fontWeight: "500", color: Colors.text },
+  1497→  paymentInvoice: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+  1498→  paymentDate: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+  1499→  paymentAmount: { fontSize: 16, fontWeight: "600", color: Colors.success },
+  1500→  statusBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, marginTop: 4 },
+  1501→  statusText: { fontSize: 12, fontWeight: "600" },
+  1502→  emptyCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 24, alignItems: "center" },
+  1503→  emptyText: { fontSize: 14, color: Colors.textMuted, marginTop: 8 },
+  1504→  // Pembayaran Input
+  1505→  searchContainer: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: Colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, minHeight: 44, backgroundColor: Colors.white },
+  1506→  searchInput: { flex: 1, paddingVertical: 8, fontSize: 14, color: Colors.text },
+  1507→  santriOption: { backgroundColor: Colors.white, borderRadius: 8, padding: 12, marginBottom: 4, flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: Colors.border },
+  1508→  santriOptionActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
+  1509→  santriOptionName: { fontSize: 14, fontWeight: "500", color: Colors.text },
+  1510→  santriOptionNis: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+  1511→  moreText: { fontSize: 12, color: Colors.textMuted, textAlign: "center", paddingVertical: 8 },
+  1512→  tagihanOption: { backgroundColor: Colors.white, borderRadius: 8, padding: 12, marginBottom: 4, flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: Colors.border },
+  1513→  tagihanOptionActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
+  1514→  tagihanOptionName: { fontSize: 14, fontWeight: "500", color: Colors.text },
+  1515→  tagihanOptionDesc: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+  1516→  amountContainer: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: Colors.border, borderRadius: 8, paddingHorizontal: 12, backgroundColor: Colors.white },
+  1517→  amountPrefix: { fontSize: 18, fontWeight: "600", color: Colors.textMuted, marginRight: 8 },
+  1518→  amountInput: { flex: 1, paddingVertical: 12, fontSize: 24, fontWeight: "bold", color: Colors.text },
+  1519→  methodRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  1520→  methodBtn: { paddingHorizontal: 12, paddingVertical: 12, minHeight: 44, justifyContent: "center", alignItems: "center", borderRadius: 8, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.white },
+  1521→  methodBtnActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  1522→  methodBtnText: { fontSize: 12, color: Colors.textMuted },
+  1523→  methodBtnTextActive: { color: Colors.white, fontWeight: "600" },
+  1524→  saveButton: { backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 14, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 24, elevation: 4 },
+  1525→  saveButtonText: { color: Colors.white, fontSize: 16, fontWeight: "600" },
+  1526→  // Tunggakan
+  1527→  totalCard: { margin: 16, borderRadius: 12, padding: 20, backgroundColor: Colors.danger, elevation: 2 },
+  1528→  totalLabel: { fontSize: 12, color: Colors.white, opacity: 0.9 },
+  1529→  totalValue: { fontSize: 24, fontWeight: "bold", color: Colors.white, marginTop: 4 },
+  1530→  tunggakanCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 16, marginBottom: 8, flexDirection: "row", justifyContent: "space-between", elevation: 1 },
+  1531→  tunggakanName: { fontSize: 15, fontWeight: "500", color: Colors.text },
+  1532→  tunggakanNis: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+  1533→  tunggakanJenis: { fontSize: 13, color: Colors.primary, marginTop: 4 },
+  1534→  tunggakanDesc: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+  1535→  tunggakanAmount: { fontSize: 16, fontWeight: "600", color: Colors.danger },
+  1536→  // Header action button (for add/new in header bar)
+  1537→  headerAction: { padding: 10, minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "center" },
+  1538→  // Kas & Rekening
+  1539→  kasCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 16, marginBottom: 8, elevation: 1 },
+  1540→  kasIcon: { width: 44, height: 44, borderRadius: 10, justifyContent: "center", alignItems: "center" },
+  1541→  kasName: { fontSize: 15, fontWeight: "600", color: Colors.text },
+  1542→  kasType: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+  1543→  kasDesc: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+  1544→  kasBalanceWrap: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  1545→  kasBalanceLabel: { fontSize: 12, color: Colors.textMuted },
+  1546→  kasBalance: { fontSize: 18, fontWeight: "bold", color: Colors.primary },
+  1547→  // Transaksi Kas
+  1548→  trxCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 14, marginBottom: 8, flexDirection: "row", alignItems: "center", elevation: 1 },
+  1549→  trxIcon: { width: 36, height: 36, borderRadius: 18, justifyContent: "center", alignItems: "center" },
+  1550→  trxCategory: { fontSize: 14, fontWeight: "500", color: Colors.text },
+  1551→  trxDesc: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+  1552→  trxMeta: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+  1553→  trxAmount: { fontSize: 15, fontWeight: "600" },
+  1554→  // Honor Guru
+  1555→  honorCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 16, marginBottom: 12, elevation: 1 },
+  1556→  honorHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8 },
+  1557→  honorGuruName: { fontSize: 15, fontWeight: "600", color: Colors.text },
+  1558→  honorPeriode: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+  1559→  honorBreakdown: { backgroundColor: Colors.background, borderRadius: 8, padding: 12, marginTop: 4 },
+  1560→  honorRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 3 },
+  1561→  honorRowLabel: { fontSize: 12, color: Colors.textMuted },
+  1562→  honorRowValue: { fontSize: 12, fontWeight: "500", color: Colors.text },
+  1563→  honorTotalWrap: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: Colors.border },
+  1564→  honorTotalLabel: { fontSize: 13, fontWeight: "600", color: Colors.text },
+  1565→  honorTotalValue: { fontSize: 16, fontWeight: "bold", color: Colors.primary },
+  1566→  slipButton: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 6, marginTop: 12, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
+  1567→  slipButtonText: { fontSize: 13, fontWeight: "600", color: Colors.primary },
+  1568→  // Laporan
+  1569→  laporanRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: Colors.white, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 4, elevation: 1 },
+  1570→  laporanRowLabel: { fontSize: 13, color: Colors.text, flex: 1 },
+  1571→  laporanRowValue: { fontSize: 13, fontWeight: "600" },
+  1572→})
+  1573→

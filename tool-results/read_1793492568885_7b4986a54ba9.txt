@@ -1,0 +1,2002 @@
+     1→/**
+     2→ * SIM MADIN — Wali Santri Mobile App
+     3→ * ============================================================================
+     4→ * Login via WhatsApp + PIN
+     5→ * Dashboard: list anak → detail (absensi, nilai, tagihan, dll)
+     6→ * Backend: Next.js API (deploy di Netlify) + Supabase Auth + Postgres
+     7→ * ============================================================================
+     8→ */
+     9→
+    10→import React, { useState, useEffect, useCallback } from "react"
+    11→import {
+    12→  View, Text, TextInput, TouchableOpacity, StyleSheet,
+    13→  ActivityIndicator, SafeAreaView, StatusBar, ScrollView, Alert,
+    14→  FlatList, Image, Modal, RefreshControl, Platform,
+    15→} from "react-native"
+    16→import { NavigationContainer } from "@react-navigation/native"
+    17→import { createNativeStackNavigator } from "@react-navigation/native-stack"
+    18→import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
+    19→import { Ionicons } from "@expo/vector-icons"
+    20→
+    21→// Import dari shared package
+    22→import {
+    23→  MobileApiClient, normalizeWhatsApp, formatPhoneDisplay,
+    24→  saveWaliSession, loadWaliSession, clearWaliSession,
+    25→  formatRupiah, formatDate, STATUS_STYLES, DAYS,
+    26→} from "../vendor/mobile-shared/src"
+    27→import { subscribeToTable, subscribeToNotifikasi, subscribeToNilai, subscribeToAbsensi, subscribeToTagihan } from "../vendor/mobile-shared/src/realtime"
+    28→import { Skeleton, SkeletonList, SkeletonCard, SkeletonPage, SkeletonStatsRow } from "../vendor/mobile-shared/src/skeleton"
+    29→import { NetworkStatusIndicator, initNetworkMonitor } from "../vendor/mobile-shared/src/network-status"
+    30→
+    31→// ============================================================================
+    32→// CONFIG
+    33→// ============================================================================
+    34→const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "https://sim-madin.vercel.app"
+    35→
+    36→// API client untuk wali (pakai JWT token dari login WA+PIN)
+    37→let waliToken: string | null = null
+    38→const api = new MobileApiClient({
+    39→  baseUrl: API_BASE_URL,
+    40→  getToken: async () => waliToken,
+    41→})
+    42→
+    43→// ============================================================================
+    44→// TYPES
+    45→// ============================================================================
+    46→interface WaliData { id: string; name: string; phone: string; email?: string }
+    47→interface SantriData {
+    48→  id: string; nis: string; name: string; gender: string; photoUrl?: string | null;
+    49→  kelas?: { id: string; name: string; code: string }
+    50→  relationship?: string; isPrimary?: boolean
+    51→}
+    52→interface SantriDetail {
+    53→  santri: any; absensi: any[]; absensiSummary: any; nilai: any[];
+    54→  tagihan: any[]; tagihanSummary: any; payments: any[];
+    55→  jadwal: any[]; announcements: any[]; activePeriod: any; rapor?: any
+    56→}
+    57→// V2: Rekap perkembangan dari /api/wali/perkembangan/[santriId]
+    58→interface PerkembanganV2 {
+    59→  santri: any
+    60→  activePeriod: any
+    61→  absensiSummary: { total: number; hadir: number; sakit: number; izin: number; alfa: number; persentaseHadir: number }
+    62→  absensiTerbaru: any[]
+    63→  nilaiPerMapel: Array<{
+    64→    mapel: any
+    65→    nilaiByType: Record<string, any[]>
+    66→    rataRata: number | null
+    67→    trend: "NAIK" | "TURUN" | "STABIL" | "BARU"
+    68→  }>
+    69→  tugasSummary: { total: number; submitted: number; graded: number; notSubmitted: number; overdueNotSubmitted: number }
+    70→  tugasTerbaru: any[]
+    71→  materiTerbaru: any[]
+    72→  pertemuanTerbaru: any[]
+    73→}
+    74→
+    75→// ============================================================================
+    76→// COLORS
+    77→// ============================================================================
+    78→const Colors = {
+    79→  primary: "#059669", // emerald-600
+    80→  primaryLight: "#d1fae5",
+    81→  primaryDark: "#047857",
+    82→  background: "#f8fafc",
+    83→  card: "#ffffff",
+    84→  text: "#1e293b",
+    85→  textMuted: "#64748b",
+    86→  border: "#e2e8f0",
+    87→  danger: "#dc2626",
+    88→  dangerLight: "#fee2e2",
+    89→  warning: "#d97706",
+    90→  warningLight: "#fef3c7",
+    91→  success: "#059669",
+    92→  successLight: "#d1fae5",
+    93→  white: "#ffffff",
+    94→}
+    95→
+    96→// ============================================================================
+    97→// SCREENS
+    98→// ============================================================================
+    99→
+   100→// --- Login Screen ---
+   101→function LoginScreen({ onLogin, onForgotPin }: { onLogin: (token: string, wali: WaliData, santriList: SantriData[]) => void; onForgotPin?: () => void }) {
+   102→  const [phone, setPhone] = useState("")
+   103→  const [pin, setPin] = useState("")
+   104→  const [loading, setLoading] = useState(false)
+   105→  const [showPin, setShowPin] = useState(false)
+   106→
+   107→  const handleLogin = async () => {
+   108→    if (!phone || !pin) {
+   109→      Alert.alert("Validasi", "Nomor WhatsApp dan PIN wajib diisi")
+   110→      return
+   111→    }
+   112→    if (pin.length !== 6) {
+   113→      Alert.alert("Validasi", "PIN harus 6 digit")
+   114→      return
+   115→    }
+   116→
+   117→    setLoading(true)
+   118→    try {
+   119→      const data = await api.post("/api/wali/login", { phone, pin })
+   120→      if (data.success) {
+   121→        waliToken = data.token
+   122→        await saveWaliSession(data.token, data.wali, data.santriList)
+   123→        onLogin(data.token, data.wali, data.santriList)
+   124→      } else {
+   125→        Alert.alert("Login Gagal", data.error || "Terjadi kesalahan")
+   126→      }
+   127→    } catch (e: any) {
+   128→      Alert.alert("Login Gagal", e.message)
+   129→    } finally {
+   130→      setLoading(false)
+   131→    }
+   132→  }
+   133→
+   134→  return (
+   135→    <SafeAreaView style={styles.loginContainer}>
+   136→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+   137→      <ScrollView contentContainerStyle={styles.loginScroll}>
+   138→        <View style={styles.loginLogo}>
+   139→          <Ionicons name="people-circle" size={80} color={Colors.primary} />
+   140→          <Text style={styles.loginTitle}>SIM MADIN</Text>
+   141→          <Text style={styles.loginSubtitle}>Wali Santri</Text>
+   142→        </View>
+   143→
+   144→        <View style={styles.loginCard}>
+   145→          <Text style={styles.loginCardTitle}>Masuk ke Akun</Text>
+   146→          <Text style={styles.loginCardDesc}>Masuk dengan Nomor WhatsApp & PIN</Text>
+   147→
+   148→          <Text style={styles.label}>Nomor WhatsApp</Text>
+   149→          <View style={styles.inputContainer}>
+   150→            <Ionicons name="call" size={20} color={Colors.textMuted} style={styles.inputIcon} />
+   151→            <TextInput
+   152→              style={styles.input}
+   153→              placeholder="08xxx atau 628xxx"
+   154→              value={phone}
+   155→              onChangeText={setPhone}
+   156→              keyboardType="phone-pad"
+   157→              autoCapitalize="none"
+   158→            />
+   159→          </View>
+   160→
+   161→          <Text style={styles.label}>PIN (6 digit)</Text>
+   162→          <View style={styles.inputContainer}>
+   163→            <Ionicons name="lock-closed" size={20} color={Colors.textMuted} style={styles.inputIcon} />
+   164→            <TextInput
+   165→              style={[styles.input, { letterSpacing: 8, textAlign: "center" }]}
+   166→              placeholder="••••••"
+   167→              value={pin}
+   168→              onChangeText={(t) => setPin(t.replace(/\D/g, "").slice(0, 6))}
+   169→              keyboardType="numeric"
+   170→              secureTextEntry={!showPin}
+   171→              maxLength={6}
+   172→            />
+   173→            <TouchableOpacity onPress={() => setShowPin(!showPin)} style={styles.eyeIcon}>
+   174→              <Ionicons name={showPin ? "eye-off" : "eye"} size={20} color={Colors.textMuted} />
+   175→            </TouchableOpacity>
+   176→          </View>
+   177→
+   178→          <TouchableOpacity
+   179→            style={[styles.loginButton, loading && { opacity: 0.6 }]}
+   180→            onPress={handleLogin}
+   181→            disabled={loading}
+   182→          >
+   183→            {loading ? (
+   184→              <ActivityIndicator color={Colors.white} />
+   185→            ) : (
+   186→              <Text style={styles.loginButtonText}>Masuk</Text>
+   187→            )}
+   188→          </TouchableOpacity>
+   189→
+   190→          <Text style={styles.demoText}>Demo: 081234511001 / PIN: 258041</Text>
+   191→
+   192→          <TouchableOpacity onPress={() => onForgotPin?.()} style={styles.forgotPinBtn}>
+   193→            <Text style={styles.forgotPinText}>Lupa PIN?</Text>
+   194→          </TouchableOpacity>
+   195→        </View>
+   196→      </ScrollView>
+   197→    </SafeAreaView>
+   198→  )
+   199→}
+   200→
+   201→// --- Forgot PIN Screen (3-step OTP flow) ---
+   202→function ForgotPinScreen({ onBack }: { onBack: () => void }) {
+   203→  const [step, setStep] = useState<"phone" | "otp" | "setPin">("phone")
+   204→  const [phone, setPhone] = useState("")
+   205→  const [otp, setOtp] = useState("")
+   206→  const [newPin, setNewPin] = useState("")
+   207→  const [confirmPin, setConfirmPin] = useState("")
+   208→  const [loading, setLoading] = useState(false)
+   209→  const [verifyToken, setVerifyToken] = useState("")
+   210→
+   211→  const handleRequestOtp = async () => {
+   212→    if (!phone) { Alert.alert("Validasi", "Nomor WhatsApp wajib diisi"); return }
+   213→    setLoading(true)
+   214→    try {
+   215→      const res = await api.post("/api/wali/request-otp", { phone, type: "FORGOT_PIN" })
+   216→      Alert.alert("OTP Terkirim", res.devOtp ? `Kode OTP (DEV): ${res.devOtp}` : res.message)
+   217→      setStep("otp")
+   218→    } catch (e: any) { Alert.alert("Gagal", e.message) }
+   219→    finally { setLoading(false) }
+   220→  }
+   221→
+   222→  const handleVerifyOtp = async () => {
+   223→    if (!otp || otp.length !== 6) { Alert.alert("Validasi", "OTP harus 6 digit"); return }
+   224→    setLoading(true)
+   225→    try {
+   226→      const res = await api.post("/api/wali/verify-otp", { phone, otpCode: otp })
+   227→      if (res.verifyToken) {
+   228→        setVerifyToken(res.verifyToken)
+   229→        setStep("setPin")
+   230→        Alert.alert("Terverifikasi", "Silakan buat PIN baru")
+   231→      } else { Alert.alert("Gagal", "Token verifikasi tidak diterima") }
+   232→    } catch (e: any) { Alert.alert("Gagal", e.message) }
+   233→    finally { setLoading(false) }
+   234→  }
+   235→
+   236→  const handleSetPin = async () => {
+   237→    if (!newPin || newPin.length !== 6) { Alert.alert("Validasi", "PIN harus 6 digit"); return }
+   238→    if (newPin !== confirmPin) { Alert.alert("Validasi", "PIN tidak cocok"); return }
+   239→    setLoading(true)
+   240→    try {
+   241→      await api.post("/api/wali/set-pin", { verifyToken, pin: newPin })
+   242→      Alert.alert("Berhasil", "PIN berhasil diubah. Silakan login dengan PIN baru.", [{ text: "OK", onPress: onBack }])
+   243→    } catch (e: any) { Alert.alert("Gagal", e.message) }
+   244→    finally { setLoading(false) }
+   245→  }
+   246→
+   247→  return (
+   248→    <SafeAreaView style={styles.loginContainer}>
+   249→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+   250→      <ScrollView contentContainerStyle={styles.loginScroll}>
+   251→        <View style={styles.loginLogo}>
+   252→          <Ionicons name="key" size={80} color={Colors.white} />
+   253→          <Text style={styles.loginTitle}>Lupa PIN</Text>
+   254→          <Text style={styles.loginSubtitle}>Reset PIN via OTP</Text>
+   255→        </View>
+   256→
+   257→        <View style={styles.loginCard}>
+   258→          {step === "phone" && (
+   259→            <>
+   260→              <Text style={styles.loginCardTitle}>Masukkan Nomor WhatsApp</Text>
+   261→              <Text style={styles.loginCardDesc}>Kami akan kirim kode OTP ke nomor Anda</Text>
+   262→              <Text style={styles.label}>Nomor WhatsApp</Text>
+   263→              <View style={styles.inputContainer}>
+   264→                <Ionicons name="call" size={20} color={Colors.textMuted} style={styles.inputIcon} />
+   265→                <TextInput style={styles.input} placeholder="08xxx atau 628xxx" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+   266→              </View>
+   267→              <TouchableOpacity style={[styles.loginButton, loading && { opacity: 0.6 }]} onPress={handleRequestOtp} disabled={loading}>
+   268→                {loading ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.loginButtonText}>Kirim OTP</Text>}
+   269→              </TouchableOpacity>
+   270→            </>
+   271→          )}
+   272→
+   273→          {step === "otp" && (
+   274→            <>
+   275→              <Text style={styles.loginCardTitle}>Verifikasi OTP</Text>
+   276→              <Text style={styles.loginCardDesc}>Masukkan 6 digit kode yang dikirim</Text>
+   277→              <TextInput
+   278→                style={[styles.input, { textAlign: "center", fontSize: 24, letterSpacing: 8, fontFamily: "monospace" }]}
+   279→                placeholder="000000"
+   280→                value={otp}
+   281→                onChangeText={(t) => setOtp(t.replace(/\D/g, "").slice(0, 6))}
+   282→                keyboardType="numeric"
+   283→                maxLength={6}
+   284→              />
+   285→              <TouchableOpacity style={[styles.loginButton, loading && { opacity: 0.6 }]} onPress={handleVerifyOtp} disabled={loading}>
+   286→                {loading ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.loginButtonText}>Verifikasi</Text>}
+   287→              </TouchableOpacity>
+   288→            </>
+   289→          )}
+   290→
+   291→          {step === "setPin" && (
+   292→            <>
+   293→              <Text style={styles.loginCardTitle}>Buat PIN Baru</Text>
+   294→              <Text style={styles.loginCardDesc}>PIN 6 digit untuk login</Text>
+   295→              <Text style={styles.label}>PIN Baru</Text>
+   296→              <TextInput
+   297→                style={[styles.input, { textAlign: "center", fontSize: 20, letterSpacing: 6, fontFamily: "monospace" }]}
+   298→                placeholder="••••••"
+   299→                value={newPin}
+   300→                onChangeText={(t) => setNewPin(t.replace(/\D/g, "").slice(0, 6))}
+   301→                keyboardType="numeric"
+   302→                secureTextEntry
+   303→                maxLength={6}
+   304→              />
+   305→              <Text style={styles.label}>Konfirmasi PIN</Text>
+   306→              <TextInput
+   307→                style={[styles.input, { textAlign: "center", fontSize: 20, letterSpacing: 6, fontFamily: "monospace" }]}
+   308→                placeholder="••••••"
+   309→                value={confirmPin}
+   310→                onChangeText={(t) => setConfirmPin(t.replace(/\D/g, "").slice(0, 6))}
+   311→                keyboardType="numeric"
+   312→                secureTextEntry
+   313→                maxLength={6}
+   314→              />
+   315→              <TouchableOpacity style={[styles.loginButton, loading && { opacity: 0.6 }]} onPress={handleSetPin} disabled={loading}>
+   316→                {loading ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.loginButtonText}>Simpan PIN</Text>}
+   317→              </TouchableOpacity>
+   318→            </>
+   319→          )}
+   320→
+   321→          <TouchableOpacity onPress={onBack} style={[styles.forgotPinBtn, { marginTop: 16 }]}>
+   322→            <Text style={styles.forgotPinText}>← Kembali ke Login</Text>
+   323→          </TouchableOpacity>
+   324→        </View>
+   325→      </ScrollView>
+   326→    </SafeAreaView>
+   327→  )
+   328→}
+   329→
+   330→// --- Dashboard Screen (List Anak) ---
+   331→function DashboardScreen({
+   332→  wali, santriList, onSelectSantri, onLogout, onRefresh,
+   333→}: {
+   334→  wali: WaliData, santriList: SantriData[],
+   335→  onSelectSantri: (santri: SantriData) => void, onLogout: () => void,
+   336→  onRefresh?: () => Promise<void> | void,
+   337→}) {
+   338→  const [refreshing, setRefreshing] = useState(false)
+   339→  const renderSantri = ({ item }: { item: SantriData }) => (
+   340→    <TouchableOpacity style={styles.santriCard} onPress={() => onSelectSantri(item)}>
+   341→      <View style={styles.santriAvatar}>
+   342→        {item.photoUrl ? (
+   343→          <Image source={{ uri: item.photoUrl }} style={styles.santriPhoto} />
+   344→        ) : (
+   345→          <Text style={styles.santriAvatarText}>{item.name[0]}</Text>
+   346→        )}
+   347→      </View>
+   348→      <View style={styles.santriInfo}>
+   349→        <Text style={styles.santriName}>{item.name}</Text>
+   350→        <Text style={styles.santriNis}>NIS: {item.nis}</Text>
+   351→        <View style={styles.santriBadges}>
+   352→          <View style={styles.badge}><Text style={styles.badgeText}>{item.kelas?.name || "-"}</Text></View>
+   353→          {item.isPrimary && <View style={[styles.badge, { backgroundColor: Colors.primaryLight }]}><Text style={[styles.badgeText, { color: Colors.primaryDark }]}>{item.relationship}</Text></View>}
+   354→        </View>
+   355→      </View>
+   356→      <Ionicons name="chevron-forward" size={24} color={Colors.textMuted} />
+   357→    </TouchableOpacity>
+   358→  )
+   359→
+   360→  return (
+   361→    <SafeAreaView style={styles.screen}>
+   362→      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+   363→      {/* Header */}
+   364→      <View style={styles.header}>
+   365→        <View>
+   366→          <Text style={styles.headerTitle}>Assalamu'alaikum,</Text>
+   367→          <Text style={styles.headerName}>{wali.name} 👋</Text>
+   368→        </View>
+   369→        <TouchableOpacity onPress={onLogout}>
+   370→          <Ionicons name="log-out-outline" size={24} color={Colors.white} />
+   371→        </TouchableOpacity>
+   372→      </View>
+   373→
+   374→      <FlatList
+   375→        data={santriList}
+   376→        keyExtractor={(item) => item.id}
+   377→        renderItem={renderSantri}
+   378→        contentContainerStyle={styles.listContainer}
+   379→        ListHeaderComponent={() => (
+   380→          <Text style={styles.sectionTitle}>Anak Saya ({santriList.length})</Text>
+   381→        )}
+   382→        ListEmptyComponent={() => (
+   383→          <View style={styles.emptyState}>
+   384→            <Ionicons name="people" size={48} color={Colors.textMuted} />
+   385→            <Text style={styles.emptyText}>Belum ada anak terhubung</Text>
+   386→            <Text style={styles.emptySubtext}>Hubungi madrasah untuk menghubungkan akun</Text>
+   387→          </View>
+   388→        )}
+   389→        refreshControl={
+   390→          <RefreshControl
+   391→            refreshing={refreshing}
+   392→            onRefresh={async () => {
+   393→              setRefreshing(true)
+   394→              try {
+   395→                if (onRefresh) await onRefresh()
+   396→              } finally {
+   397→                setRefreshing(false)
+   398→              }
+   399→            }}
+   400→            colors={[Colors.primary]}
+   401→            tintColor={Colors.primary}
+   402→          />
+   403→        }
+   404→      />
+   405→    </SafeAreaView>
+   406→  )
+   407→}
+   408→
+   409→// --- Santri Detail Screen ---
+   410→function SantriDetailScreen({ santri, onBack, refreshKey }: { santri: SantriData, onBack: () => void, refreshKey?: number }) {
+   411→  const [detail, setDetail] = useState<SantriDetail | null>(null)
+   412→  const [perkembangan, setPerkembangan] = useState<PerkembanganV2 | null>(null)
+   413→  const [loading, setLoading] = useState(true)
+   414→  const [error, setError] = useState<string | null>(null)
+   415→  const [activeTab, setActiveTab] = useState("profil")
+   416→
+   417→  const loadDetail = useCallback(async () => {
+   418→    try {
+   419→      setLoading(true)
+   420→      setError(null)
+   421→      // V2: fetch both detail (V1) and perkembangan (V2) in parallel
+   422→      const [detailRes, perkRes] = await Promise.all([
+   423→        api.get(`/api/wali/santri/${santri.id}`),
+   424→        api.get(`/api/wali/perkembangan/${santri.id}`).catch(() => null), // best-effort
+   425→      ])
+   426→      setDetail(detailRes.data)
+   427→      setPerkembangan(perkRes?.data || null)
+   428→    } catch (e: any) {
+   429→      setError(e.message)
+   430→    } finally {
+   431→      setLoading(false)
+   432→    }
+   433→  }, [santri.id])
+   434→
+   435→  useEffect(() => { loadDetail() }, [loadDetail])
+   436→
+   437→  // Auto-refresh when realtime push arrives (App-level refreshKey changes)
+   438→  useEffect(() => {
+   439→    if (refreshKey === undefined) return
+   440→    loadDetail()
+   441→    // eslint-disable-next-line react-hooks/exhaustive-deps
+   442→  }, [refreshKey])
+   443→
+   444→  // Tab groups: 6 tabs that each render multiple sections (scrollable).
+   445→  // Reduces visual clutter from 12 individual tabs. Each group lists the
+   446→  // section ids (matching the original activeTab checks) that it shows.
+   447→  const TAB_GROUPS: Array<{ id: string; label: string; icon: string; sections: string[] }> = [
+   448→    { id: "profil", label: "Profil", icon: "person", sections: ["profile", "qr"] },
+   449→    { id: "akademik", label: "Akademik", icon: "school", sections: ["absensi", "nilai", "perkembangan", "tugas", "rapor"] },
+   450→    { id: "ujian", label: "Ujian", icon: "file-tray-full", sections: ["ujian"] },
+   451→    { id: "keuangan", label: "Keuangan", icon: "wallet", sections: ["tagihan"] },
+   452→    { id: "notif", label: "Notif", icon: "notifications", sections: ["notifikasi"] },
+   453→    { id: "info", label: "Info", icon: "megaphone", sections: ["pengumuman", "chat"] },
+   454→  ]
+   455→  const activeSections = TAB_GROUPS.find(g => g.id === activeTab)?.sections || []
+   456→  const showSection = (id: string) => activeSections.includes(id)
+   457→  const tabs = TAB_GROUPS
+   458→
+   459→  return (
+   460→    <SafeAreaView style={styles.screen}>
+   461→      <View style={styles.detailHeader}>
+   462→        <TouchableOpacity onPress={onBack} style={styles.backButton}>
+   463→          <Ionicons name="arrow-back" size={24} color={Colors.white} />
+   464→        </TouchableOpacity>
+   465→        <Text style={styles.detailHeaderTitle}>{santri.name}</Text>
+   466→        <View style={{ width: 24 }} />
+   467→      </View>
+   468→
+   469→      {/* Santri Info Card */}
+   470→      <View style={styles.detailCard}>
+   471→        <View style={styles.detailAvatar}>
+   472→          <Text style={styles.detailAvatarText}>{santri.name[0]}</Text>
+   473→        </View>
+   474→        <View style={styles.detailInfo}>
+   475→          <Text style={styles.detailName}>{santri.name}</Text>
+   476→          <Text style={styles.detailNis}>NIS: {santri.nis}</Text>
+   477→          <Text style={styles.detailKelas}>{santri.kelas?.name || "Tanpa Kelas"}</Text>
+   478→          {detail?.activePeriod && (
+   479→            <Text style={styles.detailPeriod}>{detail.activePeriod.tahunAjaran} — Semester {detail.activePeriod.semester}</Text>
+   480→          )}
+   481→        </View>
+   482→      </View>
+   483→
+   484→      {/* Quick Stats */}
+   485→      {detail && (
+   486→        <View style={styles.statsRow}>
+   487→          <View style={styles.statCard}>
+   488→            <Text style={styles.statLabel}>Hadir</Text>
+   489→            <Text style={[styles.statValue, { color: Colors.success }]}>{detail.absensiSummary?.hadir || 0}</Text>
+   490→          </View>
+   491→          <View style={styles.statCard}>
+   492→            <Text style={styles.statLabel}>Sakit</Text>
+   493→            <Text style={[styles.statValue, { color: Colors.warning }]}>{detail.absensiSummary?.sakit || 0}</Text>
+   494→          </View>
+   495→          <View style={styles.statCard}>
+   496→            <Text style={styles.statLabel}>Izin</Text>
+   497→            <Text style={[styles.statValue, { color: "#3b82f6" }]}>{detail.absensiSummary?.izin || 0}</Text>
+   498→          </View>
+   499→          <View style={styles.statCard}>
+   500→            <Text style={styles.statLabel}>Alfa</Text>
+   501→            <Text style={[styles.statValue, { color: Colors.danger }]}>{detail.absensiSummary?.alfa || 0}</Text>
+   502→          </View>
+   503→        </View>
+   504→      )}
+   505→
+   506→      {/* Tabs */}
+   507→      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabBar}>
+   508→        {tabs.map((tab) => (
+   509→          <TouchableOpacity
+   510→            key={tab.id}
+   511→            style={[styles.tab, activeTab === tab.id && styles.tabActive]}
+   512→            onPress={() => setActiveTab(tab.id)}
+   513→          >
+   514→            <Ionicons name={tab.icon as any} size={18} color={activeTab === tab.id ? Colors.primary : Colors.textMuted} />
+   515→            <Text style={[styles.tabText, activeTab === tab.id && styles.tabTextActive]}>{tab.label}</Text>
+   516→          </TouchableOpacity>
+   517→        ))}
+   518→      </ScrollView>
+   519→
+   520→      {/* Tab Content */}
+   521→      {loading ? (
+   522→        <View style={{ flex: 1, backgroundColor: Colors.background, padding: 16 }}>
+   523→          <SkeletonCard />
+   524→          <SkeletonCard />
+   525→          <SkeletonCard />
+   526→        </View>
+   527→      ) : error ? (
+   528→        <View style={styles.errorContainer}>
+   529→          <Text style={styles.errorText}>{error}</Text>
+   530→          <TouchableOpacity onPress={loadDetail} style={styles.retryButton}>
+   531→            <Text style={styles.retryText}>Coba lagi</Text>
+   532→          </TouchableOpacity>
+   533→        </View>
+   534→      ) : (
+   535→        <ScrollView style={styles.tabContent}>
+   536→          {showSection("profile") && detail && (
+   537→            <View style={styles.contentCard}>
+   538→              <Text style={styles.contentTitle}>Informasi Pribadi</Text>
+   539→              <InfoRow label="Tempat Lahir" value={detail.santri?.birthPlace || "-"} />
+   540→              <InfoRow label="Tanggal Lahir" value={detail.santri?.birthDate ? formatDate(detail.santri.birthDate) : "-"} />
+   541→              <InfoRow label="Alamat" value={detail.santri?.address || "-"} />
+   542→              {detail.santri?.wali?.map((w: any, i: number) => (
+   543→                <InfoRow key={i} label={`Wali ${i + 1}`} value={`${w.name} (${w.relationship})${w.isPrimary ? " ⭐" : ""}`} />
+   544→              ))}
+   545→            </View>
+   546→          )}
+   547→
+   548→          {showSection("absensi") && detail && (
+   549→            <View style={styles.contentCard}>
+   550→              <Text style={styles.contentTitle}>Riwayat Absensi (30 hari)</Text>
+   551→              {detail.absensi?.length === 0 ? (
+   552→                <Text style={styles.emptyTextSmall}>Belum ada absensi</Text>
+   553→              ) : (
+   554→                detail.absensi?.map((a: any, i: number) => (
+   555→                  <View key={i} style={styles.listRow}>
+   556→                    <Text style={styles.listRowText}>{formatDate(a.date)}</Text>
+   557→                    <View style={[styles.statusBadge, {
+   558→                      backgroundColor: a.status === "HADIR" ? Colors.successLight :
+   559→                        a.status === "SAKIT" ? Colors.warningLight :
+   560→                        a.status === "IZIN" ? "#dbeafe" : Colors.dangerLight
+   561→                    }]}>
+   562→                      <Text style={[styles.statusBadgeText, {
+   563→                        color: a.status === "HADIR" ? Colors.success :
+   564→                          a.status === "SAKIT" ? Colors.warning :
+   565→                          a.status === "IZIN" ? "#3b82f6" : Colors.danger
+   566→                      }]}>
+   567→                        {STATUS_STYLES[a.status]?.label || a.status}
+   568→                      </Text>
+   569→                    </View>
+   570→                  </View>
+   571→                ))
+   572→              )}
+   573→            </View>
+   574→          )}
+   575→
+   576→          {showSection("nilai") && detail && (
+   577→            <View style={styles.contentCard}>
+   578→              <Text style={styles.contentTitle}>Daftar Nilai</Text>
+   579→              {detail.nilai?.length === 0 ? (
+   580→                <Text style={styles.emptyTextSmall}>Belum ada nilai</Text>
+   581→              ) : (
+   582→                detail.nilai?.map((n: any, i: number) => (
+   583→                  <View key={i} style={styles.nilaiRow}>
+   584→                    <View style={{ flex: 1 }}>
+   585→                      <Text style={styles.nilaiMapel}>{n.mapel?.name}</Text>
+   586→                      <Text style={styles.nilaiDate}>{formatDate(n.assessmentDate)}</Text>
+   587→                    </View>
+   588→                    <View style={styles.nilaiBadge}>
+   589→                      <Text style={styles.nilaiType}>{n.type}</Text>
+   590→                    </View>
+   591→                    <Text style={[styles.nilaiScore, { color: n.score >= 70 ? Colors.success : Colors.danger }]}>
+   592→                      {n.score}
+   593→                    </Text>
+   594→                  </View>
+   595→                ))
+   596→              )}
+   597→            </View>
+   598→          )}
+   599→
+   600→          {/* V2: Rekap Perkembangan — trend nilai, materi terbaru, pertemuan terbaru */}
+   601→          {showSection("perkembangan") && (
+   602→            <PerkembanganV2Section perkembangan={perkembangan} loading={loading} />
+   603→          )}
+   604→
+   605→          {showSection("tugas") && (
+   606→            <TugasListSection santriId={santri.id} />
+   607→          )}
+   608→
+   609→          {/* V3 Complete — Ujian Online */}
+   610→          {showSection("ujian") && (
+   611→            <UjianListSection santriId={santri.id} />
+   612→          )}
+   613→
+   614→          {showSection("tagihan") && detail && (
+   615→            <View style={styles.contentCard}>
+   616→              {detail.tagihanSummary && (
+   617→                <View style={styles.tagihanSummary}>
+   618→                  <View style={styles.tagihanSummaryItem}>
+   619→                    <Text style={styles.tagihanSummaryLabel}>Lunas</Text>
+   620→                    <Text style={[styles.tagihanSummaryValue, { color: Colors.success }]}>{detail.tagihanSummary.lunas}</Text>
+   621→                  </View>
+   622→                  <View style={styles.tagihanSummaryItem}>
+   623→                    <Text style={styles.tagihanSummaryLabel}>Cicil</Text>
+   624→                    <Text style={[styles.tagihanSummaryValue, { color: Colors.warning }]}>{detail.tagihanSummary.cicil}</Text>
+   625→                  </View>
+   626→                  <View style={styles.tagihanSummaryItem}>
+   627→                    <Text style={styles.tagihanSummaryLabel}>Belum</Text>
+   628→                    <Text style={[styles.tagihanSummaryValue, { color: Colors.danger }]}>{detail.tagihanSummary.belumBayar}</Text>
+   629→                  </View>
+   630→                </View>
+   631→              )}
+   632→              <Text style={styles.contentTitle}>Daftar Tagihan</Text>
+   633→              {detail.tagihan?.length === 0 ? (
+   634→                <Text style={styles.emptyTextSmall}>Tidak ada tagihan</Text>
+   635→              ) : (
+   636→                detail.tagihan?.map((t: any, i: number) => (
+   637→                  <View key={i} style={styles.tagihanRow}>
+   638→                    <View style={{ flex: 1 }}>
+   639→                      <Text style={styles.tagihanName}>{t.jenisTagihan?.name}</Text>
+   640→                      <Text style={styles.tagihanDesc}>{t.description || formatDate(t.dueDate || t.createdAt)}</Text>
+   641→                    </View>
+   642→                    <View>
+   643→                      <Text style={styles.tagihanAmount}>{formatRupiah(t.amount)}</Text>
+   644→                      <View style={[styles.statusBadge, {
+   645→                        backgroundColor: t.status === "LUNAS" ? Colors.successLight :
+   646→                          t.status === "CICIL" ? Colors.warningLight : Colors.dangerLight
+   647→                      }]}>
+   648→                        <Text style={[styles.statusBadgeText, {
+   649→                          color: t.status === "LUNAS" ? Colors.success :
+   650→                            t.status === "CICIL" ? Colors.warning : Colors.danger
+   651→                        }]}>
+   652→                          {STATUS_STYLES[t.status]?.label || t.status}
+   653→                        </Text>
+   654→                      </View>
+   655→                    </View>
+   656→                  </View>
+   657→                ))
+   658→              )}
+   659→            </View>
+   660→          )}
+   661→
+   662→          {activeTab === "jadwal" && detail && (
+   663→            <View style={styles.contentCard}>
+   664→              <Text style={styles.contentTitle}>Jadwal Pelajaran</Text>
+   665→              {detail.jadwal?.length === 0 ? (
+   666→                <Text style={styles.emptyTextSmall}>Belum ada jadwal</Text>
+   667→              ) : (
+   668→                detail.jadwal?.map((j: any, i: number) => (
+   669→                  <View key={i} style={styles.listRow}>
+   670→                    <View style={{ width: 50 }}>
+   671→                      <Text style={[styles.listRowText, { fontWeight: "bold", color: Colors.primary }]}>
+   672→                        {DAYS.find(d => d.value === j.dayOfWeek)?.short || "?"}
+   673→                      </Text>
+   674→                    </View>
+   675→                    <View style={{ flex: 1 }}>
+   676→                      <Text style={[styles.nilaiMapel, { fontSize: 13 }]}>{j.mapel?.name}</Text>
+   677→                      <Text style={styles.nilaiDate}>{j.startTime} - {j.endTime}</Text>
+   678→                    </View>
+   679→                    <View style={[styles.statusBadge, { backgroundColor: Colors.primaryLight }]}>
+   680→                      <Text style={[styles.statusBadgeText, { color: Colors.primaryDark }]}>{j.guru?.name?.split(" ").slice(0, 2).join(" ") || "-"}</Text>
+   681→                    </View>
+   682→                  </View>
+   683→                ))
+   684→              )}
+   685→            </View>
+   686→          )}
+   687→
+   688→          {showSection("rapor") && detail && (
+   689→            <View style={styles.contentCard}>
+   690→              <Text style={styles.contentTitle}>Rapor Semester</Text>
+   691→              {detail.rapor ? (
+   692→                <View>
+   693→                  <View style={styles.tagihanSummary}>
+   694→                    <View style={styles.tagihanSummaryItem}>
+   695→                      <Text style={styles.tagihanSummaryLabel}>Hadir</Text>
+   696→                      <Text style={[styles.tagihanSummaryValue, { color: Colors.success }]}>{detail.rapor.absensiHadir}</Text>
+   697→                    </View>
+   698→                    <View style={styles.tagihanSummaryItem}>
+   699→                      <Text style={styles.tagihanSummaryLabel}>Sakit</Text>
+   700→                      <Text style={[styles.tagihanSummaryValue, { color: Colors.warning }]}>{detail.rapor.absensiSakit}</Text>
+   701→                    </View>
+   702→                    <View style={styles.tagihanSummaryItem}>
+   703→                      <Text style={styles.tagihanSummaryLabel}>Izin</Text>
+   704→                      <Text style={[styles.tagihanSummaryValue, { color: "#3b82f6" }]}>{detail.rapor.absensiIzin}</Text>
+   705→                    </View>
+   706→                    <View style={styles.tagihanSummaryItem}>
+   707→                      <Text style={styles.tagihanSummaryLabel}>Alfa</Text>
+   708→                      <Text style={[styles.tagihanSummaryValue, { color: Colors.danger }]}>{detail.rapor.absensiAlfa}</Text>
+   709→                    </View>
+   710→                  </View>
+   711→
+   712→                  {/* Nilai rekap per mapel */}
+   713→                  <Text style={[styles.contentTitle, { marginTop: 16 }]}>Rekap Nilai per Mapel</Text>
+   714→                  {detail.nilai?.length === 0 ? (
+   715→                    <Text style={styles.emptyTextSmall}>Belum ada nilai</Text>
+   716→                  ) : (
+   717→                    (() => {
+   718→                      const byMapel: Record<string, number[]> = {}
+   719→                      detail.nilai?.forEach((n: any) => {
+   720→                        const key = n.mapel?.name || "Unknown"
+   721→                        if (!byMapel[key]) byMapel[key] = []
+   722→                        byMapel[key].push(n.score)
+   723→                      })
+   724→                      return Object.entries(byMapel).map(([mapel, scores], i) => {
+   725→                        const avg = scores.reduce((a, b) => a + b, 0) / scores.length
+   726→                        return (
+   727→                          <View key={i} style={styles.listRow}>
+   728→                            <Text style={[styles.listRowText, { flex: 1 }]}>{mapel}</Text>
+   729→                            <Text style={[styles.nilaiScore, { color: avg >= 70 ? Colors.success : Colors.danger, minWidth: 50 }]}>
+   730→                              {avg.toFixed(1)}
+   731→                            </Text>
+   732→                          </View>
+   733→                        )
+   734→                      })
+   735→                    })()
+   736→                  )}
+   737→
+   738→                  {detail.rapor.notes && (
+   739→                    <View style={{ marginTop: 16, padding: 12, backgroundColor: Colors.primaryLight, borderRadius: 8 }}>
+   740→                      <Text style={{ fontSize: 12, fontWeight: "600", color: Colors.primaryDark }}>Catatan Wali Kelas:</Text>
+   741→                      <Text style={{ fontSize: 13, color: Colors.text, marginTop: 4 }}>{detail.rapor.notes}</Text>
+   742→                    </View>
+   743→                  )}
+   744→                </View>
+   745→              ) : (
+   746→                <Text style={styles.emptyTextSmall}>Belum ada rapor untuk semester ini</Text>
+   747→              )}
+   748→            </View>
+   749→          )}
+   750→
+   751→          {/* Pengumuman */}
+   752→          {showSection("pengumuman") && detail && (
+   753→            <View style={styles.contentCard}>
+   754→              <Text style={styles.contentTitle}>Pengumuman</Text>
+   755→              {detail.announcements?.length === 0 ? (
+   756→                <Text style={styles.emptyTextSmall}>Belum ada pengumuman</Text>
+   757→              ) : (
+   758→                detail.announcements?.map((a: any, i: number) => (
+   759→                  <View key={i} style={styles.listRow}>
+   760→                    <View style={{ flex: 1 }}>
+   761→                      <Text style={styles.tagihanName}>{a.title}</Text>
+   762→                      <Text style={styles.tagihanDesc} numberOfLines={2}>{a.content}</Text>
+   763→                      <Text style={[styles.tagihanDesc, { fontSize: 12 }]}>{formatDate(a.publishedAt, true)}</Text>
+   764→                    </View>
+   765→                  </View>
+   766→                ))
+   767→              )}
+   768→            </View>
+   769→          )}
+   770→
+   771→          {/* V6 — Notifikasi */}
+   772→          {showSection("notifikasi") && (
+   773→            <WaliNotifikasiSection token={waliToken} />
+   774→          )}
+   775→
+   776→          {/* V6 — Chat */}
+   777→          {showSection("chat") && (
+   778→            <WaliChatSection token={waliToken} />
+   779→          )}
+   780→
+   781→          {/* V8 — QR Digital Card */}
+   782→          {showSection("qr") && (
+   783→            <WaliQrSection santriId={santri.id} token={waliToken} />
+   784→          )}
+   785→        </ScrollView>
+   786→      )}
+   787→    </SafeAreaView>
+   788→  )
+   789→}
+   790→
+   791→// ============================================================================
+   792→// V6 — Notifikasi, Chat, QR (mobile-wali)
+   793→// ============================================================================
+   794→function WaliNotifikasiSection({ token }: { token: string | null }) {
+   795→  const [list, setList] = useState<any[]>([])
+   796→  const [loading, setLoading] = useState(true)
+   797→  const [stats, setStats] = useState<any>(null)
+   798→  const [error, setError] = useState<string | null>(null)
+   799→
+   800→  const load = useCallback(async () => {
+   801→    if (!token) return
+   802→    try {
+   803→      setLoading(true)
+   804→      setError(null)
+   805→      const res = await fetch(`${API_BASE_URL}/api/wali/notifikasi`, {
+   806→        headers: { Authorization: `Bearer ${token}` },
+   807→      })
+   808→      const data = await res.json()
+   809→      setList(data.data || [])
+   810→      setStats(data.stats)
+   811→    } catch (e: any) {
+   812→      setError(e.message || "Terjadi kesalahan")
+   813→    } finally {
+   814→      setLoading(false)
+   815→    }
+   816→  }, [token])
+   817→
+   818→  useEffect(() => { load() }, [load])
+   819→
+   820→  const markRead = async (id: string) => {
+   821→    try {
+   822→      await fetch(`${API_BASE_URL}/api/wali/notifikasi/${id}`, {
+   823→        method: "PUT",
+   824→        headers: { Authorization: `Bearer ${token}` },
+   825→      })
+   826→      load()
+   827→    } catch (e: any) {
+   828→      Alert.alert("Gagal", e.message)
+   829→    }
+   830→  }
+   831→
+   832→  if (loading) return <View style={styles.contentCard}><ActivityIndicator size="large" color={Colors.primary} /></View>
+   833→
+   834→  if (error) {
+   835→    return (
+   836→      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 20 }}>
+   837→        <Text style={{ color: Colors.danger, textAlign: "center", marginBottom: 16 }}>{error}</Text>
+   838→        <TouchableOpacity onPress={() => { setError(null); load() }} style={{ backgroundColor: Colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}>
+   839→          <Text style={{ color: Colors.white, fontWeight: "600" }}>Coba Lagi</Text>
+   840→        </TouchableOpacity>
+   841→      </View>
+   842→    )
+   843→  }
+   844→
+   845→  return (
+   846→    <View style={styles.contentCard}>
+   847→      <Text style={styles.contentTitle}>Notifikasi</Text>
+   848→      {stats && stats.totalUnread > 0 && (
+   849→        <View style={[styles.statusBadge, { backgroundColor: Colors.dangerLight, alignSelf: "flex-start", marginBottom: 8 }]}>
+   850→          <Text style={[styles.statusBadgeText, { color: Colors.danger }]}>{stats.totalUnread} belum dibaca</Text>
+   851→        </View>
+   852→      )}
+   853→      {list.length === 0 ? (
+   854→        <Text style={styles.emptyTextSmall}>Tidak ada notifikasi</Text>
+   855→      ) : (
+   856→        list.map((n: any, i: number) => (
+   857→          <View key={i} style={[styles.listRow, !n.isRead && { backgroundColor: Colors.primaryLight + "40" }]}>
+   858→            <View style={{ flex: 1 }}>
+   859→              <Text style={[styles.tagihanName, !n.isRead && { fontWeight: "bold" }]}>{n.title}</Text>
+   860→              <Text style={styles.tagihanDesc}>{n.message}</Text>
+   861→              <Text style={[styles.tagihanDesc, { fontSize: 12 }]}>{formatDate(n.createdAt, true)}</Text>
+   862→            </View>
+   863→            {!n.isRead && (
+   864→              <TouchableOpacity onPress={() => markRead(n.id)} style={[styles.submitButton, { backgroundColor: Colors.primary }]}>
+   865→                <Text style={styles.submitButtonText}>Baca</Text>
+   866→              </TouchableOpacity>
+   867→            )}
+   868→          </View>
+   869→        ))
+   870→      )}
+   871→    </View>
+   872→  )
+   873→}
+   874→
+   875→function WaliChatSection({ token }: { token: string | null }) {
+   876→  const [rooms, setRooms] = useState<any[]>([])
+   877→  const [loading, setLoading] = useState(true)
+   878→  const [selectedRoom, setSelectedRoom] = useState<any | null>(null)
+   879→
+   880→  const load = useCallback(async () => {
+   881→    if (!token) return
+   882→    try {
+   883→      setLoading(true)
+   884→      const res = await fetch(`${API_BASE_URL}/api/wali/chat`, {
+   885→        headers: { Authorization: `Bearer ${token}` },
+   886→      })
+   887→      const data = await res.json()
+   888→      setRooms(data.data || [])
+   889→    } catch (e: any) {
+   890→      console.error("chat load error:", e.message)
+   891→    } finally {
+   892→      setLoading(false)
+   893→    }
+   894→  }, [token])
+   895→
+   896→  useEffect(() => { load() }, [load])
+   897→
+   898→  if (loading) return <View style={styles.contentCard}><ActivityIndicator size="large" color={Colors.primary} /></View>
+   899→
+   900→  if (selectedRoom) {
+   901→    return <WaliChatRoom room={selectedRoom} token={token} onBack={() => { setSelectedRoom(null); load() }} />
+   902→  }
+   903→
+   904→  return (
+   905→    <View style={styles.contentCard}>
+   906→      <Text style={styles.contentTitle}>Chat</Text>
+   907→      {rooms.length === 0 ? (
+   908→        <Text style={styles.emptyTextSmall}>Belum ada percakapan. Mulai chat dengan wali kelas atau madrasah.</Text>
+   909→      ) : (
+   910→        rooms.map((r: any, i: number) => (
+   911→          <TouchableOpacity key={i} style={styles.listRow} onPress={() => setSelectedRoom(r)}>
+   912→            <View style={{ flex: 1 }}>
+   913→              <Text style={styles.tagihanName}>{r.type === "WALI_WALI_KELAS" ? "Wali Kelas" : r.type === "WALI_MADRASAH" ? "Madrasah" : r.type}</Text>
+   914→              {r.lastMessage && <Text style={styles.tagihanDesc} numberOfLines={1}>{r.lastMessage}</Text>}
+   915→              {r.santri && <Text style={[styles.tagihanDesc, { fontSize: 12 }]}>Tentang: {r.santri.name}</Text>}
+   916→            </View>
+   917→            {r._count?.messages > 0 && (
+   918→              <View style={[styles.statusBadge, { backgroundColor: Colors.dangerLight }]}>
+   919→                <Text style={[styles.statusBadgeText, { color: Colors.danger, fontSize: 12 }]}>{r._count.messages}</Text>
+   920→              </View>
+   921→            )}
+   922→          </TouchableOpacity>
+   923→        ))
+   924→      )}
+   925→    </View>
+   926→  )
+   927→}
+   928→
+   929→function WaliChatRoom({ room, token, onBack }: { room: any, token: string | null, onBack: () => void }) {
+   930→  const [messages, setMessages] = useState<any[]>([])
+   931→  const [input, setInput] = useState("")
+   932→  const [loading, setLoading] = useState(true)
+   933→
+   934→  const loadMessages = useCallback(async () => {
+   935→    if (!token) return
+   936→    try {
+   937→      const res = await fetch(`${API_BASE_URL}/api/wali/chat/${room.id}/messages`, {
+   938→        headers: { Authorization: `Bearer ${token}` },
+   939→      })
+   940→      const data = await res.json()
+   941→      setMessages(data.data || [])
+   942→    } catch (e: any) {
+   943→      console.error("msg load error:", e.message)
+   944→    } finally {
+   945→      setLoading(false)
+   946→    }
+   947→  }, [token, room.id])
+   948→
+   949→  useEffect(() => { loadMessages() }, [loadMessages])
+   950→
+   951→  const send = async () => {
+   952→    if (!input.trim() || !token) return
+   953→    try {
+   954→      await fetch(`${API_BASE_URL}/api/wali/chat/${room.id}/messages`, {
+   955→        method: "POST",
+   956→        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+   957→        body: JSON.stringify({ message: input }),
+   958→      })
+   959→      setInput("")
+   960→      loadMessages()
+   961→    } catch (e: any) {
+   962→      Alert.alert("Gagal", e.message)
+   963→    }
+   964→  }
+   965→
+   966→  if (loading) return <View style={styles.contentCard}><ActivityIndicator size="large" color={Colors.primary} /></View>
+   967→
+   968→  return (
+   969→    <View style={styles.contentCard}>
+   970→      <TouchableOpacity onPress={onBack} style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
+   971→        <Ionicons name="arrow-back" size={20} color={Colors.primary} />
+   972→        <Text style={{ color: Colors.primary, marginLeft: 4 }}>Kembali</Text>
+   973→      </TouchableOpacity>
+   974→      <Text style={styles.contentTitle}>{room.type === "WALI_WALI_KELAS" ? "Chat Wali Kelas" : "Chat Madrasah"}</Text>
+   975→      <View style={{ maxHeight: 300, marginBottom: 8 }}>
+   976→        <ScrollView>
+   977→          {messages.map((m: any, i: number) => (
+   978→            <View key={i} style={{
+   979→              alignSelf: m.senderType === "WALI" ? "flex-end" : "flex-start",
+   980→              backgroundColor: m.senderType === "WALI" ? Colors.primaryLight : Colors.border,
+   981→              padding: 8, borderRadius: 8, marginBottom: 4, maxWidth: "80%",
+   982→            }}>
+   983→              <Text style={{ fontSize: 13, color: m.senderType === "WALI" ? Colors.primaryDark : Colors.text }}>{m.message}</Text>
+   984→              <Text style={{ fontSize: 9, color: Colors.textMuted, marginTop: 2 }}>{formatDate(m.createdAt, true)}</Text>
+   985→            </View>
+   986→          ))}
+   987→        </ScrollView>
+   988→      </View>
+   989→      <View style={{ flexDirection: "row", gap: 8 }}>
+   990→        <TextInput
+   991→          style={[styles.textInput, { flex: 1 }]}
+   992→          value={input}
+   993→          onChangeText={setInput}
+   994→          placeholder="Tulis pesan..."
+   995→        />
+   996→        <TouchableOpacity onPress={send} style={[styles.submitButton, { paddingHorizontal: 16 }]}>
+   997→          <Ionicons name="send" size={18} color={Colors.white} />
+   998→        </TouchableOpacity>
+   999→      </View>
+  1000→    </View>
+  1001→  )
+  1002→}
+  1003→
+  1004→function WaliQrSection({ santriId, token }: { santriId: string, token: string | null }) {
+  1005→  const [qrData, setQrData] = useState<any>(null)
+  1006→  const [loading, setLoading] = useState(true)
+  1007→
+  1008→  useEffect(() => {
+  1009→    if (!token) return
+  1010→    ;(async () => {
+  1011→      try {
+  1012→        const res = await fetch(`${API_BASE_URL}/api/wali/qr/${santriId}`, {
+  1013→          headers: { Authorization: `Bearer ${token}` },
+  1014→        })
+  1015→        const data = await res.json()
+  1016→        setQrData(data.data)
+  1017→      } catch (e: any) {
+  1018→        console.error("qr load error:", e.message)
+  1019→      } finally {
+  1020→        setLoading(false)
+  1021→      }
+  1022→    })()
+  1023→  }, [santriId, token])
+  1024→
+  1025→  if (loading) return <View style={styles.contentCard}><ActivityIndicator size="large" color={Colors.primary} /></View>
+  1026→
+  1027→  return (
+  1028→    <View style={styles.contentCard}>
+  1029→      <Text style={styles.contentTitle}>QR Santri</Text>
+  1030→      {qrData ? (
+  1031→        <View style={{ alignItems: "center", marginTop: 16 }}>
+  1032→          <Image
+  1033→            source={{ uri: qrData.qrDataUrl }}
+  1034→            style={{ width: 200, height: 200, borderRadius: 12 }}
+  1035→          />
+  1036→          <Text style={{ fontSize: 16, fontWeight: "bold", marginTop: 12, color: Colors.text }}>{qrData.santri?.name}</Text>
+  1037→          <Text style={{ fontSize: 12, color: Colors.textMuted }}>NIS: {qrData.santri?.nis}</Text>
+  1038→          {qrData.santri?.kelas && <Text style={{ fontSize: 12, color: Colors.textMuted }}>{qrData.santri.kelas.name}</Text>}
+  1039→          <Text style={{ fontSize: 12, color: Colors.textMuted, marginTop: 8, textAlign: "center" }}>
+  1040→            Tunjukkan QR ini untuk absensi, identitas, atau keperluan lain di madrasah.
+  1041→          </Text>
+  1042→        </View>
+  1043→      ) : (
+  1044→        <Text style={styles.emptyTextSmall}>Gagal memuat QR</Text>
+  1045→      )}
+  1046→    </View>
+  1047→  )
+  1048→}
+  1049→
+  1050→// ============================================================================
+  1051→// HELPER COMPONENTS
+  1052→// ============================================================================
+  1053→function InfoRow({ label, value }: { label: string; value: string }) {
+  1054→  return (
+  1055→    <View style={styles.infoRow}>
+  1056→      <Text style={styles.infoLabel}>{label}</Text>
+  1057→      <Text style={styles.infoValue}>{value}</Text>
+  1058→    </View>
+  1059→  )
+  1060→}
+  1061→
+  1062→// ============================================================================
+  1063→// V2 — Tugas & Pengumpulan (mobile-wali)
+  1064→// ============================================================================
+  1065→function TugasListSection({ santriId }: { santriId: string }) {
+  1066→  const [tugasList, setTugasList] = useState<any[]>([])
+  1067→  const [stats, setStats] = useState<any>(null)
+  1068→  const [loading, setLoading] = useState(true)
+  1069→  const [error, setError] = useState<string | null>(null)
+  1070→  const [submitModal, setSubmitModal] = useState<any | null>(null)
+  1071→
+  1072→  const load = useCallback(async () => {
+  1073→    try {
+  1074→      setLoading(true)
+  1075→      setError(null)
+  1076→      const res = await api.get(`/api/wali/tugas`, { santriId })
+  1077→      setTugasList(res.data)
+  1078→      setStats(res.stats)
+  1079→    } catch (e: any) {
+  1080→      setError(e.message)
+  1081→    } finally {
+  1082→      setLoading(false)
+  1083→    }
+  1084→  }, [santriId])
+  1085→
+  1086→  useEffect(() => { load() }, [load])
+  1087→
+  1088→  if (loading) {
+  1089→    return (
+  1090→      <View style={styles.contentCard}>
+  1091→        <ActivityIndicator size="large" color={Colors.primary} />
+  1092→      </View>
+  1093→    )
+  1094→  }
+  1095→
+  1096→  if (error) {
+  1097→    return (
+  1098→      <View style={styles.contentCard}>
+  1099→        <Text style={styles.errorText}>{error}</Text>
+  1100→        <TouchableOpacity onPress={load} style={styles.retryButton}>
+  1101→          <Text style={styles.retryText}>Coba lagi</Text>
+  1102→        </TouchableOpacity>
+  1103→      </View>
+  1104→    )
+  1105→  }
+  1106→
+  1107→  return (
+  1108→    <View style={styles.contentCard}>
+  1109→      <Text style={styles.contentTitle}>Tugas & Pengumpulan</Text>
+  1110→
+  1111→      {stats && (
+  1112→        <View style={[styles.tagihanSummary, { marginBottom: 12 }]}>
+  1113→          <View style={styles.tagihanSummaryItem}>
+  1114→            <Text style={styles.tagihanSummaryLabel}>Dikumpul</Text>
+  1115→            <Text style={[styles.tagihanSummaryValue, { color: Colors.primary }]}>{stats.submitted}</Text>
+  1116→          </View>
+  1117→          <View style={styles.tagihanSummaryItem}>
+  1118→            <Text style={styles.tagihanSummaryLabel}>Dinilai</Text>
+  1119→            <Text style={[styles.tagihanSummaryValue, { color: Colors.success }]}>{stats.graded}</Text>
+  1120→          </View>
+  1121→          <View style={styles.tagihanSummaryItem}>
+  1122→            <Text style={styles.tagihanSummaryLabel}>Belum</Text>
+  1123→            <Text style={[styles.tagihanSummaryValue, { color: Colors.warning }]}>{stats.notSubmitted}</Text>
+  1124→          </View>
+  1125→          <View style={styles.tagihanSummaryItem}>
+  1126→            <Text style={styles.tagihanSummaryLabel}>Lewat</Text>
+  1127→            <Text style={[styles.tagihanSummaryValue, { color: Colors.danger }]}>{stats.overdue}</Text>
+  1128→          </View>
+  1129→        </View>
+  1130→      )}
+  1131→
+  1132→      {tugasList.length === 0 ? (
+  1133→        <Text style={styles.emptyTextSmall}>Belum ada tugas untuk santri ini</Text>
+  1134→      ) : (
+  1135→        tugasList.map((t: any, i: number) => {
+  1136→          const sub = t.submission
+  1137→          const isOverdue = t.isOverdue
+  1138→          const isGraded = sub?.status === "GRADED"
+  1139→          const isLate = sub?.status === "LATE"
+  1140→          const canSubmit = !isGraded
+  1141→
+  1142→          return (
+  1143→            <View key={i} style={[styles.tagihanRow, isOverdue && !sub && { borderColor: Colors.danger, backgroundColor: Colors.dangerLight }]}>
+  1144→              <View style={{ flex: 1 }}>
+  1145→                <Text style={styles.tagihanName}>{t.title}</Text>
+  1146→                <Text style={styles.tagihanDesc}>
+  1147→                  {t.mapel?.name} • Tenggat: {formatDate(t.dueDate, true)}
+  1148→                </Text>
+  1149→                {sub?.feedback && (
+  1150→                  <Text style={[styles.tagihanDesc, { fontStyle: "italic", marginTop: 4 }]}>
+  1151→                    Feedback: {sub.feedback}
+  1152→                  </Text>
+  1153→                )}
+  1154→              </View>
+  1155→              <View>
+  1156→                {!sub && (
+  1157→                  <View style={[styles.statusBadge, {
+  1158→                    backgroundColor: isOverdue ? Colors.dangerLight : Colors.warningLight,
+  1159→                  }]}>
+  1160→                    <Text style={[styles.statusBadgeText, {
+  1161→                      color: isOverdue ? Colors.danger : Colors.warning,
+  1162→                    }]}>
+  1163→                      {isOverdue ? "Lewat" : "Belum"}
+  1164→                    </Text>
+  1165→                  </View>
+  1166→                )}
+  1167→                {sub && (
+  1168→                  <View style={[styles.statusBadge, {
+  1169→                    backgroundColor: isGraded ? Colors.successLight : isLate ? Colors.warningLight : Colors.primaryLight,
+  1170→                  }]}>
+  1171→                    <Text style={[styles.statusBadgeText, {
+  1172→                      color: isGraded ? Colors.success : isLate ? Colors.warning : Colors.primaryDark,
+  1173→                    }]}>
+  1174→                      {isGraded ? `Nilai: ${sub.score}` : isLate ? "Terlambat" : "Dikumpul"}
+  1175→                    </Text>
+  1176→                  </View>
+  1177→                )}
+  1178→                {canSubmit && (
+  1179→                  <TouchableOpacity
+  1180→                    onPress={() => setSubmitModal(t)}
+  1181→                    style={[styles.submitButton, { marginTop: 6 }]}
+  1182→                  >
+  1183→                    <Text style={styles.submitButtonText}>
+  1184→                      {sub ? "Kumpul Ulang" : "Kumpulkan"}
+  1185→                    </Text>
+  1186→                  </TouchableOpacity>
+  1187→                )}
+  1188→              </View>
+  1189→            </View>
+  1190→          )
+  1191→        })
+  1192→      )}
+  1193→
+  1194→      {submitModal && (
+  1195→        <TugasSubmitModal
+  1196→          tugas={submitModal}
+  1197→          santriId={santriId}
+  1198→          onClose={() => setSubmitModal(null)}
+  1199→          onSuccess={() => { setSubmitModal(null); load() }}
+  1200→        />
+  1201→      )}
+  1202→    </View>
+  1203→  )
+  1204→}
+  1205→
+  1206→function TugasSubmitModal({
+  1207→  tugas, santriId, onClose, onSuccess,
+  1208→}: {
+  1209→  tugas: any
+  1210→  santriId: string
+  1211→  onClose: () => void
+  1212→  onSuccess: () => void
+  1213→}) {
+  1214→  const [textAnswer, setTextAnswer] = useState("")
+  1215→  const [fileUrl, setFileUrl] = useState("")
+  1216→  const [submitting, setSubmitting] = useState(false)
+  1217→
+  1218→  const handleSubmit = async () => {
+  1219→    if (!textAnswer.trim() && !fileUrl.trim()) {
+  1220→      Alert.alert("Validasi", "Isi jawaban teks atau tempel URL file jawaban")
+  1221→      return
+  1222→    }
+  1223→    setSubmitting(true)
+  1224→    try {
+  1225→      const res = await api.post(`/api/wali/tugas/${tugas.id}/submit`, {
+  1226→        santriId,
+  1227→        textAnswer: textAnswer.trim() || null,
+  1228→        fileUrl: fileUrl.trim() || null,
+  1229→      })
+  1230→      Alert.alert("Berhasil", res.message || "Tugas berhasil dikumpulkan", [
+  1231→        { text: "OK", onPress: onSuccess },
+  1232→      ])
+  1233→    } catch (e: any) {
+  1234→      Alert.alert("Gagal", e.message)
+  1235→    } finally {
+  1236→      setSubmitting(false)
+  1237→    }
+  1238→  }
+  1239→
+  1240→  return (
+  1241→    <Modal visible={true} animationType="slide" transparent={true}>
+  1242→      <View style={styles.modalOverlay}>
+  1243→        <View style={styles.modalContent}>
+  1244→          <View style={styles.modalHeader}>
+  1245→            <Text style={styles.modalTitle}>Kumpulkan Tugas</Text>
+  1246→            <TouchableOpacity onPress={onClose}>
+  1247→              <Ionicons name="close" size={24} color={Colors.textMuted} />
+  1248→            </TouchableOpacity>
+  1249→          </View>
+  1250→
+  1251→          <ScrollView style={{ maxHeight: 400 }}>
+  1252→            <Text style={styles.modalTugasTitle}>{tugas.title}</Text>
+  1253→            <Text style={styles.modalTugasMeta}>
+  1254→              {tugas.mapel?.name} • Tenggat: {formatDate(tugas.dueDate, true)}
+  1255→            </Text>
+  1256→            {tugas.description ? (
+  1257→              <Text style={styles.modalTugasDesc}>{tugas.description}</Text>
+  1258→            ) : null}
+  1259→
+  1260→            <Text style={[styles.infoLabel, { marginTop: 12 }]}>Jawaban Teks (opsional)</Text>
+  1261→            <TextInput
+  1262→              style={[styles.textInput, { minHeight: 80, textAlignVertical: "top" }]}
+  1263→              value={textAnswer}
+  1264→              onChangeText={setTextAnswer}
+  1265→              placeholder="Tulis jawaban di sini..."
+  1266→              multiline
+  1267→              numberOfLines={4}
+  1268→            />
+  1269→
+  1270→            <Text style={[styles.infoLabel, { marginTop: 12 }]}>URL File Jawaban (opsional)</Text>
+  1271→            <TextInput
+  1272→              style={styles.textInput}
+  1273→              value={fileUrl}
+  1274→              onChangeText={setFileUrl}
+  1275→              placeholder="https://drive.google.com/..."
+  1276→              autoCapitalize="none"
+  1277→              autoCorrect={false}
+  1278→              keyboardType="url"
+  1279→            />
+  1280→            <Text style={styles.modalHint}>
+  1281→              Tip: Upload file ke Google Drive atau layanan lain, lalu tempel link-nya di sini.
+  1282→              File lokal akan didukung di versi mendatang.
+  1283→            </Text>
+  1284→          </ScrollView>
+  1285→
+  1286→          <View style={styles.modalFooter}>
+  1287→            <TouchableOpacity style={styles.modalCancelButton} onPress={onClose} disabled={submitting}>
+  1288→              <Text style={styles.modalCancelText}>Batal</Text>
+  1289→            </TouchableOpacity>
+  1290→            <TouchableOpacity style={styles.modalSubmitButton} onPress={handleSubmit} disabled={submitting}>
+  1291→              {submitting ? (
+  1292→                <ActivityIndicator size="small" color={Colors.white} />
+  1293→              ) : (
+  1294→                <Text style={styles.modalSubmitText}>Kumpulkan</Text>
+  1295→              )}
+  1296→            </TouchableOpacity>
+  1297→          </View>
+  1298→        </View>
+  1299→      </View>
+  1300→    </Modal>
+  1301→  )
+  1302→}
+  1303→
+  1304→// ============================================================================
+  1305→// V2: Rekap Perkembangan Section — trend nilai, materi terbaru, pertemuan terbaru
+  1306→// ============================================================================
+  1307→function PerkembanganV2Section({ perkembangan, loading }: { perkembangan: PerkembanganV2 | null, loading: boolean }) {
+  1308→  if (loading) {
+  1309→    return (
+  1310→      <View style={styles.contentCard}>
+  1311→        <ActivityIndicator size="large" color={Colors.primary} />
+  1312→      </View>
+  1313→    )
+  1314→  }
+  1315→
+  1316→  if (!perkembangan) {
+  1317→    return (
+  1318→      <View style={styles.contentCard}>
+  1319→        <Text style={styles.emptyTextSmall}>Rekap perkembangan belum tersedia</Text>
+  1320→      </View>
+  1321→    )
+  1322→  }
+  1323→
+  1324→  const trendIcons: Record<string, { icon: string; color: string; label: string }> = {
+  1325→    NAIK: { icon: "trending-up", color: Colors.success, label: "Naik" },
+  1326→    TURUN: { icon: "trending-down", color: Colors.danger, label: "Turun" },
+  1327→    STABIL: { icon: "remove", color: Colors.textMuted, label: "Stabil" },
+  1328→    BARU: { icon: "sparkles", color: Colors.primary, label: "Baru" },
+  1329→  }
+  1330→
+  1331→  return (
+  1332→    <ScrollView>
+  1333→      {/* Persentase Kehadiran 90 hari */}
+  1334→      <View style={styles.contentCard}>
+  1335→        <Text style={styles.contentTitle}>Kehadiran 90 Hari Terakhir</Text>
+  1336→        <View style={[styles.tagihanSummary, { marginBottom: 12 }]}>
+  1337→          <View style={styles.tagihanSummaryItem}>
+  1338→            <Text style={styles.tagihanSummaryLabel}>Hadir</Text>
+  1339→            <Text style={[styles.tagihanSummaryValue, { color: Colors.success, fontSize: 18 }]}>
+  1340→              {perkembangan.absensiSummary.persentaseHadir}%
+  1341→            </Text>
+  1342→          </View>
+  1343→          <View style={styles.tagihanSummaryItem}>
+  1344→            <Text style={styles.tagihanSummaryLabel}>Hadir</Text>
+  1345→            <Text style={[styles.tagihanSummaryValue, { color: Colors.success }]}>{perkembangan.absensiSummary.hadir}</Text>
+  1346→          </View>
+  1347→          <View style={styles.tagihanSummaryItem}>
+  1348→            <Text style={styles.tagihanSummaryLabel}>Sakit/Izin</Text>
+  1349→            <Text style={[styles.tagihanSummaryValue, { color: Colors.warning }]}>
+  1350→              {perkembangan.absensiSummary.sakit + perkembangan.absensiSummary.izin}
+  1351→            </Text>
+  1352→          </View>
+  1353→          <View style={styles.tagihanSummaryItem}>
+  1354→            <Text style={styles.tagihanSummaryLabel}>Alfa</Text>
+  1355→            <Text style={[styles.tagihanSummaryValue, { color: Colors.danger }]}>{perkembangan.absensiSummary.alfa}</Text>
+  1356→          </View>
+  1357→        </View>
+  1358→      </View>
+  1359→
+  1360→      {/* Trend Nilai per Mapel */}
+  1361→      <View style={styles.contentCard}>
+  1362→        <Text style={styles.contentTitle}>Rekap Nilai per Mapel</Text>
+  1363→        {perkembangan.nilaiPerMapel.length === 0 ? (
+  1364→          <Text style={styles.emptyTextSmall}>Belum ada nilai</Text>
+  1365→        ) : (
+  1366→          perkembangan.nilaiPerMapel.map((npm, i) => {
+  1367→            const trend = trendIcons[npm.trend] || trendIcons.BARU
+  1368→            const kkm = npm.mapel?.kkm || 70
+  1369→            const isAboveKKM = npm.rataRata !== null && npm.rataRata >= kkm
+  1370→            return (
+  1371→              <View key={i} style={styles.listRow}>
+  1372→                <View style={{ flex: 1 }}>
+  1373→                  <Text style={styles.tagihanName}>{npm.mapel?.name}</Text>
+  1374→                  <Text style={styles.tagihanDesc}>
+  1375→                    {Object.entries(npm.nilaiByType).map(([type, arr]) => `${type}: ${arr.length}`).join(" • ")}
+  1376→                  </Text>
+  1377→                </View>
+  1378→                <View style={{ alignItems: "flex-end" }}>
+  1379→                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+  1380→                    <Ionicons name={trend.icon as any} size={14} color={trend.color} />
+  1381→                    <Text style={{ fontSize: 12, color: trend.color }}>{trend.label}</Text>
+  1382→                  </View>
+  1383→                  <Text style={[styles.nilaiScore, { color: isAboveKKM ? Colors.success : Colors.danger, fontSize: 18 }]}>
+  1384→                    {npm.rataRata ?? "-"}
+  1385→                  </Text>
+  1386→                  <Text style={styles.tagihanDesc}>KKM: {kkm}</Text>
+  1387→                </View>
+  1388→              </View>
+  1389→            )
+  1390→          })
+  1391→        )}
+  1392→      </View>
+  1393→
+  1394→      {/* Materi Terbaru */}
+  1395→      {perkembangan.materiTerbaru.length > 0 && (
+  1396→        <View style={styles.contentCard}>
+  1397→          <Text style={styles.contentTitle}>Materi Pembelajaran Terbaru</Text>
+  1398→          {perkembangan.materiTerbaru.map((m, i) => (
+  1399→            <View key={i} style={styles.listRow}>
+  1400→              <View style={[styles.statusBadge, { backgroundColor: Colors.primaryLight }]}>
+  1401→                <Text style={[styles.statusBadgeText, { color: Colors.primaryDark, fontSize: 9 }]}>
+  1402→                  {m.type}
+  1403→                </Text>
+  1404→              </View>
+  1405→              <View style={{ flex: 1, marginLeft: 8 }}>
+  1406→                <Text style={styles.tagihanName}>{m.title}</Text>
+  1407→                <Text style={styles.tagihanDesc}>{m.mapel} • {formatDate(m.publishedAt)}</Text>
+  1408→              </View>
+  1409→            </View>
+  1410→          ))}
+  1411→        </View>
+  1412→      )}
+  1413→
+  1414→      {/* Pertemuan Terbaru */}
+  1415→      {perkembangan.pertemuanTerbaru.length > 0 && (
+  1416→        <View style={styles.contentCard}>
+  1417→          <Text style={styles.contentTitle}>Pertemuan Terbaru</Text>
+  1418→          {perkembangan.pertemuanTerbaru.map((p, i) => {
+  1419→            const statusColors: Record<string, string> = {
+  1420→              HADIR: Colors.success,
+  1421→              SAKIT: Colors.warning,
+  1422→              IZIN: "#3b82f6",
+  1423→              ALFA: Colors.danger,
+  1424→              BELUM: Colors.textMuted,
+  1425→            }
+  1426→            const statusColor = statusColors[p.santriAbsensi] || Colors.textMuted
+  1427→            return (
+  1428→              <View key={i} style={styles.listRow}>
+  1429→                <View style={{ flex: 1 }}>
+  1430→                  <Text style={styles.tagihanName}>
+  1431→                    #{p.pertemuanKe} {p.mapel}
+  1432→                  </Text>
+  1433→                  <Text style={styles.tagihanDesc}>
+  1434→                    {formatDate(p.date)}{p.topic ? ` • ${p.topic}` : ""}
+  1435→                  </Text>
+  1436→                </View>
+  1437→                <View style={[styles.statusBadge, { backgroundColor: statusColor + "20" }]}>
+  1438→                  <Text style={[styles.statusBadgeText, { color: statusColor, fontSize: 12 }]}>
+  1439→                    {STATUS_STYLES[p.santriAbsensi]?.label || (p.santriAbsensi === "BELUM" ? "Belum Absen" : p.santriAbsensi)}
+  1440→                  </Text>
+  1441→                </View>
+  1442→              </View>
+  1443→            )
+  1444→          })}
+  1445→        </View>
+  1446→      )}
+  1447→
+  1448→      {/* Status Tugas */}
+  1449→      {perkembangan.tugasSummary && (
+  1450→        <View style={styles.contentCard}>
+  1451→          <Text style={styles.contentTitle}>Status Tugas</Text>
+  1452→          <View style={styles.tagihanSummary}>
+  1453→            <View style={styles.tagihanSummaryItem}>
+  1454→              <Text style={styles.tagihanSummaryLabel}>Dikumpul</Text>
+  1455→              <Text style={[styles.tagihanSummaryValue, { color: Colors.primary }]}>{perkembangan.tugasSummary.submitted}</Text>
+  1456→            </View>
+  1457→            <View style={styles.tagihanSummaryItem}>
+  1458→              <Text style={styles.tagihanSummaryLabel}>Dinilai</Text>
+  1459→              <Text style={[styles.tagihanSummaryValue, { color: Colors.success }]}>{perkembangan.tugasSummary.graded}</Text>
+  1460→            </View>
+  1461→            <View style={styles.tagihanSummaryItem}>
+  1462→              <Text style={styles.tagihanSummaryLabel}>Belum</Text>
+  1463→              <Text style={[styles.tagihanSummaryValue, { color: Colors.warning }]}>{perkembangan.tugasSummary.notSubmitted}</Text>
+  1464→            </View>
+  1465→            <View style={styles.tagihanSummaryItem}>
+  1466→              <Text style={styles.tagihanSummaryLabel}>Lewat</Text>
+  1467→              <Text style={[styles.tagihanSummaryValue, { color: Colors.danger }]}>{perkembangan.tugasSummary.overdueNotSubmitted}</Text>
+  1468→            </View>
+  1469→          </View>
+  1470→        </View>
+  1471→      )}
+  1472→    </ScrollView>
+  1473→  )
+  1474→}
+  1475→
+  1476→// ============================================================================
+  1477→// V3 COMPLETE — Ujian Online (mobile-wali)
+  1478→// ============================================================================
+  1479→function UjianListSection({ santriId }: { santriId: string }) {
+  1480→  const [ujianList, setUjianList] = useState<any[]>([])
+  1481→  const [loading, setLoading] = useState(true)
+  1482→  const [error, setError] = useState<string | null>(null)
+  1483→  const [takeUjian, setTakeUjian] = useState<any | null>(null)
+  1484→
+  1485→  const load = useCallback(async () => {
+  1486→    try {
+  1487→      setLoading(true)
+  1488→      setError(null)
+  1489→      const res = await api.get(`/api/wali/ujian`, { santriId })
+  1490→      setUjianList(res.data)
+  1491→    } catch (e: any) {
+  1492→      setError(e.message)
+  1493→    } finally {
+  1494→      setLoading(false)
+  1495→    }
+  1496→  }, [santriId])
+  1497→
+  1498→  useEffect(() => { load() }, [load])
+  1499→
+  1500→  if (loading) return <View style={styles.contentCard}><ActivityIndicator size="large" color={Colors.primary} /></View>
+  1501→  if (error) return <View style={styles.contentCard}><Text style={styles.errorText}>{error}</Text></View>
+  1502→
+  1503→  // If taking ujian, show the take screen
+  1504→  if (takeUjian) {
+  1505→    return <UjianTakeScreen ujian={takeUjian} santriId={santriId} onClose={() => { setTakeUjian(null); load() }} />
+  1506→  }
+  1507→
+  1508→  return (
+  1509→    <View style={styles.contentCard}>
+  1510→      <Text style={styles.contentTitle}>Ujian Online</Text>
+  1511→      {ujianList.length === 0 ? (
+  1512→        <Text style={styles.emptyTextSmall}>Belum ada ujian</Text>
+  1513→      ) : (
+  1514→        ujianList.map((u, i) => {
+  1515→          const statusColors: Record<string, string> = {
+  1516→            UPCOMING: Colors.warning,
+  1517→            ONGOING: Colors.success,
+  1518→            COMPLETED: Colors.textMuted,
+  1519→          }
+  1520→          const statusLabels: Record<string, string> = {
+  1521→            UPCOMING: "Akan Datang",
+  1522→            ONGOING: "Berlangsung",
+  1523→            COMPLETED: "Selesai",
+  1524→          }
+  1525→          return (
+  1526→            <View key={i} style={[styles.listRow, u.status === "ONGOING" && !u.hasSubmitted && { borderColor: Colors.success }]}>
+  1527→              <View style={{ flex: 1 }}>
+  1528→                <Text style={styles.tagihanName}>{u.title}</Text>
+  1529→                <Text style={styles.tagihanDesc}>{u.mapel?.name} • {u.soalCount} soal • {u.durationMnt} mnt</Text>
+  1530→                <Text style={[styles.tagihanDesc, { fontSize: 12 }]}>{formatDate(u.startTime, true)}</Text>
+  1531→              </View>
+  1532→              <View>
+  1533→                <View style={[styles.statusBadge, { backgroundColor: (statusColors[u.status] || Colors.textMuted) + "20" }]}>
+  1534→                  <Text style={[styles.statusBadgeText, { color: statusColors[u.status] || Colors.textMuted, fontSize: 12 }]}>
+  1535→                    {statusLabels[u.status] || u.status}
+  1536→                  </Text>
+  1537→                </View>
+  1538→                {u.hasSubmitted ? (
+  1539→                  <View style={[styles.statusBadge, { backgroundColor: Colors.successLight, marginTop: 4 }]}>
+  1540→                    <Text style={[styles.statusBadgeText, { color: Colors.success, fontSize: 12 }]}>
+  1541→                      Nilai: {u.sesi?.score ?? "-"}
+  1542→                    </Text>
+  1543→                  </View>
+  1544→                ) : u.canStart ? (
+  1545→                  <TouchableOpacity
+  1546→                    onPress={() => setTakeUjian(u)}
+  1547→                    style={[styles.submitButton, { marginTop: 4, backgroundColor: Colors.success }]}
+  1548→                  >
+  1549→                    <Text style={styles.submitButtonText}>Mulai</Text>
+  1550→                  </TouchableOpacity>
+  1551→                ) : u.canResume ? (
+  1552→                  <TouchableOpacity
+  1553→                    onPress={() => setTakeUjian(u)}
+  1554→                    style={[styles.submitButton, { marginTop: 4, backgroundColor: Colors.warning }]}
+  1555→                  >
+  1556→                    <Text style={styles.submitButtonText}>Lanjut</Text>
+  1557→                  </TouchableOpacity>
+  1558→                ) : null}
+  1559→              </View>
+  1560→            </View>
+  1561→          )
+  1562→        })
+  1563→      )}
+  1564→    </View>
+  1565→  )
+  1566→}
+  1567→
+  1568→function UjianTakeScreen({ ujian, santriId, onClose }: { ujian: any, santriId: string, onClose: () => void }) {
+  1569→  const [detail, setDetail] = useState<any>(null)
+  1570→  const [loading, setLoading] = useState(true)
+  1571→  const [answers, setAnswers] = useState<Record<string, { answer: string; optionOrder?: number[] }>>({})
+  1572→  const [currentSoal, setCurrentSoal] = useState(0)
+  1573→  const [remainingSeconds, setRemainingSeconds] = useState(0)
+  1574→  const [submitting, setSubmitting] = useState(false)
+  1575→  const [result, setResult] = useState<any>(null)
+  1576→
+  1577→  useEffect(() => {
+  1578→    (async () => {
+  1579→      try {
+  1580→        setLoading(true)
+  1581→        // Start or resume ujian
+  1582→        await api.post(`/api/wali/ujian/${ujian.id}/start`, { santriId })
+  1583→        // Get detail with shuffled soal
+  1584→        const res = await api.get(`/api/wali/ujian/${ujian.id}`, { santriId })
+  1585→        setDetail(res.data)
+  1586→        setRemainingSeconds(res.data.remainingSeconds || ujian.durationMnt * 60)
+  1587→        // Init answers from existing
+  1588→        const init: Record<string, { answer: string; optionOrder?: number[] }> = {}
+  1589→        res.data.soalList.forEach((s: any) => {
+  1590→          init[s.ujianSoalId] = {
+  1591→            answer: s.existingAnswer || "",
+  1592→            optionOrder: s.optionOrder,
+  1593→          }
+  1594→        })
+  1595→        setAnswers(init)
+  1596→      } catch (e: any) {
+  1597→        Alert.alert("Error", e.message)
+  1598→        onClose()
+  1599→      } finally {
+  1600→        setLoading(false)
+  1601→      }
+  1602→    })()
+  1603→  }, [ujian.id, santriId, ujian.durationMnt])
+  1604→
+  1605→  // Timer countdown
+  1606→  useEffect(() => {
+  1607→    if (loading || result) return
+  1608→    const timer = setInterval(() => {
+  1609→      setRemainingSeconds((prev) => {
+  1610→        if (prev <= 1) {
+  1611→          clearInterval(timer)
+  1612→          handleAutoSubmit()
+  1613→          return 0
+  1614→        }
+  1615→        return prev - 1
+  1616→      })
+  1617→    }, 1000)
+  1618→    return () => clearInterval(timer)
+  1619→  }, [loading, result])
+  1620→
+  1621→  const formatTime = (sec: number) => {
+  1622→    const m = Math.floor(sec / 60)
+  1623→    const s = sec % 60
+  1624→    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+  1625→  }
+  1626→
+  1627→  const handleAnswer = (ujianSoalId: string, answer: string) => {
+  1628→    setAnswers({ ...answers, [ujianSoalId]: { ...answers[ujianSoalId], answer } })
+  1629→  }
+  1630→
+  1631→  const handleSubmit = () => {
+  1632→    Alert.alert(
+  1633→      "Konfirmasi Submit",
+  1634→      "Yakin ingin mengumpulkan ujian? Anda tidak bisa mengubah jawaban setelah submit.",
+  1635→      [
+  1636→        { text: "Batal", style: "cancel" },
+  1637→        { text: "Kumpulkan", onPress: () => doSubmit(false) },
+  1638→      ]
+  1639→    )
+  1640→  }
+  1641→
+  1642→  const handleAutoSubmit = () => {
+  1643→    Alert.alert("Waktu Habis", "Waktu ujian telah berakhir. Jawaban akan dikumpulkan otomatis.")
+  1644→    doSubmit(true)
+  1645→  }
+  1646→
+  1647→  const doSubmit = async (auto: boolean) => {
+  1648→    setSubmitting(true)
+  1649→    try {
+  1650→      const answerArray = Object.entries(answers).map(([ujianSoalId, v]) => ({
+  1651→        ujianSoalId,
+  1652→        answer: v.answer,
+  1653→        optionOrder: v.optionOrder,
+  1654→      }))
+  1655→      const res = await api.post(`/api/wali/ujian/${ujian.id}/submit`, { santriId, answers: answerArray })
+  1656→      setResult(res.data)
+  1657→    } catch (e: any) {
+  1658→      Alert.alert("Gagal Submit", e.message)
+  1659→    } finally {
+  1660→      setSubmitting(false)
+  1661→    }
+  1662→  }
+  1663→
+  1664→  if (loading) {
+  1665→    return (
+  1666→      <View style={styles.contentCard}>
+  1667→        <ActivityIndicator size="large" color={Colors.primary} />
+  1668→        <Text style={{ textAlign: "center", marginTop: 10, color: Colors.textMuted }}>Memuat soal ujian...</Text>
+  1669→      </View>
+  1670→    )
+  1671→  }
+  1672→
+  1673→  if (result) {
+  1674→    return (
+  1675→      <View style={styles.contentCard}>
+  1676→        <Text style={[styles.contentTitle, { textAlign: "center" }]}>Ujian Selesai</Text>
+  1677→        <View style={{ alignItems: "center", marginTop: 20 }}>
+  1678→          <Text style={{ fontSize: 48, fontWeight: "bold", color: (result?.data?.score ?? result?.score ?? 0) >= 70 ? Colors.success : Colors.danger }}>
+  1679→            {result?.data?.score ?? result?.score ?? 0}
+  1680→          </Text>
+  1681→          <Text style={{ fontSize: 14, color: Colors.textMuted }}>/ {ujian.maxScore}</Text>
+  1682→          <Text style={{ fontSize: 12, color: Colors.textMuted, marginTop: 8, textAlign: "center" }}>
+  1683→            {result.message}
+  1684→          </Text>
+  1685→        </View>
+  1686→        <TouchableOpacity style={[styles.submitButton, { marginTop: 24 }]} onPress={onClose}>
+  1687→          <Text style={styles.submitButtonText}>Kembali ke Daftar Ujian</Text>
+  1688→        </TouchableOpacity>
+  1689→      </View>
+  1690→    )
+  1691→  }
+  1692→
+  1693→  if (!detail) return null
+  1694→  const soalList = detail.soalList || []
+  1695→  const soal = soalList[currentSoal]
+  1696→  const answeredCount = Object.values(answers).filter((a) => a.answer).length
+  1697→  const isLowTime = remainingSeconds < 60
+  1698→
+  1699→  return (
+  1700→    <View style={styles.contentCard}>
+  1701→      {/* Timer + Progress */}
+  1702→      <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 12 }}>
+  1703→        <View style={[styles.statusBadge, { backgroundColor: isLowTime ? Colors.dangerLight : Colors.primaryLight }]}>
+  1704→          <Ionicons name="time" size={14} color={isLowTime ? Colors.danger : Colors.primary} />
+  1705→          <Text style={[styles.statusBadgeText, { color: isLowTime ? Colors.danger : Colors.primary, marginLeft: 4 }]}>
+  1706→            {formatTime(remainingSeconds)}
+  1707→          </Text>
+  1708→        </View>
+  1709→        <Text style={{ fontSize: 12, color: Colors.textMuted }}>
+  1710→          Soal {currentSoal + 1}/{soalList.length} • Terjawab: {answeredCount}
+  1711→        </Text>
+  1712→      </View>
+  1713→
+  1714→      {/* Soal */}
+  1715→      <View style={{ marginBottom: 16 }}>
+  1716→        <Text style={{ fontSize: 14, fontWeight: "600", marginBottom: 8 }}>{soal.question}</Text>
+  1717→        {soal.type === "PG" && soal.options && (
+  1718→          <View>
+  1719→            {soal.options.map((opt: string, idx: number) => {
+  1720→              const letter = String.fromCharCode(65 + idx)
+  1721→              const isSelected = answers[soal.ujianSoalId]?.answer === letter
+  1722→              return (
+  1723→                <TouchableOpacity
+  1724→                  key={idx}
+  1725→                  onPress={() => handleAnswer(soal.ujianSoalId, letter)}
+  1726→                  style={{
+  1727→                    flexDirection: "row", alignItems: "center", padding: 10, marginBottom: 6,
+  1728→                    borderWidth: 1, borderColor: isSelected ? Colors.primary : Colors.border,
+  1729→                    backgroundColor: isSelected ? Colors.primaryLight : Colors.background, borderRadius: 6,
+  1730→                  }}
+  1731→                >
+  1732→                  <Text style={{ fontWeight: "bold", marginRight: 8, color: isSelected ? Colors.primary : Colors.text }}>{letter}.</Text>
+  1733→                  <Text style={{ flex: 1, fontSize: 13, color: Colors.text }}>{opt}</Text>
+  1734→                </TouchableOpacity>
+  1735→              )
+  1736→            })}
+  1737→          </View>
+  1738→        )}
+  1739→        {(soal.type === "ISIAN" || soal.type === "ESSAY") && (
+  1740→          <TextInput
+  1741→            style={[styles.textInput, { minHeight: 60, textAlignVertical: "top" }]}
+  1742→            value={answers[soal.ujianSoalId]?.answer || ""}
+  1743→            onChangeText={(text) => handleAnswer(soal.ujianSoalId, text)}
+  1744→            placeholder={soal.type === "ISIAN" ? "Jawaban singkat..." : "Tulis jawaban essay..."}
+  1745→            multiline={soal.type === "ESSAY"}
+  1746→            numberOfLines={3}
+  1747→          />
+  1748→        )}
+  1749→        {soal.type === "PRAKTIK" && (
+  1750→          <Text style={{ fontSize: 12, color: Colors.textMuted, fontStyle: "italic" }}>
+  1751→            Soal praktik — jawaban diinput manual oleh guru setelah ujian.
+  1752→          </Text>
+  1753→        )}
+  1754→      </View>
+  1755→
+  1756→      {/* Navigation */}
+  1757→      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+  1758→        <TouchableOpacity
+  1759→          onPress={() => setCurrentSoal(Math.max(0, currentSoal - 1))}
+  1760→          disabled={currentSoal === 0}
+  1761→          style={[styles.modalCancelButton, { opacity: currentSoal === 0 ? 0.4 : 1 }]}
+  1762→        >
+  1763→          <Text style={styles.modalCancelText}>‹ Prev</Text>
+  1764→        </TouchableOpacity>
+  1765→
+  1766→        {currentSoal < soalList.length - 1 ? (
+  1767→          <TouchableOpacity
+  1768→            onPress={() => setCurrentSoal(Math.min(soalList.length - 1, currentSoal + 1))}
+  1769→            style={styles.modalSubmitButton}
+  1770→          >
+  1771→            <Text style={styles.modalSubmitText}>Next ›</Text>
+  1772→          </TouchableOpacity>
+  1773→        ) : (
+  1774→          <TouchableOpacity
+  1775→            onPress={handleSubmit}
+  1776→            disabled={submitting}
+  1777→            style={[styles.modalSubmitButton, { backgroundColor: Colors.success }]}
+  1778→          >
+  1779→            {submitting ? <ActivityIndicator size="small" color={Colors.white} /> : <Text style={styles.modalSubmitText}>Kumpulkan</Text>}
+  1780→          </TouchableOpacity>
+  1781→        )}
+  1782→      </View>
+  1783→
+  1784→      {/* Soal navigator */}
+  1785→      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 12, justifyContent: "center" }}>
+  1786→        {soalList.map((s: any, i: number) => (
+  1787→          <TouchableOpacity
+  1788→            key={i}
+  1789→            onPress={() => setCurrentSoal(i)}
+  1790→            style={{
+  1791→              width: 28, height: 28, borderRadius: 6, justifyContent: "center", alignItems: "center",
+  1792→              backgroundColor: i === currentSoal ? Colors.primary : answers[s.ujianSoalId]?.answer ? Colors.successLight : Colors.border,
+  1793→              borderWidth: 1, borderColor: i === currentSoal ? Colors.primary : "transparent",
+  1794→            }}
+  1795→          >
+  1796→            <Text style={{
+  1797→              fontSize: 12, fontWeight: "600",
+  1798→              color: i === currentSoal ? Colors.white : answers[s.ujianSoalId]?.answer ? Colors.success : Colors.textMuted,
+  1799→            }}>{i + 1}</Text>
+  1800→          </TouchableOpacity>
+  1801→        ))}
+  1802→      </View>
+  1803→
+  1804→      {/* Exit button */}
+  1805→      <TouchableOpacity onPress={onClose} style={{ marginTop: 16, alignSelf: "center" }}>
+  1806→        <Text style={{ fontSize: 12, color: Colors.danger }}>Keluar tanpa submit</Text>
+  1807→      </TouchableOpacity>
+  1808→    </View>
+  1809→  )
+  1810→}
+  1811→
+  1812→// ============================================================================
+  1813→// APP ROOT
+  1814→// ============================================================================
+  1815→type RootStackParamList = {
+  1816→  Login: undefined
+  1817→  ForgotPin: undefined
+  1818→  Dashboard: { wali: WaliData; santriList: SantriData[] }
+  1819→  SantriDetail: { santri: SantriData }
+  1820→}
+  1821→
+  1822→const Stack = createNativeStackNavigator<RootStackParamList>()
+  1823→
+  1824→export default function App() {
+  1825→  const [isReady, setIsReady] = useState(false)
+  1826→  const [initialRoute, setInitialRoute] = useState<"Login" | "Dashboard">("Login")
+  1827→  const [savedWali, setSavedWali] = useState<WaliData | null>(null)
+  1828→  const [savedSantri, setSavedSantri] = useState<SantriData[]>([])
+  1829→  // Refresh trigger flag — incremented by realtime subscriptions to nudge
+  1830→  // child screens (Dashboard, SantriDetail) into reloading data.
+  1831→  const [refreshKey, setRefreshKey] = useState(0)
+  1832→
+  1833→  useEffect(() => {
+  1834→    initNetworkMonitor()
+  1835→    async function init() {
+  1836→      const session = await loadWaliSession()
+  1837→      if (session) {
+  1838→        waliToken = session.token
+  1839→        setSavedWali(session.wali)
+  1840→        setSavedSantri(session.santriList)
+  1841→        setInitialRoute("Dashboard")
+  1842→      }
+  1843→      setIsReady(true)
+  1844→    }
+  1845→    init()
+  1846→  }, [])
+  1847→
+  1848→  // ── Realtime: subscribe ke Supabase Realtime untuk notifikasi instant ──
+  1849→  // Saat admin input nilai/absensi/tagihan, wali terima notifikasi langsung
+  1850→  // tanpa perlu refresh — via WebSocket (Supabase Realtime).
+  1851→  // Subscriptions:
+  1852→  //   - Notifikasi (per wali)        → Alert dialog
+  1853→  //   - Nilai/Absensi/Tagihan (per santri) → trigger refresh via refreshKey
+  1854→  useEffect(() => {
+  1855→    if (!savedWali || !savedSantri.length) return
+  1856→
+  1857→    let unsubs: Array<() => void> = []
+  1858→
+  1859→    ;(async () => {
+  1860→      try {
+  1861→        // Subscribe ke Notifikasi untuk wali
+  1862→        unsubs.push(await subscribeToNotifikasi(savedWali.id, (notif: any) => {
+  1863→          if (typeof Alert !== "undefined") {
+  1864→            Alert.alert(notif.title || "Notifikasi", notif.message || "")
+  1865→          }
+  1866→        }))
+  1867→
+  1868→        // Subscribe ke Nilai, Absensi, Tagihan untuk SETIAP santri
+  1869→        for (const santri of savedSantri) {
+  1870→          unsubs.push(await subscribeToNilai(santri.id, () => {
+  1871→            // Trigger refresh — child screens watch refreshKey
+  1872→            setRefreshKey(k => k + 1)
+  1873→          }))
+  1874→          unsubs.push(await subscribeToAbsensi(santri.id, () => {
+  1875→            setRefreshKey(k => k + 1)
+  1876→          }))
+  1877→          unsubs.push(await subscribeToTagihan(santri.id, () => {
+  1878→            setRefreshKey(k => k + 1)
+  1879→          }))
+  1880→        }
+  1881→      } catch (e) {
+  1882→        // Realtime optional — app tetap jalan tanpa realtime
+  1883→      }
+  1884→    })()
+  1885→
+  1886→    return () => {
+  1887→      unsubs.forEach(u => { try { u() } catch {} })
+  1888→    }
+  1889→  }, [savedWali, savedSantri])
+  1890→
+  1891→  if (!isReady) {
+  1892→    return (
+  1893→      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: Colors.primary }}>
+  1894→        <ActivityIndicator size="large" color={Colors.white} />
+  1895→      </View>
+  1896→    )
+  1897→  }
+  1898→
+  1899→  return (
+  1900→    <View style={{ flex: 1 }}>
+  1901→      <NetworkStatusIndicator />
+  1902→      <NavigationContainer>
+  1903→        <Stack.Navigator
+  1904→          initialRouteName={initialRoute}
+  1905→          screenOptions={{ headerShown: false }}
+  1906→        >
+  1907→        <Stack.Screen name="Login">
+  1908→          {({ navigation }) => (
+  1909→            <LoginScreen
+  1910→              onLogin={(token, wali, santriList) => {
+  1911→                waliToken = token
+  1912→                setSavedWali(wali)
+  1913→                setSavedSantri(santriList)
+  1914→                setInitialRoute("Dashboard")
+  1915→              }}
+  1916→              onForgotPin={() => navigation.navigate("ForgotPin")}
+  1917→            />
+  1918→          )}
+  1919→        </Stack.Screen>
+  1920→        <Stack.Screen name="ForgotPin" options={{ headerShown: false }}>
+  1921→          {({ navigation }) => (
+  1922→            <ForgotPinScreen onBack={() => navigation.goBack()} />
+  1923→          )}
+  1924→        </Stack.Screen>
+  1925→        <Stack.Screen name="Dashboard" options={{ headerShown: false }}>
+  1926→          {({ navigation }) => (
+  1927→            <DashboardScreen
+  1928→              wali={savedWali!}
+  1929→              santriList={savedSantri}
+  1930→              onSelectSantri={(santri) => navigation.navigate("SantriDetail", { santri })}
+  1931→              onRefresh={async () => {
+  1932→                const session = await loadWaliSession()
+  1933→                if (session) {
+  1934→                  waliToken = session.token
+  1935→                  setSavedWali(session.wali)
+  1936→                  setSavedSantri(session.santriList)
+  1937→                }
+  1938→              }}
+  1939→              onLogout={async () => {
+  1940→                waliToken = null
+  1941→                await clearWaliSession()
+  1942→                setSavedWali(null)
+  1943→                setSavedSantri([])
+  1944→                navigation.replace("Login")
+  1945→              }}
+  1946→            />
+  1947→          )}
+  1948→        </Stack.Screen>
+  1949→        <Stack.Screen name="SantriDetail" options={{ headerShown: false }}>
+  1950→          {({ route, navigation }) => (
+  1951→            <SantriDetailScreen
+  1952→              santri={(route.params as any).santri}
+  1953→              onBack={() => navigation.goBack()}
+  1954→              refreshKey={refreshKey}
+  1955→            />
+  1956→          )}
+  1957→        </Stack.Screen>
+  1958→      </Stack.Navigator>
+  1959→    </NavigationContainer>
+  1960→    </View>
+  1961→  )
+  1962→}
+  1963→
+  1964→// ============================================================================
+  1965→// STYLES
+  1966→// ============================================================================
+  1967→const styles = StyleSheet.create({
+  1968→  loginContainer: { flex: 1, backgroundColor: Colors.primary },
+  1969→  loginScroll: { flexGrow: 1, justifyContent: "center", padding: 24 },
+  1970→  loginLogo: { alignItems: "center", marginBottom: 32 },
+  1971→  loginTitle: { fontSize: 28, fontWeight: "bold", color: Colors.white, marginTop: 8 },
+  1972→  loginSubtitle: { fontSize: 16, color: Colors.white, opacity: 0.8 },
+  1973→  loginCard: { backgroundColor: Colors.white, borderRadius: 16, padding: 24, elevation: 4, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8 },
+  1974→  loginCardTitle: { fontSize: 20, fontWeight: "bold", color: Colors.text },
+  1975→  loginCardDesc: { fontSize: 14, color: Colors.textMuted, marginTop: 4, marginBottom: 20 },
+  1976→  label: { fontSize: 12, fontWeight: "600", color: Colors.text, marginTop: 12, marginBottom: 4 },
+  1977→  inputContainer: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: Colors.border, borderRadius: 8, paddingHorizontal: 12 },
+  1978→  inputIcon: { marginRight: 8 },
+  1979→  input: { flex: 1, paddingVertical: 12, fontSize: 16, color: Colors.text },
+  1980→  eyeIcon: { padding: 10, minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "center" },
+  1981→  loginButton: { backgroundColor: Colors.primary, borderRadius: 8, paddingVertical: 14, alignItems: "center", marginTop: 24 },
+  1982→  loginButtonText: { color: Colors.white, fontSize: 16, fontWeight: "600" },
+  1983→  demoText: { fontSize: 12, color: Colors.textMuted, textAlign: "center", marginTop: 16 },
+  1984→  forgotPinBtn: { alignItems: "center", marginTop: 12 },
+  1985→  forgotPinText: { fontSize: 13, color: Colors.primary, fontWeight: "500" },
+  1986→  screen: { flex: 1, backgroundColor: Colors.background },
+  1987→  header: { backgroundColor: Colors.primary, paddingHorizontal: 16, paddingVertical: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: Platform.OS === "android" ? 35 : 0 },
+  1988→  headerTitle: { fontSize: 14, color: Colors.white, opacity: 0.9 },
+  1989→  headerName: { fontSize: 18, fontWeight: "bold", color: Colors.white },
+  1990→  listContainer: { padding: 16 },
+  1991→  sectionTitle: { fontSize: 16, fontWeight: "600", color: Colors.text, marginBottom: 12 },
+  1992→  santriCard: { backgroundColor: Colors.white, borderRadius: 12, padding: 16, marginBottom: 12, flexDirection: "row", alignItems: "center", elevation: 2, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4 },
+  1993→  santriAvatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.primaryLight, justifyContent: "center", alignItems: "center", marginRight: 12 },
+  1994→  santriAvatarText: { fontSize: 24, fontWeight: "bold", color: Colors.primary },
+  1995→  santriPhoto: { width: 56, height: 56, borderRadius: 28 },
+  1996→  santriInfo: { flex: 1 },
+  1997→  santriName: { fontSize: 16, fontWeight: "600", color: Colors.text },
+  1998→  santriNis: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+  1999→  santriBadges: { flexDirection: "row", gap: 6, marginTop: 4 },
+  2000→  badge: { backgroundColor: Colors.border, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
+
+[showing lines 1-2000 of 2158; use offset=2001 with limit to continue reading]

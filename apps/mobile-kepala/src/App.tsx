@@ -6,7 +6,7 @@
 
 import React, { useState, useEffect, useCallback } from "react"
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, Image,
   ActivityIndicator, SafeAreaView, StatusBar, ScrollView, Alert,
   FlatList, RefreshControl, Platform,
 } from "react-native"
@@ -97,7 +97,7 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
       <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
       <ScrollView contentContainerStyle={styles.loginScroll}>
         <View style={styles.loginLogo}>
-          <Ionicons name="analytics" size={80} color={Colors.primary} />
+          <Image source={require("../assets/logo-madrasah.png")} style={{ width: 120, height: 120, resizeMode: "contain", marginBottom: 8 }} />
           <Text style={styles.loginTitle}>SIM MADIN</Text>
           <Text style={styles.loginSubtitle}>Kepala Madrasah</Text>
         </View>
