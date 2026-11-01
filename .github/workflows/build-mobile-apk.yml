@@ -98,13 +98,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
-      - name: Setup Expo CLI
+      - name: Setup EAS CLI
         uses: expo/expo-github-action@v8
         with:
-          expo-version: latest
+          # We don't need the legacy global expo-cli for EAS builds.
+          # Only eas-cli is required, which is compatible with Node 22.
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
