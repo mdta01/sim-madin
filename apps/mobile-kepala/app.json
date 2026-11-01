@@ -5,8 +5,8 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "scheme": "simadinkepala",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
     "splash": {
       "resizeMode": "contain",
       "backgroundColor": "#0D7A4F"
@@ -22,13 +22,16 @@
       },
       "package": "id.madrasah.madin.kepala"
     },
-    "scheme": "simadinkepala",
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/favicon.png"
+    },
     "extra": {
       "eas": {
         "projectId": "5ae82a4f-894a-4201-8d4b-1aa5a50b9792"
       }
     },
-    "owner": "madinmu01s-team",
-    "hermesEnabled": true
+    "owner": "madinmu01s-team"
   }
 }

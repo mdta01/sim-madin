@@ -5,8 +5,8 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "scheme": "simadinguru",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
     "splash": {
       "resizeMode": "contain",
       "backgroundColor": "#0D7A4F"
@@ -22,13 +22,16 @@
       },
       "package": "id.madrasah.madin.guru"
     },
-    "scheme": "simadinguru",
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/favicon.png"
+    },
     "extra": {
       "eas": {
         "projectId": "c1793ef8-86aa-4b5e-a4c7-024201be43e1"
       }
     },
-    "owner": "madinmu01s-team",
-    "hermesEnabled": true
+    "owner": "madinmu01s-team"
   }
 }
