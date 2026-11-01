@@ -21,8 +21,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0D7A4F"
       },
-      "package": "id.madrasah.madin.wali",
-      "minSdkVersion": 24
+      "package": "id.madrasah.madin.wali"
     },
     "web": {
       "bundler": "metro",

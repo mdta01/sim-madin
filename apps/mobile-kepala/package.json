@@ -17,6 +17,7 @@
     "@react-navigation/native-stack": "^6.9.26",
     "@supabase/supabase-js": "^2.118.0",
     "expo": "~51.0.39",
+    "expo-font": "~12.0.1",
     "expo-secure-store": "~13.0.2",
     "react": "18.2.0",
     "react-native": "0.74.5",
@@ -24,7 +25,7 @@
     "react-native-screens": "~3.31.1"
   },
   "devDependencies": {
-    "@types/react": "~18.3.0",
-    "typescript": "^5.0.0"
+    "@types/react": "~18.2.79",
+    "typescript": "~5.3.3"
   }
 }
